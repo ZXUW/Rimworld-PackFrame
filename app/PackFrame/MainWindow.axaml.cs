@@ -124,6 +124,7 @@ public partial class MainWindow : Window
     private readonly TextBlock _undoToastText;
     private readonly DispatcherTimer _undoToastTimer;
     private readonly DispatcherTimer _problemTooltipTimer;
+    private readonly Popup _modBadgePopup;
     private Control? _problemTooltipTarget;
     private bool _problemTooltipContentHovered;
 
@@ -316,6 +317,11 @@ public partial class MainWindow : Window
         _problemTooltipTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _modBadgePopup = new Popup
+        {
+            IsLightDismissEnabled = false,
+            Placement = PlacementMode.Top
         };
         _problemTooltipTimer.Tick += (_, _) =>
         {
@@ -1245,7 +1251,7 @@ public partial class MainWindow : Window
         SetProblemTooltipContent(target, content);
     }
 
-    private void SetProblemTooltipContent(Control target, StackPanel content)
+    private void AttachProblemTooltipHover(Control target, StackPanel content)
     {
         content.Background = new SolidColorBrush(Colors.Transparent);
         content.PointerEntered += (_, _) =>
@@ -1261,6 +1267,11 @@ public partial class MainWindow : Window
                 StartProblemTooltipCloseTimer();
             }
         };
+    }
+
+    private void SetProblemTooltipContent(Control target, StackPanel content)
+    {
+        AttachProblemTooltipHover(target, content);
         ToolTip.SetTip(target, content);
     }
 
@@ -1277,6 +1288,7 @@ public partial class MainWindow : Window
         {
             ToolTip.SetIsOpen(_problemTooltipTarget, false);
         }
+        _modBadgePopup.IsOpen = false;
 
         _problemTooltipTarget = target;
         _problemTooltipContentHovered = false;
@@ -1298,14 +1310,15 @@ public partial class MainWindow : Window
         {
             ToolTip.SetIsOpen(_problemTooltipTarget, false);
         }
+        _modBadgePopup.IsOpen = false;
 
         _problemTooltipTarget = target;
         _problemTooltipContentHovered = false;
         var content = CreateModBadgeTooltip(mod);
-        SetProblemTooltipContent(target, content);
-        ToolTip.SetPlacement(target, PlacementMode.Top);
-        ToolTip.SetVerticalOffset(target, 6);
-        ToolTip.SetIsOpen(target, true);
+        AttachProblemTooltipHover(target, content);
+        _modBadgePopup.Child = content;
+        _modBadgePopup.PlacementTarget = target;
+        _modBadgePopup.IsOpen = true;
     }
 
     private void OnModBadgePointerExited(object? sender, PointerEventArgs e)
@@ -1342,8 +1355,8 @@ public partial class MainWindow : Window
             };
             apply.Click += (_, _) =>
             {
-                CloseProblemTooltip();
                 ApplySortSuggestion(mod);
+                CloseProblemTooltip();
             };
             content.Children.Add(apply);
         }
@@ -1412,6 +1425,8 @@ public partial class MainWindow : Window
         {
             ToolTip.SetIsOpen(_problemTooltipTarget, false);
         }
+        _modBadgePopup.IsOpen = false;
+        _modBadgePopup.Child = null;
 
         _problemTooltipTarget = null;
         _problemTooltipContentHovered = false;
