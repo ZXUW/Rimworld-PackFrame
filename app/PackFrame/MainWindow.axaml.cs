@@ -124,7 +124,7 @@ public partial class MainWindow : Window
     private readonly TextBlock _undoToastText;
     private readonly DispatcherTimer _undoToastTimer;
     private readonly DispatcherTimer _problemTooltipTimer;
-    private TextBlock? _problemTooltipTarget;
+    private Control? _problemTooltipTarget;
     private bool _problemTooltipContentHovered;
 
     private const string ScratchFolderName = "__scratch__";
@@ -1245,7 +1245,7 @@ public partial class MainWindow : Window
         SetProblemTooltipContent(target, content);
     }
 
-    private void SetProblemTooltipContent(TextBlock target, StackPanel content)
+    private void SetProblemTooltipContent(Control target, StackPanel content)
     {
         content.Background = new SolidColorBrush(Colors.Transparent);
         content.PointerEntered += (_, _) =>
@@ -1283,6 +1283,109 @@ public partial class MainWindow : Window
         ToolTip.SetIsOpen(target, true);
     }
 
+    private void OnModBadgePointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (sender is not Control target ||
+            target.DataContext is not ModInfo mod ||
+            string.IsNullOrWhiteSpace(mod.BadgeTooltip))
+        {
+            return;
+        }
+
+        _problemTooltipTimer.Stop();
+        if (_problemTooltipTarget is not null &&
+            !ReferenceEquals(_problemTooltipTarget, target))
+        {
+            ToolTip.SetIsOpen(_problemTooltipTarget, false);
+        }
+
+        _problemTooltipTarget = target;
+        _problemTooltipContentHovered = false;
+        var content = CreateModBadgeTooltip(mod);
+        SetProblemTooltipContent(target, content);
+        ToolTip.SetPlacement(target, PlacementMode.Top);
+        ToolTip.SetVerticalOffset(target, 6);
+        ToolTip.SetIsOpen(target, true);
+    }
+
+    private void OnModBadgePointerExited(object? sender, PointerEventArgs e)
+    {
+        if (ReferenceEquals(sender, _problemTooltipTarget))
+        {
+            StartProblemTooltipCloseTimer();
+        }
+    }
+
+    private StackPanel CreateModBadgeTooltip(ModInfo mod)
+    {
+        var content = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Vertical,
+            Spacing = 6
+        };
+        content.Children.Add(new SelectableTextBlock
+        {
+            Text = mod.BadgeTooltip,
+            FontSize = 14,
+            Foreground = TextBrush,
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        if (mod.SortError && mod.SortOrderAfterIds.Count > 0)
+        {
+            var apply = new Button
+            {
+                Content = Localization.ApplyButton(_config.Language),
+                Padding = new Thickness(12, 3),
+                MinHeight = 26,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left
+            };
+            apply.Click += (_, _) =>
+            {
+                CloseProblemTooltip();
+                ApplySortSuggestion(mod);
+            };
+            content.Children.Add(apply);
+        }
+
+        return content;
+    }
+
+    private void ApplySortSuggestion(ModInfo mod)
+    {
+        var column = mod.BadgeColumn;
+        if (column < 1)
+        {
+            return;
+        }
+
+        var instance = GetInstanceForColumn(column);
+        if (instance is null)
+        {
+            return;
+        }
+
+        var indices = mod.SortOrderAfterIds
+            .Select(id => instance.ActivePackageIds.FindIndex(
+                activeId => string.Equals(
+                    activeId,
+                    id,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ))
+            .Where(index => index >= 0)
+            .ToList();
+        if (indices.Count == 0)
+        {
+            return;
+        }
+
+        MoveMods(
+            new DragPayload(column, new List<ModInfo> { mod }),
+            column,
+            indices.Max() + 1
+        );
+    }
     private void OnProblemLabelPointerExited(object? sender, PointerEventArgs e)
     {
         if (ReferenceEquals(sender, _problemTooltipTarget))
@@ -2027,10 +2130,12 @@ public partial class MainWindow : Window
         var instance1 = GetInstanceAt(index1);
         var instance2 = GetInstanceAt(index2);
         var active1 = ApplyOrderFlags(
-            ApplySteamCmdFilter(ResolveActive(index1), instance1)
+            ApplySteamCmdFilter(ResolveActive(index1), instance1),
+            1
         );
         var active2 = ApplyOrderFlags(
-            ApplySteamCmdFilter(ResolveActive(index2), instance2)
+            ApplySteamCmdFilter(ResolveActive(index2), instance2),
+            2
         );
         _missingMods1 = BuildMissingMods(index1);
         _missingMods2 = BuildMissingMods(index2);
@@ -3089,7 +3194,7 @@ public partial class MainWindow : Window
         return index >= 0 && index < _instances.Count ? index : -1;
     }
 
-    private List<ModInfo> ApplyOrderFlags(List<ModInfo> active)
+    private List<ModInfo> ApplyOrderFlags(List<ModInfo> active, int column)
     {
         if (active.Count == 0)
         {
@@ -3107,6 +3212,7 @@ public partial class MainWindow : Window
         {
             var mod = active[i];
             var names = new List<string>();
+            var ids = new List<string>();
             var missingNames = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var missingSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3121,6 +3227,7 @@ public partial class MainWindow : Window
                 if (seen.Add(name))
                 {
                     names.Add(name);
+                    ids.Add(id);
                 }
             }
 
@@ -3198,6 +3305,8 @@ public partial class MainWindow : Window
                 SortError = true,
                 SortAfter = string.Join(Environment.NewLine, details),
                 SortOrderAfterNames = names,
+                SortOrderAfterIds = ids,
+                BadgeColumn = column,
                 MissingDependencyNames = missingNames
             };
             result.Add(flagged);

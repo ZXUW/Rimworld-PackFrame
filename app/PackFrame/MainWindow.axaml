@@ -20,7 +20,8 @@
                             Margin="0,0,4,0"
                             Background="Transparent"
                             ToolTip.ShowDelay="200"
-                            ToolTip.Tip="{Binding BadgeTooltip}">
+                            PointerEntered="OnModBadgePointerEntered"
+                            PointerExited="OnModBadgePointerExited">
                         <local:ModBadge Badges="{Binding ActiveBadges}"
                                         Width="22"
                                         Height="22" />

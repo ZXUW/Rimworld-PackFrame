@@ -2293,6 +2293,16 @@ public static class Localization
             Japanese => "自分で作成したリポジトリのリンクを直接入力できます。トークンはブランチとレビュー PR の作成に使います。",
             _ => "You can paste a repository you created yourself. The token is used to create the branch and review PR."
         };
+    }
+    public static string ApplyButton(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "应用",
+            TraditionalChinese => "套用",
+            Japanese => "適用",
+            _ => "Apply"
+        };
     }}
 
 

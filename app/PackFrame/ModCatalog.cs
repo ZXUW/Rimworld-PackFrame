@@ -82,6 +82,8 @@ public sealed record ModInfo(
     public List<string> ForceLoadAfter { get; init; } = new();
     public List<string> ModDependencies { get; init; } = new();
     public List<string> SortOrderAfterNames { get; init; } = new();
+    public List<string> SortOrderAfterIds { get; init; } = new();
+    public int BadgeColumn { get; init; }
     public List<string> MissingDependencyNames { get; init; } = new();
     public string Link { get; init; } = string.Empty;
     public IBrush? NameBrush { get; init; }
