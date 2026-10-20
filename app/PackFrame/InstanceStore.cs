@@ -1340,7 +1340,25 @@ public static class InstanceStore
             }
         }
 
-        return (active, version, known);
+        var normalizedActive = active.Select(NormalizePackageId).ToList();
+        var normalizedKnown = known.Select(NormalizePackageId).ToList();
+        if (!active.SequenceEqual(normalizedActive) ||
+            !known.SequenceEqual(normalizedKnown))
+        {
+            WriteModsConfig(
+                modsConfigPath,
+                normalizedActive,
+                version,
+                normalizedKnown
+            );
+        }
+
+        return (normalizedActive, version, normalizedKnown);
+    }
+
+    private static string NormalizePackageId(string id)
+    {
+        return id.Trim().ToLowerInvariant();
     }
 
     private static void WriteModsConfig(
@@ -1352,7 +1370,7 @@ public static class InstanceStore
     {
         var activeElements = activeIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => new XElement("li", id))
+            .Select(id => new XElement("li", NormalizePackageId(id)))
             .ToArray();
 
         var known = new List<string>(KnownExpansionIds);
@@ -1361,7 +1379,7 @@ public static class InstanceStore
         {
             if (!string.IsNullOrWhiteSpace(id) && knownSet.Add(id))
             {
-                known.Add(id);
+                known.Add(NormalizePackageId(id));
             }
         }
 
