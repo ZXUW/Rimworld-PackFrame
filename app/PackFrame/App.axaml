@@ -1,4 +1,4 @@
-<Application xmlns="https://github.com/avaloniaui"
+﻿<Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="PackFrame.App"
              RequestedThemeVariant="Dark">
@@ -58,6 +58,9 @@
     </Application.Resources>
     <Application.Styles>
         <FluentTheme />
+        <Style Selector="ScrollViewer">
+            <Setter Property="Padding" Value="0,0,16,0" />
+        </Style>
         <Style Selector="ScrollBar:vertical">
             <Setter Property="AllowAutoHide" Value="False" />
             <Setter Property="MinWidth" Value="14" />
