@@ -124,6 +124,9 @@ public partial class MainWindow : Window
     private readonly TextBlock _undoToastText;
     private readonly DispatcherTimer _undoToastTimer;
     private readonly DispatcherTimer _problemTooltipTimer;
+    private readonly DispatcherTimer _scrollRepeatTimer;
+    private ScrollBar? _scrollRepeatBar;
+    private int _scrollRepeatDirection;
     private readonly Popup _modBadgePopup;
     private Control? _problemTooltipTarget;
     private bool _problemTooltipContentHovered;
@@ -318,6 +321,27 @@ public partial class MainWindow : Window
         {
             Interval = TimeSpan.FromMilliseconds(500)
         };
+        _scrollRepeatTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(120)
+        };
+        _scrollRepeatTimer.Tick += (_, _) =>
+        {
+            if (_scrollRepeatBar is null)
+            {
+                _scrollRepeatTimer.Stop();
+                return;
+            }
+
+            if (_scrollRepeatDirection < 0)
+            {
+                _scrollRepeatBar.PageUp();
+            }
+            else
+            {
+                _scrollRepeatBar.PageDown();
+            }
+        };
         _modBadgePopup = new Popup
         {
             IsLightDismissEnabled = false,
@@ -488,6 +512,12 @@ public partial class MainWindow : Window
         AddHandler(
             InputElement.PointerPressedEvent,
             OnScrollBarPointerPressed,
+            RoutingStrategies.Tunnel,
+            true
+        );
+        AddHandler(
+            InputElement.PointerReleasedEvent,
+            OnWindowPointerReleased,
             RoutingStrategies.Tunnel,
             true
         );
@@ -666,16 +696,30 @@ public partial class MainWindow : Window
         var thumbTop = thumbOrigin.Value.Y;
         var thumbBottom = thumbTop + thumb.Bounds.Height;
         var point = e.GetPosition(scrollBar);
+        _scrollRepeatTimer.Stop();
+        _scrollRepeatBar = null;
         if (point.Y < thumbTop)
         {
             scrollBar.PageUp();
+            _scrollRepeatBar = scrollBar;
+            _scrollRepeatDirection = -1;
+            _scrollRepeatTimer.Start();
             e.Handled = true;
         }
         else if (point.Y > thumbBottom)
         {
             scrollBar.PageDown();
+            _scrollRepeatBar = scrollBar;
+            _scrollRepeatDirection = 1;
+            _scrollRepeatTimer.Start();
             e.Handled = true;
         }
+    }
+
+    private void OnWindowPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _scrollRepeatTimer.Stop();
+        _scrollRepeatBar = null;
     }
 
     private bool IsWithinSearchBox(object? source)
