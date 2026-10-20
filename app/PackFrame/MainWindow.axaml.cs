@@ -4358,8 +4358,7 @@ public partial class MainWindow : Window
 
         var index = list.IndexFromContainer(item);
         var now = Environment.TickCount64;
-        var isDoubleClick = e.ClickCount == 2 &&
-                            ReferenceEquals(_lastPressList, list) &&
+        var isDoubleClick = ReferenceEquals(_lastPressList, list) &&
                             ReferenceEquals(_lastPressMod, mod) &&
                             now - _lastPressTicks <= 350;
         _lastPressList = list;
