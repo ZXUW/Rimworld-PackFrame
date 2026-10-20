@@ -499,10 +499,17 @@ public partial class MainWindow : Window
             ValidatePath(save: false);
         }
 
-        Opened += (_, _) => Dispatcher.UIThread.Post(
-            () => _inactiveList.Focus(),
-            DispatcherPriority.Loaded
-        );
+        Opened += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(
+                () => _inactiveList.Focus(),
+                DispatcherPriority.Loaded
+            );
+            if (_gameInstallation is null)
+            {
+                _ = AutoDetectGameAsync();
+            }
+        };
     }
 
     private T Find<T>(string name) where T : Control
@@ -1988,6 +1995,11 @@ public partial class MainWindow : Window
     }
 
     private async void OnAutoDetectGameClick(object? sender, RoutedEventArgs e)
+    {
+        await AutoDetectGameAsync();
+    }
+
+    private async Task AutoDetectGameAsync()
     {
         if (!_autoDetectGameButton.IsEnabled)
         {

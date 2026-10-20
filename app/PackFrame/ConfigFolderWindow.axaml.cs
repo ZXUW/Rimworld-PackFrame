@@ -47,6 +47,11 @@ public partial class ConfigFolderWindow : Window
         this.FindControl<Button>("AutoDetectButton")!.Content = autoDetectText;
         _autoDetectFailedText = autoDetectFailedText;
 
+        if (string.IsNullOrWhiteSpace(currentPath))
+        {
+            AutoDetect();
+        }
+
         Opened += (_, _) =>
         {
             pathBox.Focus();
@@ -111,6 +116,11 @@ public partial class ConfigFolderWindow : Window
     }
 
     private void OnAutoDetectClick(object? sender, RoutedEventArgs e)
+    {
+        AutoDetect();
+    }
+
+    private void AutoDetect()
     {
         var path = RimWorldLocator.FindConfigDirectory();
         if (string.IsNullOrWhiteSpace(path))
