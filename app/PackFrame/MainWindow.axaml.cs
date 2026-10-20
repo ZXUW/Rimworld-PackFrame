@@ -10,6 +10,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.VisualTree;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -1395,20 +1396,19 @@ public partial class MainWindow : Window
             Orientation = Avalonia.Layout.Orientation.Vertical,
             Spacing = 6
         };
-        content.Children.Add(new TextBox
+        content.Children.Add(new SelectableTextBlock
         {
             Text = mod.BadgeTooltip,
             FontSize = 14,
             Foreground = TextBrush,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(0),
-            IsReadOnly = true,
-            AcceptsReturn = true,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 560
+            TextWrapping = TextWrapping.Wrap
         });
 
+        var actions = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 8
+        };
         if (mod.SortError && mod.SortOrderAfterIds.Count > 0)
         {
             var apply = new Button
@@ -1418,16 +1418,35 @@ public partial class MainWindow : Window
                 Foreground = Brushes.White,
                 BorderThickness = new Thickness(0),
                 Padding = new Thickness(12, 3),
-                MinHeight = 26,
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left
+                MinHeight = 26
             };
             apply.Click += (_, _) =>
             {
                 ApplySortSuggestion(mod);
                 CloseProblemTooltip();
             };
-            content.Children.Add(apply);
+            actions.Children.Add(apply);
         }
+
+        var copy = new Button
+        {
+            Content = Localization.CopyButton(_config.Language),
+            Background = SecondaryBorderBrush,
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(12, 3),
+            MinHeight = 26
+        };
+        copy.Click += async (_, _) =>
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard is not null)
+            {
+                await clipboard.SetTextAsync(mod.BadgeTooltip);
+            }
+        };
+        actions.Children.Add(copy);
+        content.Children.Add(actions);
 
         return new Border
         {

@@ -1,4 +1,4 @@
-namespace PackFrame;
+﻿namespace PackFrame;
 
 public static class Localization
 {
@@ -2294,6 +2294,17 @@ public static class Localization
             _ => "You can paste a repository you created yourself. The token is used to create the branch and review PR."
         };
     }
+    public static string CopyButton(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "复制",
+            TraditionalChinese => "複製",
+            Japanese => "コピー",
+            _ => "Copy"
+        };
+    }
+
     public static string ApplyButton(string? language)
     {
         return language switch
