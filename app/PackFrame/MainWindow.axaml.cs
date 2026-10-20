@@ -5462,7 +5462,7 @@ public partial class MainWindow : Window
             );
             _selectionAnchorList = null;
             _selectionAnchorIndex = -1;
-            ReloadInstances(null, -1);
+            RefreshManager(false);
             Dispatcher.UIThread.Post(() => SelectMovedMods(targetColumn, selectedIds));
         }
         catch
@@ -5608,7 +5608,7 @@ public partial class MainWindow : Window
             PushUndo(undoSnapshots, selectedIds, payload.SourceColumn, targetColumn);
             _selectionAnchorList = null;
             _selectionAnchorIndex = -1;
-            ReloadInstances(null, -1);
+            RefreshManager(false);
             Dispatcher.UIThread.Post(() => SelectMovedMods(targetColumn, selectedIds));
         }
     }
