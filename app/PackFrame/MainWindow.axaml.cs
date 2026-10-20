@@ -485,6 +485,12 @@ public partial class MainWindow : Window
             RoutingStrategies.Tunnel,
             true
         );
+        AddHandler(
+            InputElement.PointerPressedEvent,
+            OnScrollBarPointerPressed,
+            RoutingStrategies.Tunnel,
+            true
+        );
         Closing += OnClosing;
 
         if (!string.IsNullOrWhiteSpace(_config.GamePath))
@@ -615,6 +621,61 @@ public partial class MainWindow : Window
         }
 
         focusManager.Focus(null, NavigationMethod.Unspecified, KeyModifiers.None);
+    }
+
+    private void OnScrollBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source is not Visual source ||
+            !e.GetCurrentPoint(source).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        ScrollBar? scrollBar = null;
+        for (var visual = source; visual is not null; visual = visual.GetVisualParent())
+        {
+            if (visual is Thumb)
+            {
+                return;
+            }
+
+            if (visual is ScrollBar bar)
+            {
+                scrollBar = bar;
+                break;
+            }
+        }
+
+        if (scrollBar is null || scrollBar.Orientation != Avalonia.Layout.Orientation.Vertical)
+        {
+            return;
+        }
+
+        var thumb = scrollBar.GetVisualDescendants().OfType<Thumb>().FirstOrDefault();
+        if (thumb is null)
+        {
+            return;
+        }
+
+        var thumbOrigin = thumb.TranslatePoint(new Point(0, 0), scrollBar);
+        if (thumbOrigin is null)
+        {
+            return;
+        }
+
+        var thumbTop = thumbOrigin.Value.Y;
+        var thumbBottom = thumbTop + thumb.Bounds.Height;
+        var point = e.GetPosition(scrollBar);
+        if (point.Y < thumbTop)
+        {
+            scrollBar.PageUp();
+            e.Handled = true;
+        }
+        else if (point.Y > thumbBottom)
+        {
+            scrollBar.PageDown();
+            e.Handled = true;
+        }
     }
 
     private bool IsWithinSearchBox(object? source)
