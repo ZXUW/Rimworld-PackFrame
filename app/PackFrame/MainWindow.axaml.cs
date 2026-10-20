@@ -666,6 +666,26 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!control && e.Key == Key.Enter)
+        {
+            var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+            if (focused is TextBox || focused is ComboBox || focused is Button)
+            {
+                return;
+            }
+
+            var list = _lastPressList ??
+                       GetModLists().FirstOrDefault(item => item.IsKeyboardFocusWithin) ??
+                       _selectionAnchorList;
+            if (list is not null)
+            {
+                MoveModsOnDoubleClick(list);
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (!control)
         {
             return;
@@ -3708,6 +3728,7 @@ public partial class MainWindow : Window
 
         _selectionAnchorList = list;
         _selectionAnchorIndex = items.IndexOf(moved[0]);
+        _lastPressList = list;
         _refreshing = false;
         list.Focus();
         ShowDetails(moved[0]);
@@ -4281,6 +4302,7 @@ public partial class MainWindow : Window
             _selectionAnchorIndex = next;
         }
 
+        _lastPressList = list;
         _refreshing = false;
         list.ScrollIntoView(nextItem);
         list.Focus();
