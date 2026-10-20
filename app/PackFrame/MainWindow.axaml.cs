@@ -3922,9 +3922,7 @@ public partial class MainWindow : Window
         }
 
         var column = ReferenceEquals(border, _activeColumn1) ? 1 : 2;
-        if (column == 1 &&
-            !_firstColumnOfficialTried &&
-            GetSelectedInstance(0)?.IsScratch == true)
+        if (column == 1 && !_firstColumnOfficialTried)
         {
             _firstColumnOfficialTried = true;
             var officialIndex = _instances.FindIndex(instance =>
@@ -3946,13 +3944,22 @@ public partial class MainWindow : Window
                 }
             }
 
+            _lastEnableColumn = column;
+            UpdateEnableTargetBorders();
             if (officialIndex >= 0)
             {
-                _lastEnableColumn = column;
-                UpdateEnableTargetBorders();
                 _instanceCombo1.SelectedIndex = officialIndex;
-                return;
             }
+            else
+            {
+                var scratchIndex = _instances.FindIndex(instance => instance.IsScratch);
+                if (scratchIndex >= 0)
+                {
+                    _instanceCombo1.SelectedIndex = scratchIndex;
+                }
+            }
+
+            return;
         }
 
         if (_lastEnableColumn == column)
