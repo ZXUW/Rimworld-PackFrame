@@ -1396,13 +1396,41 @@ public partial class MainWindow : Window
             Orientation = Avalonia.Layout.Orientation.Vertical,
             Spacing = 6
         };
-        content.Children.Add(new SelectableTextBlock
+        var body = new SelectableTextBlock
         {
             Text = mod.BadgeTooltip,
             FontSize = 14,
             Foreground = TextBrush,
-            TextWrapping = TextWrapping.Wrap
-        });
+            TextWrapping = TextWrapping.Wrap,
+            Focusable = true
+        };
+        body.PointerPressed += (_, _) => body.Focus();
+        body.KeyDown += (_, keyEvent) =>
+        {
+            if (keyEvent.Key == Key.C &&
+                (keyEvent.KeyModifiers.HasFlag(KeyModifiers.Control) ||
+                 keyEvent.KeyModifiers.HasFlag(KeyModifiers.Meta)))
+            {
+                body.Copy();
+                keyEvent.Handled = true;
+            }
+        };
+
+        var copyMenu = new ContextMenu();
+        var copyItem = new MenuItem
+        {
+            Header = Localization.CopyButton(_config.Language)
+        };
+        copyItem.Click += (_, _) => body.Copy();
+        copyMenu.Items.Add(copyItem);
+        copyMenu.Opened += (_, _) =>
+        {
+            _problemTooltipContentHovered = true;
+            _problemTooltipTimer.Stop();
+        };
+        copyMenu.Closed += (_, _) => _problemTooltipContentHovered = false;
+        body.ContextMenu = copyMenu;
+        content.Children.Add(body);
 
         var actions = new StackPanel
         {
@@ -1428,25 +1456,10 @@ public partial class MainWindow : Window
             actions.Children.Add(apply);
         }
 
-        var copy = new Button
+        if (actions.Children.Count > 0)
         {
-            Content = Localization.CopyButton(_config.Language),
-            Background = SecondaryBorderBrush,
-            Foreground = Brushes.White,
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(12, 3),
-            MinHeight = 26
-        };
-        copy.Click += async (_, _) =>
-        {
-            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-            if (clipboard is not null)
-            {
-                await clipboard.SetTextAsync(mod.BadgeTooltip);
-            }
-        };
-        actions.Children.Add(copy);
-        content.Children.Add(actions);
+            content.Children.Add(actions);
+        }
 
         return new Border
         {
