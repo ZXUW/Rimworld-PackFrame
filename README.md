@@ -1,4 +1,4 @@
-# Rimworld PackFrame
+﻿# Rimworld PackFrame
 
 RimWorld 整合包管理框架，基于 Avalonia 12 和 .NET 10。
 
@@ -16,7 +16,7 @@ RimWorld 整合包管理框架，基于 Avalonia 12 和 .NET 10。
 
 在 Releases 中下载：
 
-Windows x64：`Rimworld PackFrame-portable.zip`
+Windows x64：`Rimworld PackFrame-Window64.zip`
 
 macOS Intel：`Rimworld PackFrame-osx-x64.zip`
 
