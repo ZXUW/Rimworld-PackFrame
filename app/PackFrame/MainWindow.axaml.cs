@@ -1348,6 +1348,9 @@ public partial class MainWindow : Window
             var apply = new Button
             {
                 Content = Localization.ApplyButton(_config.Language),
+                Background = SecondaryBorderBrush,
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
                 Padding = new Thickness(12, 3),
                 MinHeight = 26,
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left
