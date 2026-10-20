@@ -169,9 +169,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _autoScrollTimer;
     private ListBox? _autoScrollList;
     private int _autoScrollDirection;
-    private ListBox? _lastClickList;
-    private ModInfo? _lastClickMod;
-    private long _lastClickTicks;
+    private ListBox? _lastPressList;
+    private ModInfo? _lastPressMod;
+    private long _lastPressTicks;
     private int _lastEnableColumn = 1;
     private int _lastInstanceIndex1 = -1;
     private int _lastInstanceIndex2 = -1;
@@ -4225,18 +4225,19 @@ public partial class MainWindow : Window
 
         var index = list.IndexFromContainer(item);
         var now = Environment.TickCount64;
-        var isDoubleClick = ReferenceEquals(_lastClickList, list) &&
-                            ReferenceEquals(_lastClickMod, mod) &&
-                            now - _lastClickTicks <= 500;
-        _lastClickList = list;
-        _lastClickMod = mod;
-        _lastClickTicks = now;
+        var isDoubleClick = e.ClickCount == 2 &&
+                            ReferenceEquals(_lastPressList, list) &&
+                            ReferenceEquals(_lastPressMod, mod) &&
+                            now - _lastPressTicks <= 350;
+        _lastPressList = list;
+        _lastPressMod = mod;
+        _lastPressTicks = now;
 
         if (isDoubleClick)
         {
-            _lastClickList = null;
-            _lastClickMod = null;
-            _lastClickTicks = 0;
+            _lastPressList = null;
+            _lastPressMod = null;
+            _lastPressTicks = 0;
             _pendingCollapseList = null;
             _pendingCollapseMod = null;
             _pendingCollapseIndex = -1;
@@ -5146,9 +5147,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        _lastClickList = null;
-        _lastClickMod = null;
-        _lastClickTicks = 0;
         _pendingCollapseList = null;
         _pendingCollapseMod = null;
         _pendingCollapseIndex = -1;
