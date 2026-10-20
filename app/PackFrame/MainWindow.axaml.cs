@@ -5313,7 +5313,7 @@ public partial class MainWindow : Window
         var target = wasDragging ? GetTargetListAt(e) : null;
         var targetIndex = target is null
             ? 0
-            : GetDropIndexAt(target, e.GetPosition(target));
+            : MapDropIndexToActive(target, GetDropIndexAt(target, e.GetPosition(target)));
 
         StopAutoScroll();
         HideDragGhost();
@@ -5674,6 +5674,41 @@ public partial class MainWindow : Window
         }
 
         return index;
+    }
+
+    private int MapDropIndexToActive(ListBox target, int displayIndex)
+    {
+        var column = GetListColumn(target);
+        if (column == 0)
+        {
+            return displayIndex;
+        }
+
+        var instance = GetInstanceForColumn(column);
+        if (instance is null)
+        {
+            return displayIndex;
+        }
+
+        var active = instance.ActivePackageIds;
+        if (displayIndex >= target.ItemCount)
+        {
+            return active.Count;
+        }
+
+        if (displayIndex < 0 || target.Items[displayIndex] is not ModInfo next)
+        {
+            return Math.Clamp(displayIndex, 0, active.Count);
+        }
+
+        var activeIndex = active.FindIndex(id => string.Equals(
+            id,
+            next.PackageId,
+            StringComparison.OrdinalIgnoreCase
+        ));
+        return activeIndex >= 0
+            ? activeIndex
+            : Math.Clamp(displayIndex, 0, active.Count);
     }
 
     private void MoveModsOnDoubleClick(ListBox sourceList)
