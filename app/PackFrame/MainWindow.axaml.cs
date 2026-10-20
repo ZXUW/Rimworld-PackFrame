@@ -1251,9 +1251,8 @@ public partial class MainWindow : Window
         SetProblemTooltipContent(target, content);
     }
 
-    private void AttachProblemTooltipHover(Control target, StackPanel content)
+    private void AttachProblemTooltipHover(Control target, Control content)
     {
-        content.Background = new SolidColorBrush(Colors.Transparent);
         content.PointerEntered += (_, _) =>
         {
             _problemTooltipContentHovered = true;
@@ -1329,7 +1328,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private StackPanel CreateModBadgeTooltip(ModInfo mod)
+    private Border CreateModBadgeTooltip(ModInfo mod)
     {
         var content = new StackPanel
         {
@@ -1361,7 +1360,14 @@ public partial class MainWindow : Window
             content.Children.Add(apply);
         }
 
-        return content;
+        return new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#20354A")),
+            BorderBrush = SecondaryBorderBrush,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 8),
+            Child = content
+        };
     }
 
     private void ApplySortSuggestion(ModInfo mod)
