@@ -78,12 +78,14 @@
                                Value="{TemplateBinding Value, Mode=TwoWay}"
                                ViewportSize="{TemplateBinding ViewportSize}">
                             <Track.DecreaseButton>
-                                <RepeatButton Background="Transparent"
+                                <RepeatButton Name="PART_PageUpButton"
+                                              Background="Transparent"
                                               BorderThickness="0"
                                               Focusable="False" />
                             </Track.DecreaseButton>
                             <Track.IncreaseButton>
-                                <RepeatButton Background="Transparent"
+                                <RepeatButton Name="PART_PageDownButton"
+                                              Background="Transparent"
                                               BorderThickness="0"
                                               Focusable="False" />
                             </Track.IncreaseButton>
