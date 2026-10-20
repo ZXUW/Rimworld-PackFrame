@@ -26,7 +26,8 @@ public sealed record ModInfo(
     string Description,
     string? PreviewPath,
     ModSource Source,
-    string GameVersions
+    string GameVersions,
+    DateTime SubscribedAt
 ) : INotifyPropertyChanged
 {
     private IBrush? _rowBrush;
@@ -391,7 +392,10 @@ public static class ModCatalog
                 description.Trim(),
                 preview,
                 source,
-                string.Join(", ", versions)
+                string.Join(", ", versions),
+                source == ModSource.Workshop
+                    ? Directory.GetCreationTime(directory)
+                    : DateTime.MinValue
             )
             {
                 LoadAfter = ReadIdList(root, "loadAfter"),

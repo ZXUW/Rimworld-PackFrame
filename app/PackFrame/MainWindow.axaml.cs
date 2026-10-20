@@ -2740,7 +2740,7 @@ public partial class MainWindow : Window
     {
         var language = _config.Language;
         var flyout = new MenuFlyout();
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 6; i++)
         {
             var field = i;
             var header = (i == _inactiveSortField ? "✓ " : "   ") +
@@ -2792,12 +2792,27 @@ public partial class MainWindow : Window
             2 => Localization.SearchByPath(language),
             3 => Localization.SearchByPackageId(language),
             4 => Localization.SearchByGameVersion(language),
+            5 => Localization.SearchBySubscribedTime(language),
             _ => Localization.SearchByName(language)
         };
     }
 
     private List<ModInfo> SortInactive(List<ModInfo> mods)
     {
+        if (_inactiveSortField == 5)
+        {
+            var dated = _inactiveSortAscending
+                ? mods.OrderBy(mod => mod.SubscribedAt == DateTime.MinValue
+                    ? DateTime.MaxValue
+                    : mod.SubscribedAt)
+                : mods.OrderByDescending(mod => mod.SubscribedAt == DateTime.MinValue
+                    ? DateTime.MinValue
+                    : mod.SubscribedAt);
+            return dated
+                .ThenBy(mod => mod.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+        }
+
         Func<ModInfo, string> selector = _inactiveSortField switch
         {
             1 => mod => mod.Author,
@@ -3247,7 +3262,7 @@ public partial class MainWindow : Window
         }
 
         var step = e.Delta.Y > 0 ? -1 : 1;
-        _inactiveSortField = (_inactiveSortField + step + 5) % 5;
+        _inactiveSortField = (_inactiveSortField + step + 6) % 6;
         UpdateSortButton(_config.Language);
         RefreshInactivePreservingScroll();
         e.Handled = true;

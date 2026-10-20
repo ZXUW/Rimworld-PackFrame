@@ -494,6 +494,17 @@ public static class Localization
         };
     }
 
+    public static string SearchBySubscribedTime(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "订阅时间",
+            TraditionalChinese => "訂閱時間",
+            Japanese => "購読日時",
+            _ => "Subscription time"
+        };
+    }
+
     public static string AllSources(string? language)
     {
         return language switch
