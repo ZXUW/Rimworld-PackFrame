@@ -353,6 +353,7 @@ public partial class MainWindow : Window
 
         foreach (var list in GetModLists())
         {
+            list.Focusable = true;
             list.SelectionMode = SelectionMode.Multiple;
             list.AddHandler(
                 InputElement.PointerPressedEvent,
@@ -360,6 +361,7 @@ public partial class MainWindow : Window
                 RoutingStrategies.Tunnel,
                 true
             );
+
             list.PointerMoved += OnModListPointerMoved;
             list.PointerReleased += OnModListPointerReleased;
             list.PointerExited += OnModListPointerExited;
@@ -470,7 +472,12 @@ public partial class MainWindow : Window
             RoutingStrategies.Tunnel,
             true
         );
-        AddHandler(InputElement.KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel, true);
+        AddHandler(
+            InputElement.KeyDownEvent,
+            OnWindowKeyDown,
+            RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
+            true
+        );
         AddHandler(
             InputElement.PointerPressedEvent,
             OnWindowPointerPressed,
@@ -485,7 +492,10 @@ public partial class MainWindow : Window
             ValidatePath(save: false);
         }
 
-        Opened += (_, _) => _pathBox.Focus();
+        Opened += (_, _) => Dispatcher.UIThread.Post(
+            () => _inactiveList.Focus(),
+            DispatcherPriority.Loaded
+        );
     }
 
     private T Find<T>(string name) where T : Control
@@ -625,8 +635,37 @@ public partial class MainWindow : Window
     }
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Handled)
+        {
+            return;
+        }
+
         var control = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                       e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        if (!control && (e.Key == Key.Up || e.Key == Key.Down))
+        {
+            var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+            if (focused is TextBox || focused is ComboBox)
+            {
+                return;
+            }
+
+            var list = _lastPressList ??
+                       GetModLists().FirstOrDefault(item => item.IsKeyboardFocusWithin) ??
+                       _selectionAnchorList;
+            if (list is not null)
+            {
+                MoveModSelection(
+                    list,
+                    e.Key == Key.Up ? -1 : 1,
+                    e.KeyModifiers.HasFlag(KeyModifiers.Shift)
+                );
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (!control)
         {
             return;
@@ -1716,7 +1755,6 @@ public partial class MainWindow : Window
     {
         _inactiveFilter.Sort = CycleProblemFilter(_inactiveFilter.Sort);
         RefreshManager(false);
-        e.Handled = true;
     }
 
     private void OnInactiveProblemVClick(object? sender, PointerPressedEventArgs e)
@@ -4187,6 +4225,70 @@ public partial class MainWindow : Window
         catch
         {
         }
+    }
+
+    private void MoveModSelection(ListBox list, int direction, bool shift)
+    {
+        if (list.ItemCount == 0)
+        {
+            return;
+        }
+
+        var current = list.SelectedIndex;
+        if (current < 0 && ReferenceEquals(_selectionAnchorList, list))
+        {
+            current = _selectionAnchorIndex;
+        }
+
+        var next = current < 0
+            ? direction > 0 ? 0 : list.ItemCount - 1
+            : Math.Clamp(current + direction, 0, list.ItemCount - 1);
+        var nextItem = list.Items[next];
+        if (nextItem is null)
+        {
+            return;
+        }
+
+        _refreshing = true;
+        foreach (var other in GetModLists())
+        {
+            if (other != list)
+            {
+                other.SelectedItems!.Clear();
+            }
+        }
+
+        if (shift && ReferenceEquals(_selectionAnchorList, list) && _selectionAnchorIndex >= 0)
+        {
+            var start = Math.Min(_selectionAnchorIndex, next);
+            var end = Math.Max(_selectionAnchorIndex, next);
+            var selection = list.Selection;
+            selection.BeginBatchUpdate();
+            try
+            {
+                selection.SelectRange(start, end);
+            }
+            finally
+            {
+                selection.EndBatchUpdate();
+            }
+        }
+        else
+        {
+            list.SelectedItems!.Clear();
+            list.SelectedItems!.Add(nextItem);
+            _selectionAnchorList = list;
+            _selectionAnchorIndex = next;
+        }
+
+        _refreshing = false;
+        list.ScrollIntoView(nextItem);
+        list.Focus();
+        if (nextItem is ModInfo mod)
+        {
+            ShowDetails(mod);
+        }
+
     }
 
     private void OnModListPointerPressed(object? sender, PointerPressedEventArgs e)
