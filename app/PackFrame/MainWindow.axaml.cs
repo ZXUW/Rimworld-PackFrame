@@ -326,7 +326,8 @@ public partial class MainWindow : Window
         _problemTooltipTimer.Tick += (_, _) =>
         {
             _problemTooltipTimer.Stop();
-            if (!_problemTooltipContentHovered)
+            if (!_problemTooltipContentHovered &&
+                _modBadgePopup.Child?.IsKeyboardFocusWithin != true)
             {
                 CloseProblemTooltip();
             }
@@ -1394,12 +1395,18 @@ public partial class MainWindow : Window
             Orientation = Avalonia.Layout.Orientation.Vertical,
             Spacing = 6
         };
-        content.Children.Add(new SelectableTextBlock
+        content.Children.Add(new TextBox
         {
             Text = mod.BadgeTooltip,
             FontSize = 14,
             Foreground = TextBrush,
-            TextWrapping = TextWrapping.Wrap
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(0),
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 560
         });
 
         if (mod.SortError && mod.SortOrderAfterIds.Count > 0)
