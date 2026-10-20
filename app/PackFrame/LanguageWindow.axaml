@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PackFrame.LanguageWindow"
+        Title="Rimworld PackFrame"
+        Width="420"
+        Height="220"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Background="#20354A"
+        RequestedThemeVariant="Dark">
+    <Grid Margin="12" RowDefinitions="*,*" ColumnDefinitions="*,*">
+        <Button Grid.Row="0"
+                Grid.Column="0"
+                Content="English"
+                Tag="en"
+                Theme="{StaticResource FlatButton}"
+                Margin="6"
+                MinHeight="64"
+                Click="OnLanguageClick" />
+        <Button Grid.Row="0"
+                Grid.Column="1"
+                Content="简体中文"
+                Tag="zh-Hans"
+                Theme="{StaticResource FlatButton}"
+                Margin="6"
+                MinHeight="64"
+                Click="OnLanguageClick" />
+        <Button Grid.Row="1"
+                Grid.Column="0"
+                Content="繁體中文"
+                Tag="zh-Hant"
+                Theme="{StaticResource FlatButton}"
+                Margin="6"
+                MinHeight="64"
+                Click="OnLanguageClick" />
+        <Button Grid.Row="1"
+                Grid.Column="1"
+                Content="日本語"
+                Tag="ja"
+                Theme="{StaticResource FlatButton}"
+                Margin="6"
+                MinHeight="64"
+                Click="OnLanguageClick" />
+    </Grid>
+</Window>

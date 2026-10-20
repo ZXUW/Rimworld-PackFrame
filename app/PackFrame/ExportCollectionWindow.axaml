@@ -1,0 +1,379 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PackFrame.ExportCollectionWindow"
+        Title="Rimworld PackFrame"
+        Width="760"
+        Height="720"
+        MinWidth="640"
+        MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        Background="#20354A"
+        RequestedThemeVariant="Dark">
+    <Grid Margin="16" RowDefinitions="Auto,*,Auto">
+        <TextBlock x:Name="TitleText"
+                   FontSize="21"
+                   FontWeight="SemiBold"
+                   Foreground="#EAF1F8" />
+
+        <Grid Grid.Row="1" Margin="0,12,0,0">
+            <ScrollViewer x:Name="RepoPage"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock x:Name="RepoLabel"
+                                   Foreground="#C3D4E4"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                        <Button x:Name="OpenRepoButton"
+                                Grid.Column="1"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="30"
+                                Padding="14,5"
+                                Click="OnOpenRepoClick" />
+                    </Grid>
+                    <SelectableTextBlock x:Name="RepoPath"
+                                         Foreground="#EAF1F8"
+                                         TextWrapping="Wrap" />
+                    <TextBlock x:Name="SummaryText"
+                               Foreground="#C3D4E4"
+                               TextWrapping="Wrap" />
+
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                        <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,12,0">
+                            <TextBlock x:Name="PackNameLabel"
+                                       Foreground="#C3D4E4"
+                                       FontWeight="SemiBold" />
+                            <Border Classes="field" MinHeight="34">
+                                <TextBox x:Name="PackNameBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         CornerRadius="0"
+                                         VerticalContentAlignment="Center" />
+                            </Border>
+                            <TextBlock x:Name="PackDescriptionLabel"
+                                       Foreground="#C3D4E4"
+                                       FontWeight="SemiBold"
+                                       Margin="0,2,0,0" />
+                            <Border Classes="field" MinHeight="58">
+                                <TextBox x:Name="PackDescriptionBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         CornerRadius="0"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         VerticalContentAlignment="Top" />
+                            </Border>
+                        </StackPanel>
+                        <Border x:Name="CoverPicker"
+                                Grid.Column="1"
+                                Width="256"
+                                Height="144"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Background="Transparent"
+                                BorderBrush="#455364"
+                                BorderThickness="1"
+                                Cursor="Hand"
+                                PointerPressed="OnCoverPickerPressed">
+                            <Panel>
+                                <Image x:Name="CoverPreview"
+                                       Stretch="Uniform"
+                                       Margin="4" />
+                                <TextBlock x:Name="CoverPlaceholder"
+                                           Text="+"
+                                           FontSize="28"
+                                           Foreground="#9AA7B8"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Panel>
+                        </Border>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,*" Margin="0,8,0,0">
+                        <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                            <TextBlock x:Name="LocalHeader"
+                                       Foreground="#C3D4E4"
+                                       FontWeight="SemiBold" />
+                            <ListBox x:Name="LocalList"
+                                     Height="260"
+                                     Margin="0,6,0,0"
+                                     BorderBrush="#455364"
+                                     BorderThickness="1" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                            <TextBlock x:Name="WorkshopHeader1"
+                                       Foreground="#C3D4E4"
+                                       FontWeight="SemiBold" />
+                            <ListBox x:Name="WorkshopList1"
+                                     Height="260"
+                                     Margin="0,6,0,0"
+                                     BorderBrush="#455364"
+                                     BorderThickness="1" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock x:Name="MissingHeader"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,8,0,0" />
+                    <ListBox x:Name="MissingList"
+                             Height="54"
+                             BorderBrush="#455364"
+                             BorderThickness="1" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid x:Name="SteamPage"
+                  IsVisible="False"
+                  RowDefinitions="Auto,*,Auto,Auto,Auto">
+                <TextBlock x:Name="WorkshopHeader2"
+                           Foreground="#C3D4E4"
+                           FontWeight="SemiBold" />
+                <ListBox x:Name="WorkshopList2"
+                         Grid.Row="1"
+                         Margin="0,8,0,8"
+                         BorderBrush="#455364"
+                         BorderThickness="1" />
+                <StackPanel Grid.Row="2" Spacing="4">
+                    <TextBlock x:Name="CollectionNameLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold" />
+                    <Border Classes="field" MinHeight="36">
+                        <TextBox x:Name="CollectionNameBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 VerticalContentAlignment="Center" />
+                    </Border>
+                    <TextBlock x:Name="CollectionDescriptionLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,2,0,0" />
+                    <Border Classes="field" MinHeight="58">
+                        <TextBox x:Name="CollectionDescriptionBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 VerticalContentAlignment="Top" />
+                    </Border>
+                </StackPanel>
+                <StackPanel Grid.Row="3" Spacing="8" Margin="0,8,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="CreateCollectionButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="24,8"
+                                Click="OnCreateCollectionClick" />
+                        <Button x:Name="OpenCollectionButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="18,8"
+                                IsVisible="False"
+                                Click="OnOpenCollectionClick" />
+                    </StackPanel>
+                    <TextBlock x:Name="PrivateNote"
+                               Foreground="#9AA7B8"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                    <TextBlock x:Name="StatusText"
+                               Foreground="#C3D4E4"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center" />
+                    <Button x:Name="CancelCreateButton"
+                            Grid.Column="1"
+                            Classes="footerlink"
+                            Content="Cancel"
+                            IsVisible="False"
+                            Margin="8,0,0,0"
+                            Click="OnCancelCreateClick" />
+                </Grid>
+            </Grid>
+
+            <ScrollViewer x:Name="GithubPage"
+                          IsVisible="False"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="GithubPathLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold" />
+                    <SelectableTextBlock x:Name="GithubPath"
+                                         Foreground="#EAF1F8"
+                                         TextWrapping="Wrap" />
+
+                    <TextBlock x:Name="GithubTokenLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Border Classes="field" MinHeight="36">
+                            <TextBox x:Name="GithubTokenBox"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     CornerRadius="0"
+                                     PasswordChar="*"
+                                     VerticalContentAlignment="Center" />
+                        </Border>
+                        <Button x:Name="GetTokenButton"
+                                Grid.Column="1"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="36"
+                                Padding="18,6"
+                                Margin="8,0,0,0"
+                                Click="OnGetTokenClick" />
+                    </Grid>
+                    <TextBlock x:Name="GithubTokenHint"
+                               Foreground="#9AA7B8"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock x:Name="GithubRepoNameLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Border Classes="field" MinHeight="36">
+                        <TextBox x:Name="GithubRepoNameBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 VerticalContentAlignment="Center"
+                                 TextChanged="OnRepoNameChanged" />
+                    </Border>
+                    <TextBlock x:Name="GithubRepoNormalizedLabel"
+                               Foreground="#9AA7B8"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock x:Name="GithubRepoDescriptionLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Border Classes="field" MinHeight="58">
+                        <TextBox x:Name="GithubRepoDescriptionBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 VerticalContentAlignment="Top" />
+                    </Border>
+
+                    <TextBlock x:Name="GithubCollectionUrlLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Border Classes="field" MinHeight="36">
+                        <TextBox x:Name="GithubCollectionUrlBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 VerticalContentAlignment="Center" />
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                        <Button x:Name="UploadGithubButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="24,8"
+                                Click="OnUploadGithubClick" />
+                        <Button x:Name="OpenGithubRepoButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="18,8"
+                                IsVisible="False"
+                                Click="OnOpenGithubRepoClick" />
+                    </StackPanel>
+                    <TextBlock x:Name="GithubStatus"
+                               Foreground="#C3D4E4"
+                               TextWrapping="Wrap" />
+
+                    <Border Height="1" Background="#455364" Margin="0,10,0,0" />
+                    <Button x:Name="OpenRepoGithubButton"
+                            Theme="{StaticResource FlatButton}"
+                            MinHeight="38"
+                            Padding="20,8"
+                            HorizontalAlignment="Left"
+                            Click="OnOpenRepoClick" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <ScrollViewer x:Name="IndexPage"
+                          IsVisible="False"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="IndexIntro"
+                               Foreground="#EAF1F8"
+                               TextWrapping="Wrap" />
+                    <TextBlock x:Name="IndexRepoLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Border Classes="field" MinHeight="36">
+                        <TextBox x:Name="IndexRepoUrlBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 VerticalContentAlignment="Center" />
+                    </Border>
+                    <TextBlock x:Name="IndexTokenLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Border Classes="field" MinHeight="36">
+                        <TextBox x:Name="IndexTokenBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 PasswordChar="*"
+                                 VerticalContentAlignment="Center" />
+                    </Border>
+                    <TextBlock x:Name="IndexHint"
+                               Foreground="#9AA7B8"
+                               TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                        <Button x:Name="SubmitIndexButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="24,8"
+                                Click="OnSubmitIndexClick" />
+                        <Button x:Name="OpenIndexPrButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="18,8"
+                                IsVisible="False"
+                                Click="OnOpenIndexPrClick" />
+                    </StackPanel>
+                    <TextBlock x:Name="IndexStatus"
+                               Foreground="#C3D4E4"
+                               TextWrapping="Wrap" />
+                    <Border Height="1" Background="#455364" Margin="0,10,0,0" />
+                    <Button x:Name="OpenRepoIndexButton"
+                            Theme="{StaticResource FlatButton}"
+                            MinHeight="38"
+                            Padding="20,8"
+                            HorizontalAlignment="Left"
+                            Click="OnOpenRepoClick" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <Grid Grid.Row="2"
+              ColumnDefinitions="Auto,*,Auto"
+              Margin="0,12,0,0">
+            <Button x:Name="BackButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="38"
+                    Padding="24,8"
+                    Click="OnBackClick" />
+            <Button x:Name="NextButton"
+                    Grid.Column="2"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="38"
+                    Padding="24,8"
+                    Click="OnNextClick" />
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PackFrame.ImportModeWindow"
+        Title="Rimworld PackFrame"
+        Width="300"
+        Height="100"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#20354A"
+        RequestedThemeVariant="Dark">
+    <Grid Margin="12" ColumnDefinitions="*,12,*">
+        <Button x:Name="OverwriteButton"
+                Grid.Column="0"
+                Theme="{StaticResource FlatButton}"
+                MinHeight="40"
+                Click="OnOverwriteClick" />
+        <Button x:Name="NewButton"
+                Grid.Column="2"
+                Theme="{StaticResource FlatButton}"
+                MinHeight="40"
+                Click="OnNewClick" />
+    </Grid>
+</Window>

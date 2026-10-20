@@ -1,0 +1,117 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:PackFrame"
+        x:Class="PackFrame.MissingModsWindow"
+        Title="Rimworld PackFrame"
+        Width="1040"
+        Height="640"
+        MinWidth="780"
+        MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Background="#20354A"
+        RequestedThemeVariant="Dark">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto">
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock x:Name="TitleText"
+                       FontSize="21"
+                       FontWeight="SemiBold"
+                       Foreground="#EAF1F8"
+                       VerticalAlignment="Center" />
+            <Button x:Name="HistoryButton"
+                    Grid.Column="1"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Click="OnHistoryClick" />
+        </Grid>
+
+        <StackPanel Grid.Row="1" Margin="0,10,0,0" Spacing="4">
+            <TextBlock x:Name="SummaryText"
+                       Foreground="#EAF1F8"
+                       TextWrapping="Wrap" />
+            <TextBlock x:Name="SourceText"
+                       Foreground="#C3D4E4"
+                       TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
+                <TextBlock x:Name="MappingLabel"
+                           Foreground="#C3D4E4"
+                           Margin="0,0,8,0" />
+                <SelectableTextBlock x:Name="MappingPathText"
+                                     Grid.Column="1"
+                                     Foreground="#EAF1F8"
+                                     TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </StackPanel>
+
+        <Border Grid.Row="2"
+                Margin="0,12,0,0"
+                BorderBrush="{StaticResource SecondaryBrush}"
+                BorderThickness="1">
+            <Grid RowDefinitions="Auto,*">
+                <Border Background="#455364" Padding="12,9">
+                    <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*">
+                        <TextBlock x:Name="LabelHeader"
+                                   Foreground="#EAF1F8"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,12,0" />
+                        <TextBlock x:Name="AuthorHeader"
+                                   Grid.Column="1"
+                                   Foreground="#EAF1F8"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,12,0" />
+                        <TextBlock x:Name="PackageHeader"
+                                   Grid.Column="2"
+                                   Foreground="#EAF1F8"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,12,0" />
+                        <TextBlock x:Name="LinkHeader"
+                                   Grid.Column="3"
+                                   Foreground="#EAF1F8"
+                                   FontWeight="SemiBold" />
+                    </Grid>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="Rows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:MissingModRow">
+                                <Border BorderBrush="#455364"
+                                        BorderThickness="0,0,0,1"
+                                        Padding="12,9">
+                                    <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*">
+                                        <SelectableTextBlock Text="{Binding Label}"
+                                                             Foreground="#EAF1F8"
+                                                             TextWrapping="Wrap"
+                                                             Margin="0,0,12,0" />
+                                        <SelectableTextBlock Grid.Column="1"
+                                                             Text="{Binding Author}"
+                                                             Foreground="#EAF1F8"
+                                                             TextWrapping="Wrap"
+                                                             Margin="0,0,12,0" />
+                                        <SelectableTextBlock Grid.Column="2"
+                                                             Text="{Binding PackageId}"
+                                                             Foreground="#EAF1F8"
+                                                             TextWrapping="Wrap"
+                                                             Margin="0,0,12,0" />
+                                        <SelectableTextBlock Grid.Column="3"
+                                                             Text="{Binding Link}"
+                                                             Foreground="#EAF1F8"
+                                                             TextWrapping="Wrap" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <Button x:Name="FooterCloseButton"
+                Grid.Row="3"
+                Theme="{StaticResource FlatButton}"
+                MinHeight="32"
+                Padding="24,6"
+                HorizontalAlignment="Right"
+                Margin="0,12,0,0"
+                Click="OnCloseClick" />
+    </Grid>
+</Window>

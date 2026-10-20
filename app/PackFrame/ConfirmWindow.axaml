@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PackFrame.ConfirmWindow"
+        Title="Rimworld PackFrame"
+        Width="480"
+        Height="180"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#20354A"
+        RequestedThemeVariant="Dark">
+    <Grid Margin="16" RowDefinitions="*,Auto">
+        <TextBlock x:Name="MessageText"
+                   Foreground="#EAF1F8"
+                   TextWrapping="Wrap" />
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8">
+            <Button x:Name="CancelButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Click="OnCancelClick" />
+            <Button x:Name="ConfirmButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Click="OnConfirmClick" />
+        </StackPanel>
+    </Grid>
+</Window>

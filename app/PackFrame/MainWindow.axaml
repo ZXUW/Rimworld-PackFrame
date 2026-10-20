@@ -1,0 +1,549 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:PackFrame"
+        x:Class="PackFrame.MainWindow"
+        Title="Rimworld PackFrame"
+        Width="1500"
+        Height="900"
+        MinWidth="1100"
+        MinHeight="700"
+        WindowStartupLocation="CenterScreen"
+        Background="#20354A"
+        RequestedThemeVariant="Dark">
+    <Window.Resources>
+        <DataTemplate x:Key="ModTemplate" x:DataType="local:ModInfo">
+            <Border Background="{Binding RowBrush}">
+                <Grid ColumnDefinitions="24,*" Opacity="{Binding SearchOpacity}">
+                    <Border Width="22"
+                            Height="22"
+                            VerticalAlignment="Center"
+                            Margin="0,0,4,0"
+                            Background="Transparent"
+                            ToolTip.ShowDelay="200"
+                            ToolTip.Tip="{Binding BadgeTooltip}">
+                        <local:ModBadge Badges="{Binding ActiveBadges}"
+                                        Width="22"
+                                        Height="22" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Name}"
+                               Foreground="#EAF1F8"
+                               Effect="{Binding NameEffect}"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               ToolTip.ShowDelay="200"
+                               ToolTip.Tip="{Binding ColorLabel}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+    <Grid Margin="12" RowDefinitions="Auto,Auto,*,Auto">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto" VerticalAlignment="Top">
+            <Button x:Name="LanguageButton"
+                    Grid.Column="0"
+                    Theme="{StaticResource FlatButton}"
+                    Content="文/A"
+                    Padding="10,8"
+                    MinWidth="50"
+                    MinHeight="36"
+                    Margin="0,0,10,0" />
+            <TextBlock x:Name="GamePathLabel"
+                       Grid.Column="1"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,0"
+                       Foreground="#EAF1F8" />
+            <Border x:Name="PathField"
+                    Grid.Column="2"
+                    Classes="field"
+                    CornerRadius="0"
+                    MinHeight="36">
+                <TextBox x:Name="PathBox"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         CornerRadius="0"
+                         VerticalContentAlignment="Center"
+                         VerticalAlignment="Stretch" />
+            </Border>
+            <Button x:Name="AutoDetectGameButton"
+                    Grid.Column="3"
+                    Theme="{StaticResource FlatButton}"
+                    Margin="12,0,0,0"
+                    MinHeight="36"
+                    Click="OnAutoDetectGameClick" />
+            <Button x:Name="BrowseButton"
+                    Grid.Column="4"
+                    Theme="{StaticResource FlatButton}"
+                    Margin="8,0,0,0"
+                    MinHeight="36" />
+        </Grid>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,8,0,0">
+            <Button x:Name="PaintModeButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Padding="18,6"
+                    Click="OnPaintModeClick" />
+            <Button x:Name="UndoButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Padding="18,6"
+                    Click="OnUndoClick" />
+            <Button x:Name="RedoButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Padding="18,6"
+                    Click="OnRedoClick" />
+            <Button x:Name="SyncConfigButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Padding="18,6"
+                    IsVisible="False"
+                    Click="OnSyncConfigClick" />
+            <Button x:Name="RefreshButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Padding="18,6"
+                    Click="OnRefreshClick" />
+        </StackPanel>
+
+        <Grid Grid.Row="2" Margin="0,8,0,0" ColumnDefinitions="420,12,*">
+            <Border Grid.Column="0"
+                    Background="Transparent"
+                    BorderBrush="{StaticResource SecondaryBrush}"
+                    BorderThickness="1"
+                    Padding="12">
+                <Grid RowDefinitions="240,Auto,Auto,Auto,Auto,Auto,*">
+                    <Image x:Name="PreviewImage"
+                           Grid.Row="0"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+
+                    <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,8,0,0">
+                        <SelectableTextBlock x:Name="NameLabel"
+                                   Foreground="#C3D4E4"
+                                   VerticalAlignment="Top"
+                                   Margin="0,0,10,0" />
+                        <SelectableTextBlock x:Name="NameValue"
+                                   Grid.Column="1"
+                                   Foreground="#EAF1F8"
+                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+
+                    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" Margin="0,6,0,0">
+                        <SelectableTextBlock x:Name="AuthorLabel"
+                                   Foreground="#C3D4E4"
+                                   VerticalAlignment="Top"
+                                   Margin="0,0,10,0" />
+                        <SelectableTextBlock x:Name="AuthorValue"
+                                             Grid.Column="1"
+                                             Foreground="#EAF1F8"
+                                             TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+
+                    <Grid Grid.Row="3" ColumnDefinitions="Auto,*" Margin="0,6,0,0">
+                        <SelectableTextBlock x:Name="PathLabel"
+                                   Foreground="#C3D4E4"
+                                   VerticalAlignment="Top"
+                                   Margin="0,0,10,0" />
+                        <SelectableTextBlock x:Name="PathValue"
+                                             Grid.Column="1"
+                                             Foreground="#EAF1F8"
+                                             TextWrapping="Wrap" />
+                    </Grid>
+
+                    <Grid Grid.Row="4" ColumnDefinitions="Auto,*" Margin="0,6,0,0">
+                        <SelectableTextBlock x:Name="PackageLabel"
+                                   Foreground="#C3D4E4"
+                                   VerticalAlignment="Top"
+                                   Margin="0,0,10,0" />
+                        <SelectableTextBlock x:Name="PackageValue"
+                                             Grid.Column="1"
+                                             Foreground="#EAF1F8"
+                                             TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+
+                    <SelectableTextBlock x:Name="DescriptionLabel"
+                               Grid.Row="5"
+                               Foreground="#C3D4E4"
+                               Margin="0,10,0,2" />
+
+                    <ScrollViewer Grid.Row="6" VerticalScrollBarVisibility="Auto">
+                        <SelectableTextBlock x:Name="DescriptionValue"
+                                             Foreground="#EAF1F8"
+                                             TextWrapping="Wrap" />
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Column="2" ColumnDefinitions="*,8,*,8,*">
+                <Border Grid.Column="0"
+                        Background="Transparent"
+                        BorderBrush="{StaticResource SecondaryBrush}"
+                        BorderThickness="1"
+                        Padding="8">
+                    <Grid RowDefinitions="34,30,*,Auto">
+                        <Button x:Name="InactiveSortButton"
+                                Grid.Row="0"
+                                Theme="{StaticResource FlatButton}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                MinHeight="26"
+                                Height="26"
+                                Padding="6,2"
+                                Margin="2,0,0,0"
+                                Click="OnInactiveSortClick" />
+                        <TextBlock x:Name="InactiveHeader"
+                                   Foreground="#EAF1F8"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   Margin="2,0,2,0" />
+                        <Grid Grid.Row="1"
+                              ColumnDefinitions="*,Auto,Auto,Auto"
+                              Margin="0,2,0,2">
+                            <Border Classes="field"
+                                    Height="26"
+                                    CornerRadius="0">
+                                <TextBox x:Name="InactiveSearchBox"
+                                         Background="#01000000"
+                                         BorderThickness="0"
+                                         CornerRadius="0"
+                                         Padding="8,3"
+                                         VerticalContentAlignment="Center" />
+                            </Border>
+                            <ComboBox x:Name="InactiveSearchField"
+                                      Grid.Column="1"
+                                      MinWidth="64"
+                                      MinHeight="26"
+                                      Height="26"
+                                      Padding="6,3"
+                                      Margin="4,0,0,0" />
+                            <Button x:Name="InactiveSourceButton"
+                                    Grid.Column="2"
+                                    Theme="{StaticResource FlatButton}"
+                                    MinWidth="48"
+                                    MinHeight="26"
+                                    Height="26"
+                                    Padding="4,2"
+                                    Margin="4,0,0,0"
+                                    Click="OnInactiveSourceClick" />                            <Button x:Name="InactiveViewModeButton"
+                                    Grid.Column="3"
+                                    Theme="{StaticResource FlatButton}"
+                                    Width="26"
+                                    MinWidth="26"
+                                    MinHeight="26"
+                                    Height="26"
+                                    Padding="0"
+                                    Margin="4,0,0,0"
+                                    Click="OnInactiveViewModeClick" />
+                        </Grid>
+                        <ListBox x:Name="InactiveList"
+                                 ItemTemplate="{StaticResource ModTemplate}"
+                                 Grid.Row="2"
+                                 ItemContainerTheme="{StaticResource ModListItem}"
+                                 SelectionChanged="OnListSelectionChanged">
+                        </ListBox>                        <Border Grid.Row="3"
+                                BorderBrush="{StaticResource SecondaryBrush}"
+                                BorderThickness="0,1,0,0"
+                                Padding="4,4,4,2">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock x:Name="InactiveProblemS"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnInactiveProblemSClick" />
+                                <TextBlock x:Name="InactiveProblemV"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnInactiveProblemVClick" />
+                                <TextBlock x:Name="InactiveProblemR"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnInactiveProblemRClick" />
+                            </StackPanel>
+                        </Border>                    </Grid>
+                </Border>
+
+                <Border x:Name="ActiveColumn1"
+                        Grid.Column="2"
+                        Background="Transparent"
+                        BorderBrush="{StaticResource SecondaryBrush}"
+                        BorderThickness="1"
+                        Padding="8">
+                    <Grid RowDefinitions="34,30,*,Auto">
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*" Margin="2,0,2,0">
+                            <ComboBox x:Name="InstanceCombo1"
+                                      MinWidth="100"
+                                      HorizontalAlignment="Left"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,6,0"
+                                      SelectionChanged="OnInstanceSelectionChanged" />
+                            <Button x:Name="InstanceActionButton1"
+                                    Grid.Column="1"
+                                    Theme="{StaticResource FlatButton}"
+                                    Content="…"
+                                    Padding="8,4"
+                                    MinWidth="30"
+                                    MinHeight="28"
+                                    Margin="0,0,6,0"
+                                    VerticalAlignment="Center"
+                                    Click="OnInstanceActionsClick" />
+                            <Button x:Name="ModpackButton1"
+                                    Grid.Column="2"
+                                    Theme="{StaticResource FlatButton}"
+                                    Padding="10,4"
+                                    MinHeight="28"
+                                    Margin="0,0,10,0"
+                                    VerticalAlignment="Center"
+                                    Click="OnModpack1Click" />
+                            <TextBlock x:Name="ActiveHeader1"
+                                       Grid.Column="3"
+                                       Foreground="#EAF1F8"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                        <Grid Grid.Row="1"
+                              ColumnDefinitions="*,Auto,Auto,Auto"
+                              Margin="0,2,0,2">
+                            <Border Classes="field"
+                                    Height="26"
+                                    CornerRadius="0">
+                                <TextBox x:Name="ActiveSearchBox1"
+                                         Background="#01000000"
+                                         BorderThickness="0"
+                                         CornerRadius="0"
+                                         Padding="8,3"
+                                         VerticalContentAlignment="Center" />
+                            </Border>
+                            <ComboBox x:Name="ActiveSearchField1"
+                                      Grid.Column="1"
+                                      MinWidth="64"
+                                      MinHeight="26"
+                                      Height="26"
+                                      Padding="6,3"
+                                      Margin="4,0,0,0" />
+                            <Button x:Name="ActiveSourceButton1"
+                                    Grid.Column="2"
+                                    Theme="{StaticResource FlatButton}"
+                                    MinWidth="48"
+                                    MinHeight="26"
+                                    Height="26"
+                                    Padding="4,2"
+                                    Margin="4,0,0,0"
+                                    Click="OnActiveSource1Click" />                            <Button x:Name="ActiveViewModeButton1"
+                                    Grid.Column="3"
+                                    Theme="{StaticResource FlatButton}"
+                                    Width="26"
+                                    MinWidth="26"
+                                    MinHeight="26"
+                                    Height="26"
+                                    Padding="0"
+                                    Margin="4,0,0,0"
+                                    Click="OnActiveViewMode1Click" />
+                        </Grid>
+                        <ListBox x:Name="ActiveList1"
+                                 ItemTemplate="{StaticResource ModTemplate}"
+                                 Grid.Row="2"
+                                 ItemContainerTheme="{StaticResource ModListItem}"
+                                 SelectionChanged="OnListSelectionChanged">
+                        </ListBox>                        <Border Grid.Row="3"
+                                BorderBrush="{StaticResource SecondaryBrush}"
+                                BorderThickness="0,1,0,0"
+                                Padding="4,4,4,2">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock x:Name="ActiveProblemS1"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnActiveProblemS1Click" />
+                                <TextBlock x:Name="ActiveProblemV1"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnActiveProblemV1Click" />
+                                <TextBlock x:Name="ActiveProblemR1"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnActiveProblemR1Click" />
+                                <Button x:Name="ActiveMissing1"
+                                        Classes="footerlink"
+                                        IsVisible="False"
+                                        Click="OnMissing1Click" />
+                            </StackPanel>
+                        </Border>                    </Grid>
+                </Border>
+
+                <Border x:Name="ActiveColumn2"
+                        Grid.Column="4"
+                        Background="Transparent"
+                        BorderBrush="{StaticResource SecondaryBrush}"
+                        BorderThickness="1"
+                        Padding="8">
+                    <Grid RowDefinitions="34,30,*,Auto">
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*" Margin="2,0,2,0">
+                            <ComboBox x:Name="InstanceCombo2"
+                                      MinWidth="100"
+                                      HorizontalAlignment="Left"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,6,0"
+                                      SelectionChanged="OnInstanceSelectionChanged" />
+                            <Button x:Name="InstanceActionButton2"
+                                    Grid.Column="1"
+                                    Theme="{StaticResource FlatButton}"
+                                    Content="…"
+                                    Padding="8,4"
+                                    MinWidth="30"
+                                    MinHeight="28"
+                                    Margin="0,0,6,0"
+                                    VerticalAlignment="Center"
+                                    Click="OnInstanceActionsClick" />
+                            <Button x:Name="ModpackButton2"
+                                    Grid.Column="2"
+                                    Theme="{StaticResource FlatButton}"
+                                    Padding="10,4"
+                                    MinHeight="28"
+                                    Margin="0,0,10,0"
+                                    VerticalAlignment="Center"
+                                    Click="OnModpack2Click" />
+                            <TextBlock x:Name="ActiveHeader2"
+                                       Grid.Column="3"
+                                       Foreground="#EAF1F8"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                        <Grid Grid.Row="1"
+                              ColumnDefinitions="*,Auto,Auto,Auto"
+                              Margin="0,2,0,2">
+                            <Border Classes="field"
+                                    Height="26"
+                                    CornerRadius="0">
+                                <TextBox x:Name="ActiveSearchBox2"
+                                         Background="#01000000"
+                                         BorderThickness="0"
+                                         CornerRadius="0"
+                                         Padding="8,3"
+                                         VerticalContentAlignment="Center" />
+                            </Border>
+                            <ComboBox x:Name="ActiveSearchField2"
+                                      Grid.Column="1"
+                                      MinWidth="64"
+                                      MinHeight="26"
+                                      Height="26"
+                                      Padding="6,3"
+                                      Margin="4,0,0,0" />
+                            <Button x:Name="ActiveSourceButton2"
+                                    Grid.Column="2"
+                                    Theme="{StaticResource FlatButton}"
+                                    MinWidth="48"
+                                    MinHeight="26"
+                                    Height="26"
+                                    Padding="4,2"
+                                    Margin="4,0,0,0"
+                                    Click="OnActiveSource2Click" />                            <Button x:Name="ActiveViewModeButton2"
+                                    Grid.Column="3"
+                                    Theme="{StaticResource FlatButton}"
+                                    Width="26"
+                                    MinWidth="26"
+                                    MinHeight="26"
+                                    Height="26"
+                                    Padding="0"
+                                    Margin="4,0,0,0"
+                                    Click="OnActiveViewMode2Click" />
+                        </Grid>
+                        <ListBox x:Name="ActiveList2"
+                                 ItemTemplate="{StaticResource ModTemplate}"
+                                 Grid.Row="2"
+                                 ItemContainerTheme="{StaticResource ModListItem}"
+                                 SelectionChanged="OnListSelectionChanged">
+                        </ListBox>                        <Border Grid.Row="3"
+                                BorderBrush="{StaticResource SecondaryBrush}"
+                                BorderThickness="0,1,0,0"
+                                Padding="4,4,4,2">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock x:Name="ActiveProblemS2"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnActiveProblemS2Click" />
+                                <TextBlock x:Name="ActiveProblemV2"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnActiveProblemV2Click" />
+                                <TextBlock x:Name="ActiveProblemR2"
+                                           Foreground="#EAF1F8"
+                                           TextWrapping="NoWrap"
+                                           Cursor="Hand"
+                                           PointerPressed="OnActiveProblemR2Click" />
+                                <Button x:Name="ActiveMissing2"
+                                        Classes="footerlink"
+                                        IsVisible="False"
+                                        Click="OnMissing2Click" />
+                            </StackPanel>
+                        </Border>                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Spacing="8"
+                    Margin="0,8,0,0">
+            <Button x:Name="SaveButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="36"
+                    Padding="24,8"
+                    Click="OnSaveClick" />
+            <Button x:Name="LaunchButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="36"
+                    Padding="24,8"
+                    IsEnabled="False"
+                    Click="OnLaunchClick" />
+        </StackPanel>
+
+        <Canvas x:Name="DragOverlay"
+                Grid.RowSpan="3"
+                IsHitTestVisible="False"
+                Background="Transparent">
+            <Border x:Name="InsertionLine"
+                    Height="2"
+                    Background="#EAF1F8"
+                    IsVisible="False" />
+            <Border x:Name="DragGhost"
+                    Background="#B3455364"
+                    Padding="10,6"
+                    Width="240"
+                    IsVisible="False">
+                <TextBlock x:Name="DragGhostText"
+                           Foreground="#EAF1F8"
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+            </Border>
+        </Canvas>
+
+        <Border x:Name="UndoToast"
+                Grid.RowSpan="3"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                Margin="16"
+                Background="#CC20354A"
+                BorderBrush="{StaticResource SecondaryBrush}"
+                BorderThickness="1"
+                Padding="12,8"
+                IsVisible="False">
+            <TextBlock x:Name="UndoToastText"
+                       Foreground="#EAF1F8" />
+        </Border>
+    </Grid>
+</Window>
+
+
