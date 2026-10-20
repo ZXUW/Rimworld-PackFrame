@@ -173,6 +173,7 @@ public partial class MainWindow : Window
     private ModInfo? _lastPressMod;
     private long _lastPressTicks;
     private int _lastEnableColumn = 1;
+    private bool _firstColumnOfficialTried;
     private int _lastInstanceIndex1 = -1;
     private int _lastInstanceIndex2 = -1;
     private readonly HashSet<Control> _instanceContainers1 = new();
@@ -3921,6 +3922,39 @@ public partial class MainWindow : Window
         }
 
         var column = ReferenceEquals(border, _activeColumn1) ? 1 : 2;
+        if (column == 1 &&
+            !_firstColumnOfficialTried &&
+            GetSelectedInstance(0)?.IsScratch == true)
+        {
+            _firstColumnOfficialTried = true;
+            var officialIndex = _instances.FindIndex(instance =>
+                instance.IsOfficial &&
+                Directory.Exists(instance.ConfigDirectoryPath));
+            if (officialIndex < 0)
+            {
+                var detected = RimWorldLocator.FindConfigDirectory();
+                if (!string.IsNullOrWhiteSpace(detected))
+                {
+                    _config.OfficialConfigPath = detected;
+                    _config.Save();
+                    _instances = BuildInstances(_instances.Where(instance =>
+                        !instance.IsOfficial && !instance.IsScratch));
+                    InitializeInstanceSelectors();
+                    officialIndex = _instances.FindIndex(instance =>
+                        instance.IsOfficial &&
+                        Directory.Exists(instance.ConfigDirectoryPath));
+                }
+            }
+
+            if (officialIndex >= 0)
+            {
+                _lastEnableColumn = column;
+                UpdateEnableTargetBorders();
+                _instanceCombo1.SelectedIndex = officialIndex;
+                return;
+            }
+        }
+
         if (_lastEnableColumn == column)
         {
             return;
