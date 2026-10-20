@@ -3287,7 +3287,15 @@ public partial class MainWindow : Window
         var activeOffset1 = GetListScrollOffset(_activeList1);
         var activeOffset2 = GetListScrollOffset(_activeList2);
         RefreshManager(false);
+        RestoreListScrollOffsets(inactiveOffset, activeOffset1, activeOffset2);
+    }
 
+    private void RestoreListScrollOffsets(
+        Vector inactiveOffset,
+        Vector activeOffset1,
+        Vector activeOffset2
+    )
+    {
         void RestoreOffsets()
         {
             SetListScrollOffset(_inactiveList, inactiveOffset);
@@ -4143,6 +4151,9 @@ public partial class MainWindow : Window
 
         InstanceStore.DiscardPendingMods();
         UpdateSaveState();
+        var inactiveOffset = GetListScrollOffset(_inactiveList);
+        var activeOffset1 = GetListScrollOffset(_activeList1);
+        var activeOffset2 = GetListScrollOffset(_activeList2);
         _refreshButton.IsEnabled = false;
         try
         {
@@ -4165,6 +4176,7 @@ public partial class MainWindow : Window
             }
 
             RestoreInstanceSelection(folder1, folder2);
+            RestoreListScrollOffsets(inactiveOffset, activeOffset1, activeOffset2);
             ShowToast(Localization.Refreshed(_config.Language));
         }
         catch
