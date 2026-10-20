@@ -10,7 +10,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.VisualTree;
 using Avalonia.Input;
-using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -1383,10 +1382,6 @@ public partial class MainWindow : Window
 
     private void OnModBadgePointerExited(object? sender, PointerEventArgs e)
     {
-        if (ReferenceEquals(sender, _problemTooltipTarget))
-        {
-            StartProblemTooltipCloseTimer();
-        }
     }
 
     private Border CreateModBadgeTooltip(ModInfo mod)
@@ -4359,6 +4354,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        _modBadgePopup.IsOpen = false;
         var point = e.GetCurrentPoint(list);
         if (_paintMode && point.Properties.IsLeftButtonPressed)
         {
