@@ -1382,6 +1382,10 @@ public partial class MainWindow : Window
 
     private void OnModBadgePointerExited(object? sender, PointerEventArgs e)
     {
+        if (ReferenceEquals(sender, _problemTooltipTarget))
+        {
+            StartProblemTooltipCloseTimer();
+        }
     }
 
     private Border CreateModBadgeTooltip(ModInfo mod)
@@ -1397,7 +1401,9 @@ public partial class MainWindow : Window
             FontSize = 14,
             Foreground = TextBrush,
             TextWrapping = TextWrapping.Wrap,
-            Focusable = true
+            Focusable = true,
+            SelectionBrush = new SolidColorBrush(Color.Parse("#5C6E82")),
+            SelectionForegroundBrush = Brushes.White
         };
         body.PointerPressed += (_, _) => body.Focus();
         body.KeyDown += (_, keyEvent) =>
