@@ -336,8 +336,14 @@ try
     Check(conflictRules["other"].Contains("framework") && conflictRules["framework"].Count == 1,
         "incompatibilities flag both enabled mods and ignore disabled targets");
     Check(OperationText.Download("en").StartsWith("Downloading") &&
-        OperationText.Download("ja").Contains("ダウンロード") && OperationText.Download("unknown") == OperationText.Download("en"),
+        OperationText.Download("ja").Contains("ローカル") && OperationText.Download("unknown") == OperationText.Download("en"),
         "operation messages respect language and English fallback");
+    var packManifest = new Uri("https://raw.githubusercontent.com/ZXUW/UI-1.7-Rimworld-PackFrame/main/pack.json");
+    Check(ModpackService.ResolveImage(packManifest, "images/cover.png") ==
+        "https://raw.githubusercontent.com/ZXUW/UI-1.7-Rimworld-PackFrame/main/images/cover.png",
+        "pack-relative cover image resolves against the pack manifest");
+    Check(ModpackService.ResolveImage(packManifest, "https://example.com/cover.png") ==
+        "https://example.com/cover.png", "absolute cover image stays absolute");
     await PublishingChecks.Run(root);
     Console.WriteLine("Rule and publishing checks passed.");
 }

@@ -216,8 +216,22 @@ public static class ModpackService
         pack.Description = string.IsNullOrWhiteSpace(pack.Description)
             ? entry.Summary
             : pack.Description;
-        pack.Image = string.IsNullOrWhiteSpace(pack.Image) ? entry.Image : pack.Image;
+        pack.Image = !string.IsNullOrWhiteSpace(pack.Image)
+            ? ResolveImage(packUri, pack.Image)
+            : ResolveImage(indexUri, entry.Image);
         return pack;
+    }
+
+    internal static string? ResolveImage(Uri baseUri, string? image)
+    {
+        if (string.IsNullOrWhiteSpace(image))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(baseUri, image, out var resolved)
+            ? resolved.AbsoluteUri
+            : image;
     }
 
     public static async Task<ModpackInstallResult> InstallAsync(
