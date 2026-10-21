@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -147,12 +148,12 @@ public static class GitHubPublisher
     {
         using var response = await client.PostAsync(
             "https://api.github.com/user/repos",
-            JsonContent(new
+            JsonContent(new JsonObject
             {
-                name,
-                description = BuildDescription(description, collectionUrl),
-                @private = false,
-                auto_init = true
+                ["name"] = name,
+                ["description"] = BuildDescription(description, collectionUrl),
+                ["private"] = false,
+                ["auto_init"] = true
             }),
             cancellationToken
         );
@@ -230,17 +231,17 @@ public static class GitHubPublisher
             Encoding.UTF8.GetBytes("# PackFrame\n")
         );
         var sha = await GetFileShaAsync(client, url, cancellationToken);
-        object payload = string.IsNullOrWhiteSpace(sha)
-            ? new
+        JsonObject payload = string.IsNullOrWhiteSpace(sha)
+            ? new JsonObject
             {
-                message = "Initial commit",
-                content = readme
+                ["message"] = "Initial commit",
+                ["content"] = readme
             }
-            : new
+            : new JsonObject
             {
-                message = "Initial commit",
-                content = readme,
-                sha
+                ["message"] = "Initial commit",
+                ["content"] = readme,
+                ["sha"] = sha
             };
 
         using var response = await client.PutAsync(
@@ -267,9 +268,9 @@ public static class GitHubPublisher
     {
         using var response = await client.PatchAsync(
             $"https://api.github.com/repos/{owner}/{name}",
-            JsonContent(new
+            JsonContent(new JsonObject
             {
-                description = BuildDescription(description, collectionUrl)
+                ["description"] = BuildDescription(description, collectionUrl)
             }),
             cancellationToken
         );
@@ -301,17 +302,17 @@ public static class GitHubPublisher
         );
         var url = $"https://api.github.com/repos/{owner}/{name}/contents/{encodedPath}";
         var sha = await GetFileShaAsync(client, url, cancellationToken);
-        object payload = string.IsNullOrWhiteSpace(sha)
-            ? new
+        JsonObject payload = string.IsNullOrWhiteSpace(sha)
+            ? new JsonObject
             {
-                message = "Add " + relative,
-                content
+                ["message"] = "Add " + relative,
+                ["content"] = content
             }
-            : new
+            : new JsonObject
             {
-                message = "Update " + relative,
-                content,
-                sha
+                ["message"] = "Update " + relative,
+                ["content"] = content,
+                ["sha"] = sha
             };
 
         using var response = await client.PutAsync(
@@ -352,10 +353,10 @@ public static class GitHubPublisher
             : null;
     }
 
-    private static StringContent JsonContent(object value)
+    private static StringContent JsonContent(JsonNode value)
     {
         return new StringContent(
-            JsonSerializer.Serialize(value),
+            value.ToJsonString(),
             Encoding.UTF8,
             "application/json"
         );
