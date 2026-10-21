@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -257,6 +258,7 @@ public static class ModpackService
                 await DownloadAsync(
                     archiveUri,
                     temporaryArchive,
+                    status,
                     cancellationToken
                 );
                 status?.Invoke("正在解压本地模组...");
@@ -786,7 +788,7 @@ public static class ModpackService
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
-            await DownloadAsync(uri, zipPath, cancellationToken);
+            await DownloadAsync(uri, zipPath, null, cancellationToken);
             Directory.CreateDirectory(extractRoot);
             using (var archive = ZipFile.OpenRead(zipPath))
             {
@@ -951,6 +953,7 @@ public static class ModpackService
     private static async Task DownloadAsync(
         Uri uri,
         string path,
+        Action<string>? status,
         CancellationToken cancellationToken
     )
     {
@@ -967,6 +970,10 @@ public static class ModpackService
 
         await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
         await using var destination = File.Create(path);
+        var totalLength = response.Content.Headers.ContentLength ?? 0;
+        var stopwatch = Stopwatch.StartNew();
+        var lastBytes = 0L;
+        var lastSeconds = 0d;
         var buffer = new byte[81920];
         long total = 0;
         int read;
@@ -979,7 +986,35 @@ public static class ModpackService
             }
 
             await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            var now = stopwatch.Elapsed.TotalSeconds;
+            if (now - lastSeconds >= 0.5 || total == totalLength)
+            {
+                var speed = (total - lastBytes) / Math.Max(0.001, now - lastSeconds);
+                var progress = totalLength > 0
+                    ? $"{FormatBytes(total)} / {FormatBytes(totalLength)} ({total * 100d / totalLength:0.0}%)"
+                    : FormatBytes(total);
+                status?.Invoke($"正在下载本地模组压缩包... {progress}  {FormatBytes(speed)}/s");
+                lastBytes = total;
+                lastSeconds = now;
+            }
         }
+    }
+
+    private static string FormatBytes(double bytes)
+    {
+        if (bytes >= 1024d * 1024d * 1024d)
+        {
+            return $"{bytes / (1024d * 1024d * 1024d):0.0} GB";
+        }
+        if (bytes >= 1024d * 1024d)
+        {
+            return $"{bytes / (1024d * 1024d):0.0} MB";
+        }
+        if (bytes >= 1024d)
+        {
+            return $"{bytes / 1024d:0.0} KB";
+        }
+        return $"{bytes:0} B";
     }
 
     private static string NormalizeSource(ModpackMod mod)
