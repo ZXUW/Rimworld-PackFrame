@@ -199,8 +199,8 @@
                                     Click="OnSteamCmdInstallClick" />
                             <Button x:Name="WorkshopOnlyButton"
                                     Theme="{StaticResource FlatButton}"
-                                    MinHeight="36"
-                                    Padding="14,8"
+                                    MinHeight="48"
+                                    Padding="10,4"
                                     Click="OnWorkshopOnlyInstallClick" />
                             <Button x:Name="ApplyConfigButton"
                                     Theme="{StaticResource FlatButton}"

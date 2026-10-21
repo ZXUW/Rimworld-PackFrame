@@ -119,7 +119,8 @@ public partial class ModpackWindow : Window
         );
         SetButtonText(
             Find<Button>("WorkshopOnlyButton"),
-            Localization.ModpackWorkshopOnlyInstall(_language)
+            Localization.ModpackWorkshopOnlyInstall(_language),
+            11
         );
         SetButtonText(
             Find<Button>("ApplyConfigButton"),
@@ -134,11 +135,12 @@ public partial class ModpackWindow : Window
         SetControls(true);
     }
 
-    private static void SetButtonText(Button button, string text)
+    private static void SetButtonText(Button button, string text, double fontSize = 14)
     {
         button.Content = new TextBlock
         {
             Text = text,
+            FontSize = fontSize,
             TextAlignment = TextAlignment.Center,
             TextWrapping = TextWrapping.Wrap
         };

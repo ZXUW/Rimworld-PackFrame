@@ -1495,10 +1495,10 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "只下载合集、配置和排序",
-            TraditionalChinese => "只下載合集、設定和排序",
-            Japanese => "コレクション・設定・並び順のみ",
-            _ => "Collection, config and order only"
+            SimplifiedChinese => "只下载合集、配置和排序\n手动把本地模组放到该实例下的 Mods 目录",
+            TraditionalChinese => "只下載合集、設定和排序\n手動把本地模組放到該實例下的 Mods 目錄",
+            Japanese => "コレクション・設定・並び順のみ\nローカルMODは該当インスタンスのModsへ手動配置",
+            _ => "Collection, config and order only\nPlace local mods in this instance's Mods folder manually"
         };
     }
 
