@@ -9,6 +9,9 @@ using System.Threading;
 using SkiaSharp;
 
 namespace PackFrame;
+public sealed record SteamCollectionFailure(ulong Id, string Name, int Result);
+public sealed record SteamCollectionCreateResult(ulong CollectionId, IReadOnlyList<SteamCollectionFailure> Failed);
+
 internal sealed class SteamCollectionClient
 {
     private const uint RimWorldAppId = 294100;
@@ -130,7 +133,7 @@ internal sealed class SteamCollectionClient
         _getCallResult = getCallResult;
     }
 
-    public static ulong CreatePrivateCollection(
+    public static SteamCollectionCreateResult CreatePrivateCollection(
         string gamePath,
         string title,
         string description,
@@ -287,20 +290,22 @@ internal sealed class SteamCollectionClient
             }
 
 
+            var failures = new List<SteamCollectionFailure>();
             for (var index = 0; index < workshopIds.Count; index++)
             {
                 var child = workshopIds[index];
-                var childLabel = workshopNames is not null &&
-                                 workshopNames.TryGetValue(child, out var childName) &&
-                                 !string.IsNullOrWhiteSpace(childName)
-                    ? $"{child} ({childName})"
-                    : child.ToString();
+                var childName = workshopNames is not null &&
+                                workshopNames.TryGetValue(child, out var resolvedName)
+                    ? resolvedName
+                    : string.Empty;
+                var childLabel = string.IsNullOrWhiteSpace(childName)
+                    ? child.ToString()
+                    : $"{child} ({childName})";
                 var addCall = addDependency(ugc, collectionId, child);
                 if (addCall == 0)
                 {
-                    throw new InvalidOperationException(
-                        $"AddDependency returned an invalid call for {childLabel}."
-                    );
+                    failures.Add(new SteamCollectionFailure(child, childName, 0));
+                    continue;
                 }
 
                 var added = client.Wait<AddDependencyResult>(
@@ -310,9 +315,11 @@ internal sealed class SteamCollectionClient
                 );
                 if (added.Result != ResultOk)
                 {
-                    throw new InvalidOperationException(
-                        $"AddDependency failed for {childLabel} with EResult {added.Result}."
-                    );
+                    failures.Add(new SteamCollectionFailure(
+                        child,
+                        childName,
+                        added.Result
+                    ));
                 }
             }
 
@@ -357,7 +364,7 @@ internal sealed class SteamCollectionClient
                 {
                 }
             }
-            return collectionId;
+            return new SteamCollectionCreateResult(collectionId, failures);
         }
         finally
         {

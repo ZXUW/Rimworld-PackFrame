@@ -390,7 +390,7 @@ public partial class ExportCollectionWindow : Window
         StatusText.Text = Localization.ExportCollectionUploading(_language);
         try
         {
-            var collectionId = await Task.Run(() =>
+            var createResult = await Task.Run(() =>
                 SteamCollectionClient.CreatePrivateCollection(
                     _gamePath,
                     collectionName,
@@ -401,6 +401,7 @@ public partial class ExportCollectionWindow : Window
                     cancellation.Token
                 )
             );
+            var collectionId = createResult.CollectionId;
 
             _collectionUrl =
                 $"https://steamcommunity.com/sharedfiles/filedetails/?id={collectionId}";
@@ -410,6 +411,20 @@ public partial class ExportCollectionWindow : Window
                 collectionId,
                 _collectionUrl
             );
+            if (createResult.Failed.Count > 0)
+            {
+                var details = string.Join(
+                    "\n",
+                    createResult.Failed.Select(failure =>
+                        string.IsNullOrWhiteSpace(failure.Name)
+                            ? $"{failure.Id}: EResult {failure.Result}"
+                            : $"{failure.Id} ({failure.Name}): EResult {failure.Result}")
+                );
+                StatusText.Text = Localization.ExportCollectionPartial(
+                    _language,
+                    createResult.Failed.Count
+                ) + "\n" + _collectionUrl + "\n" + details;
+            }
             GithubCollectionUrlBox.Text = _collectionUrl;
             OpenCollectionButton.IsVisible = true;
         }

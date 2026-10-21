@@ -1842,6 +1842,17 @@ public static class Localization
         };
     }
 
+    public static string ExportCollectionPartial(string? language, int count)
+    {
+        return language switch
+        {
+            SimplifiedChinese => $"合集已创建，但 {count} 个模组添加失败（已跳过）：",
+            TraditionalChinese => $"合集已建立，但 {count} 個模組加入失敗（已略過）：",
+            Japanese => $"コレクションは作成されましたが、{count} 個の MOD を追加できませんでした（スキップ）：",
+            _ => $"Collection created, but {count} mods could not be added (skipped):"
+        };
+    }
+
     public static string ExportCollectionSuccess(string? language, ulong id, string url)
     {
         return language switch
