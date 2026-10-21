@@ -10,9 +10,11 @@
     <Product>Rimworld PackFrame</Product>
     <Description>Rimworld PackFrame modpack launcher.</Description>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>Assets\PackFrame.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
+    <AvaloniaResource Include="Assets\PackFrame.ico" />
     <InternalsVisibleTo Include="PackFrame.Checks" />
     <PackageReference Include="Avalonia" Version="12.1.4" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
