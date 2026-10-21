@@ -117,10 +117,9 @@ public partial class ModpackWindow : Window
             Find<Button>("SteamCmdButton"),
             Localization.ModpackSteamCmdInstall(_language)
         );
-        SetButtonText(
+        SetWorkshopOnlyButtonText(
             Find<Button>("WorkshopOnlyButton"),
-            Localization.ModpackWorkshopOnlyInstall(_language),
-            11
+            Localization.ModpackWorkshopOnlyInstall(_language)
         );
         SetButtonText(
             Find<Button>("ApplyConfigButton"),
@@ -133,6 +132,27 @@ public partial class ModpackWindow : Window
 
         Find<TextBlock>("StatusText").Text = Localization.ModpackNoUrl(_language);
         SetControls(true);
+    }
+
+    private static void SetWorkshopOnlyButtonText(Button button, string text)
+    {
+        var panel = new StackPanel
+        {
+            Spacing = 1
+        };
+        var lines = text.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = lines[i],
+                FontSize = i == 0 ? 14 : 10,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
+
+        button.Content = panel;
     }
 
     private static void SetButtonText(Button button, string text, double fontSize = 14)
