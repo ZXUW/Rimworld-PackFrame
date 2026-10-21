@@ -1248,6 +1248,28 @@ public static class Localization
         };
     }
 
+    public static string ModpackRepoDefault(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "默认仓库（ZXUW）",
+            TraditionalChinese => "預設倉庫（ZXUW）",
+            Japanese => "デフォルトリポジトリ（ZXUW）",
+            _ => "Default repository (ZXUW)"
+        };
+    }
+
+    public static string ModpackRepoCustom(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "自定义输入",
+            TraditionalChinese => "自訂輸入",
+            Japanese => "カスタム入力",
+            _ => "Custom input"
+        };
+    }
+
     public static string ModpackRepoLabel(string? language)
     {
         return language switch

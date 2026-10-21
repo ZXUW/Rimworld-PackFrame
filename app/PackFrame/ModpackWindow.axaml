@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:PackFrame"
         x:Class="PackFrame.ModpackWindow"
@@ -26,7 +26,7 @@
         </Grid>
 
         <Grid Grid.Row="1"
-              ColumnDefinitions="Auto,*"
+              ColumnDefinitions="Auto,*,Auto"
               Margin="0,10,0,0">
             <TextBlock x:Name="RepoLabel"
                        Foreground="#C3D4E4"
@@ -43,6 +43,15 @@
                          VerticalContentAlignment="Center"
                          KeyDown="OnRepoKeyDown" />
             </Border>
+            <Button x:Name="RepoMenuButton"
+                    Grid.Column="2"
+                    Theme="{StaticResource FlatButton}"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    Margin="4,0,0,0"
+                    Content="▾"
+                    Click="OnRepoMenuClick" />
         </Grid>
 
         <Grid Grid.Row="2"

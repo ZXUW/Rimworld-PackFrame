@@ -82,7 +82,12 @@ public partial class ModpackWindow : Window
         _language = config.Language ?? Localization.English;
 
         ApplyLocalization();
-        RepoBox.Text = config.ModpackIndexUrl ?? string.Empty;
+        var indexUrl = string.IsNullOrWhiteSpace(config.ModpackIndexUrl)
+            ? GitHubIndexPublisher.DefaultIndexUrl
+            : config.ModpackIndexUrl;
+        RepoBox.Text = indexUrl;
+        config.ModpackIndexUrl = indexUrl;
+        config.Save();
         Opened += async (_, _) => await LoadIndexAsync();
         KeyDown += OnWindowKeyDown;
         Closing += (_, _) =>
@@ -519,6 +524,33 @@ public partial class ModpackWindow : Window
         Find<Button>("SteamCmdButton").IsEnabled = ready && _canInstall;
         Find<Button>("ApplyConfigButton").IsEnabled =
             ready && _selectedPack is not null;
+    }
+
+    private void OnRepoMenuClick(object? sender, RoutedEventArgs e)
+    {
+        var flyout = new MenuFlyout();
+        var defaultItem = new MenuItem
+        {
+            Header = Localization.ModpackRepoDefault(_language)
+        };
+        defaultItem.Click += async (_, _) =>
+        {
+            RepoBox.Text = GitHubIndexPublisher.DefaultIndexUrl;
+            await LoadIndexAsync();
+        };
+        flyout.Items.Add(defaultItem);
+
+        var customItem = new MenuItem
+        {
+            Header = Localization.ModpackRepoCustom(_language)
+        };
+        customItem.Click += (_, _) =>
+        {
+            RepoBox.Focus();
+            RepoBox.SelectAll();
+        };
+        flyout.Items.Add(customItem);
+        flyout.ShowAt((Control)sender!);
     }
 
     private async void OnRefreshClick(object? sender, RoutedEventArgs e)
