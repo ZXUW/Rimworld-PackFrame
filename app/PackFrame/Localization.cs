@@ -2,6 +2,26 @@
 
 public static class Localization
 {
+    public static string IncompatibleMods(string? language, string names) => language switch
+    {
+        SimplifiedChinese => $"不兼容：{names}（调整顺序无法解决）",
+        TraditionalChinese => $"不相容：{names}（調整順序無法解決）",
+        Japanese => $"非互換: {names}（並べ替えでは解決しません）",
+        _ => $"Incompatible: {names} (reordering will not resolve this)"
+    };
+    public static string DiscardChanges(string? language) => language switch
+    {
+        SimplifiedChinese => "丢弃修改", TraditionalChinese => "捨棄變更",
+        Japanese => "変更を破棄", _ => "Discard changes"
+    };
+
+    public static string PendingChangesPrompt(string? language) => language switch
+    {
+        SimplifiedChinese => "模组列表有未保存的修改。是否保存？",
+        TraditionalChinese => "模組清單有未儲存的變更。是否儲存？",
+        Japanese => "MOD リストに未保存の変更があります。保存しますか？",
+        _ => "The mod lists have unsaved changes. Save them?"
+    };
     public const string English = "en";
     public const string SimplifiedChinese = "zh-Hans";
     public const string TraditionalChinese = "zh-Hant";

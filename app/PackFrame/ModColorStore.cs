@@ -21,6 +21,10 @@ public sealed class ModColorData
 public static class ModColorStore
 {
     public const string FileName = "ModColors.json";
+    private static string? _cachedRoot;
+    private static ModColorData? _cachedData;
+
+    public static void Invalidate() => _cachedData = null;
 
     public static string GetPath(string packRoot)
     {
@@ -33,6 +37,18 @@ public static class ModColorStore
 
     public static ModColorData Load(string? packRoot)
     {
+        var data = LoadCached(packRoot);
+        return new ModColorData
+        {
+            ModColors = new(data.ModColors, StringComparer.OrdinalIgnoreCase),
+            ColorLabels = new(data.ColorLabels, StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static ModColorData LoadCached(string? packRoot)
+    {
+        if (_cachedData is not null && _cachedRoot == packRoot) return _cachedData;
+        _cachedRoot = packRoot;
         var result = new ModColorData
         {
             ModColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
@@ -46,7 +62,7 @@ public static class ModColorStore
         var path = GetPath(packRoot);
         if (!File.Exists(path))
         {
-            return result;
+            return _cachedData = result;
         }
 
         try
@@ -75,11 +91,12 @@ public static class ModColorStore
                 }
             }
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("Read mod colors: " + path, exception);
         }
 
-        return result;
+        return _cachedData = result;
     }
 
     public static void SetModColors(
@@ -138,7 +155,7 @@ public static class ModColorStore
 
     public static string? GetColor(string? packRoot, string packageId)
     {
-        return Load(packRoot).ModColors.TryGetValue(packageId, out var color)
+        return LoadCached(packRoot).ModColors.TryGetValue(packageId, out var color)
             ? color
             : null;
     }
@@ -147,12 +164,14 @@ public static class ModColorStore
     {
         var path = GetPath(packRoot);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(
-            path,
+        FileTransactions.WriteAtomic(path, temporary => File.WriteAllText(
+            temporary,
             JsonSerializer.Serialize(
                 data,
                 PackFrameJsonContext.Default.ModColorData
             )
-        );
+        ));
+        _cachedRoot = packRoot;
+        _cachedData = data;
     }
 }

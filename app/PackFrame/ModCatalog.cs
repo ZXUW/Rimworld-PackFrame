@@ -81,11 +81,15 @@ public sealed record ModInfo(
     public string? BadgeTooltip { get; set; }
     public List<string> LoadAfter { get; init; } = new();
     public List<string> ForceLoadAfter { get; init; } = new();
+    public List<string> LoadBefore { get; init; } = new();
+    public List<string> ForceLoadBefore { get; init; } = new();
+    public List<string> IncompatibleWith { get; init; } = new();
     public List<string> ModDependencies { get; init; } = new();
     public List<string> SortOrderAfterNames { get; init; } = new();
     public List<string> SortOrderAfterIds { get; init; } = new();
     public int BadgeColumn { get; init; }
     public List<string> MissingDependencyNames { get; init; } = new();
+    public List<string> IncompatibleNames { get; init; } = new();
     public string Link { get; init; } = string.Empty;
     public IBrush? NameBrush { get; init; }
 
@@ -336,7 +340,7 @@ public static class ModCatalog
         }
     }
 
-    private static ModInfo? ReadMod(string directory, ModSource source)
+    internal static ModInfo? ReadMod(string directory, ModSource source)
     {
         var aboutPath = Path.Combine(directory, "About", "About.xml");
         if (!File.Exists(aboutPath))
@@ -400,6 +404,9 @@ public static class ModCatalog
             {
                 LoadAfter = ReadIdList(root, "loadAfter"),
                 ForceLoadAfter = ReadIdList(root, "forceLoadAfter"),
+                LoadBefore = ReadIdList(root, "loadBefore"),
+                ForceLoadBefore = ReadIdList(root, "forceLoadBefore"),
+                IncompatibleWith = ReadIdList(root, "incompatibleWith"),
                 ModDependencies = ReadDependencyIds(root),
                 Link = ReadLink(root)
             };

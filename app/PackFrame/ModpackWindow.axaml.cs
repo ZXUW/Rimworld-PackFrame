@@ -374,7 +374,7 @@ public partial class ModpackWindow : Window
         _canInstall = rows.Count > 0 ||
             (pack.PackageIds?.Count ?? 0) > 0 ||
             collectionId is not null;
-        _canApplyConfig = _currentInstance is not null &&
+        _canApplyConfig = _currentInstance is not null && !_currentInstance.IsDamaged &&
             !_currentInstance.IsScratch &&
             !_currentInstance.IsOfficial &&
             !string.IsNullOrWhiteSpace(_currentInstance.ConfigDirectoryPath) &&
@@ -383,7 +383,7 @@ public partial class ModpackWindow : Window
         Find<Button>("InstallButton").IsEnabled = _canInstall && !_busy;
         Find<Button>("SteamCmdButton").IsEnabled = _canInstall && !_busy;
         Find<Button>("ApplyConfigButton").IsEnabled =
-            _selectedPack is not null && !_busy;
+            _canApplyConfig && !_busy;
     }
 
     private List<ModpackModRow> BuildModRows(ModpackDefinition pack)
@@ -550,7 +550,7 @@ public partial class ModpackWindow : Window
         Find<Button>("InstallButton").IsEnabled = ready && _canInstall;
         Find<Button>("SteamCmdButton").IsEnabled = ready && _canInstall;
         Find<Button>("ApplyConfigButton").IsEnabled =
-            ready && _selectedPack is not null;
+            ready && _canApplyConfig;
     }
 
     private void OnRepoMenuClick(object? sender, RoutedEventArgs e)
@@ -624,6 +624,11 @@ public partial class ModpackWindow : Window
 
     private async void OnApplyConfigClick(object? sender, RoutedEventArgs e)
     {
+        if (_currentInstance?.IsDamaged == true)
+        {
+            Find<TextBlock>("StatusText").Text = _currentInstance.LoadError;
+            return;
+        }
         if (_busy || _selectedPack is null)
         {
             return;
@@ -639,10 +644,16 @@ public partial class ModpackWindow : Window
             return;
         }
 
-        if (IsRimWorldProcessRunning())
+        if (GameLaunchService.IsRunning())
         {
             Find<TextBlock>("StatusText").Text =
                 Localization.ModpackGameRunning(_language);
+            return;
+        }
+
+        if (InstanceStore.HasPendingMods)
+        {
+            Find<TextBlock>("StatusText").Text = Localization.UnsavedChanges(_language);
             return;
         }
 
@@ -655,6 +666,8 @@ public partial class ModpackWindow : Window
         }
 
         _busy = true;
+        using var cancellation = new CancellationTokenSource();
+        _operationCancellation = cancellation;
         SetControls(false);
         Find<TextBlock>("StatusText").Text =
             Localization.SyncConfig(_language) + "...";
@@ -663,49 +676,36 @@ public partial class ModpackWindow : Window
             await ModpackService.DownloadConfigToAsync(
                 _selectedPack.ConfigBaseUrl,
                 _selectedPack.ConfigFiles,
-                _currentInstance.ConfigDirectoryPath
+                _currentInstance.ConfigDirectoryPath,
+                text => Dispatcher.UIThread.Post(() =>
+                {
+                    if (!_closed) Find<TextBlock>("StatusText").Text = text;
+                }), cancellation.Token, _language
             );
             ConfigApplied = true;
-            Close();
+            InstanceStore.SetPackBinding(_currentInstance, _selectedPack.Id,
+                _selectedPack.ConfigBaseUrl, _selectedPack.ConfigFiles, _currentInstance.IsSteamCmd);
+            if (!_closed) Close();
+        }
+        catch (OperationCanceledException)
+        {
+            if (!_closed) Find<TextBlock>("StatusText").Text = Localization.OperationCancelled(_language);
         }
         catch (Exception exception)
         {
             Find<TextBlock>("StatusText").Text =
                 Localization.SyncConfigFailed(_language, exception.Message);
+            AppLog.Error("Apply modpack configuration", exception);
         }
         finally
         {
+            if (ReferenceEquals(_operationCancellation, cancellation)) _operationCancellation = null;
             _busy = false;
             if (!_closed)
             {
                 SetControls(true);
             }
         }
-    }
-
-    private static bool IsRimWorldProcessRunning()
-    {
-        foreach (var name in new[]
-                 {
-                     "RimWorld",
-                     "RimWorldWin",
-                     "RimWorldWin64",
-                     "RimWorldLinux"
-                 })
-        {
-            try
-            {
-                if (Process.GetProcessesByName(name).Length > 0)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return false;
     }
 
     private async Task InstallAsync(string? workshopLink, bool useSteamCmd, bool skipModsDownload = false)
@@ -750,7 +750,7 @@ public partial class ModpackWindow : Window
                         }
                     });
                 },
-                cancellation.Token
+                cancellation.Token, _language
             );
             if (!_closed)
             {
@@ -772,6 +772,7 @@ public partial class ModpackWindow : Window
         }
         catch (Exception exception)
         {
+            AppLog.Error("Install modpack", exception);
             TryDeleteDirectory(stagingRoot);
             if (!_closed)
             {
@@ -846,13 +847,6 @@ public partial class ModpackWindow : Window
         return client;
     }
 }
-
-
-
-
-
-
-
 
 
 

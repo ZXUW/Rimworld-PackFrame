@@ -21,6 +21,13 @@ public sealed class ManagedInstance
     public InstanceMetadata? Metadata { get; set; }
     public bool IsOfficial { get; init; }
     public bool IsScratch { get; init; }
+    public string? LoadError { get; init; }
+    public bool IsDamaged => LoadError is not null;
+
+    public void EnsureHealthy()
+    {
+        if (IsDamaged) throw new IOException($"Instance is damaged: {DirectoryPath}\n{LoadError}");
+    }
     public bool IsSteamCmd => Metadata?.SteamCmd == true;
     public string? DisplayNameOverride { get; init; }
 
@@ -38,6 +45,7 @@ public sealed class ManagedInstance
                 : string.IsNullOrWhiteSpace(Metadata?.Name)
                     ? FolderName
                     : Metadata.Name.Trim();
+            if (IsDamaged) return "⚠ " + name;
             return IsSteamCmd &&
                    !name.EndsWith("(cmd)", StringComparison.OrdinalIgnoreCase)
                 ? name + " (cmd)"
@@ -106,7 +114,14 @@ public static class InstanceStore
                 continue;
             }
 
-            instances.Add(LoadInstance(directory));
+            try { instances.Add(LoadInstance(directory)); }
+            catch (IOException exception)
+            {
+                var damaged = new ManagedInstance { FolderName = Path.GetFileName(directory),
+                    DirectoryPath = Path.GetFullPath(directory), LoadError = exception.Message };
+                RemovePending(damaged);
+                instances.Add(damaged);
+            }
         }
 
         return instances
@@ -185,6 +200,7 @@ public static class InstanceStore
         string? gameVersion = null
     )
     {
+        source.EnsureHealthy();
         var folderName = $"profile{GetNextIndex(packRoot)}";
         var directory = Path.Combine(packRoot, InstancesFolderName, folderName);
         if (Directory.Exists(directory))
@@ -206,6 +222,7 @@ public static class InstanceStore
 
     public static ManagedInstance CopyOfficial(string packRoot, ManagedInstance source)
     {
+        source.EnsureHealthy();
         var folderName = $"profile{GetNextIndex(packRoot)}";
         var directory = Path.Combine(packRoot, InstancesFolderName, folderName);
         if (Directory.Exists(directory))
@@ -253,6 +270,7 @@ public static class InstanceStore
         bool steamCmd
     )
     {
+        instance.EnsureHealthy();
         if (instance.IsScratch || instance.IsOfficial ||
             string.IsNullOrWhiteSpace(instance.DirectoryPath))
         {
@@ -270,18 +288,19 @@ public static class InstanceStore
             .Select(file => file!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        File.WriteAllText(
-            Path.Combine(instance.DirectoryPath, MetadataFileName),
+        FileTransactions.WriteAtomic(
+            Path.Combine(instance.DirectoryPath, MetadataFileName), temporary => File.WriteAllText(temporary,
             JsonSerializer.Serialize(
                 metadata,
                 PackFrameJsonContext.Default.InstanceMetadata
             )
-        );
+        ));
         instance.Metadata = metadata;
     }
 
     public static void RenameInstance(ManagedInstance instance, string? name)
     {
+        instance.EnsureHealthy();
         var source = instance.Metadata?.Source;
         WriteMetadata(
             instance.DirectoryPath,
@@ -307,6 +326,7 @@ public static class InstanceStore
         IReadOnlyList<string> activePackageIds
     )
     {
+        instance.EnsureHealthy();
         var active = activePackageIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .ToList();
@@ -367,6 +387,7 @@ public static class InstanceStore
         IReadOnlyList<string> activePackageIds
     )
     {
+        instance.EnsureHealthy();
         var configDirectory = instance.ConfigDirectoryPath;
         if (string.IsNullOrWhiteSpace(configDirectory))
         {
@@ -800,9 +821,8 @@ public static class InstanceStore
             Directory.CreateDirectory(Path.Combine(targetPath, "Config"));
             Directory.CreateDirectory(Path.Combine(targetPath, "Saves"));
             WriteMetadata(targetPath, displayName, sourceName);
-            Directory.Delete(backupPath, true);
         }
-        catch
+        catch (Exception failure)
         {
             try
             {
@@ -815,12 +835,20 @@ public static class InstanceStore
                     Directory.Move(backupPath, targetPath);
                 }
             }
-            catch
+            catch (Exception rollbackFailure)
             {
+                throw new AggregateException(
+                    $"Instance update and rollback failed. Backup: {backupPath}",
+                    failure, rollbackFailure);
             }
 
             throw;
         }
+
+        // Cleanup failure must not roll back a successfully installed instance.
+        try { Directory.Delete(backupPath, true); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private static void OverwriteFromZip(
@@ -1251,6 +1279,8 @@ public static class InstanceStore
         var directory = string.IsNullOrWhiteSpace(configDirectory)
             ? string.Empty
             : Path.GetFullPath(configDirectory);
+        try
+        {
         var (active, version, known) = directory.Length == 0
             ? (new List<string>(), null, new List<string>())
             : ReadModsConfig(Path.Combine(directory, "ModsConfig.xml"));
@@ -1269,9 +1299,18 @@ public static class InstanceStore
             IsOfficial = true,
             DisplayNameOverride = displayName
         };
+        }
+        catch (IOException exception)
+        {
+            var damaged = new ManagedInstance { FolderName = OfficialFolderName,
+                DirectoryPath = directory, IsOfficial = true, DisplayNameOverride = displayName,
+                LoadError = exception.Message };
+            RemovePending(damaged);
+            return damaged;
+        }
     }
 
-    private static ManagedInstance LoadInstance(string directory)
+    internal static ManagedInstance LoadInstance(string directory)
     {
         var folderName = Path.GetFileName(directory);
         var (active, version, known) = ReadModsConfig(
@@ -1324,6 +1363,9 @@ public static class InstanceStore
             {
                 var document = XDocument.Load(modsConfigPath);
                 var root = document.Root;
+                if (root?.Name.LocalName != "ModsConfigData" ||
+                    !root.Elements().Any(element => element.Name.LocalName == "activeMods"))
+                    throw new InvalidDataException("Invalid ModsConfig structure: " + modsConfigPath);
                 if (root is not null)
                 {
                     active = ReadListItems(root.Elements()
@@ -1335,25 +1377,41 @@ public static class InstanceStore
                         ?.Value.Trim();
                 }
             }
-            catch
+            catch (Exception exception)
             {
+                AppLog.Error("Read mod list: " + modsConfigPath, exception);
+                throw new IOException($"Could not read mod list: {modsConfigPath}", exception);
             }
         }
 
         var normalizedActive = active.Select(NormalizePackageId).ToList();
         var normalizedKnown = known.Select(NormalizePackageId).ToList();
-        if (!active.SequenceEqual(normalizedActive) ||
-            !known.SequenceEqual(normalizedKnown))
-        {
-            WriteModsConfig(
-                modsConfigPath,
-                normalizedActive,
-                version,
-                normalizedKnown
-            );
-        }
-
         return (normalizedActive, version, normalizedKnown);
+    }
+
+    internal static void NormalizeConfigForLaunch(ManagedInstance instance)
+    {
+        instance.EnsureHealthy();
+        var path = Path.Combine(instance.ConfigDirectoryPath, "ModsConfig.xml");
+        if (!File.Exists(path)) return;
+        // Read from disk, not the in-memory list: preserve external edits and unrelated fields.
+        ReadModsConfig(path); // Validate before making any changes.
+        var document = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+        var changed = false;
+        foreach (var list in document.Root!.Elements().Where(element =>
+            element.Name.LocalName is "activeMods" or "knownExpansions"))
+        {
+            foreach (var item in list.Elements().Where(element => element.Name.LocalName == "li"))
+            {
+                var normalized = NormalizePackageId(item.Value);
+                if (item.Value == normalized) continue;
+                item.Value = normalized;
+                changed = true;
+            }
+        }
+        if (!changed) return;
+        File.Copy(path, path + ".before-normalize-" + Guid.NewGuid().ToString("N") + ".bak");
+        FileTransactions.WriteAtomic(path, temporary => document.Save(temporary, SaveOptions.DisableFormatting));
     }
 
     private static string NormalizePackageId(string id)
@@ -1397,7 +1455,7 @@ public static class InstanceStore
             )
         );
 
-        document.Save(path);
+        FileTransactions.WriteAtomic(path, temporary => document.Save(temporary));
     }
 
     private static InstanceMetadata? ReadMetadata(string directory)
@@ -1413,31 +1471,30 @@ public static class InstanceStore
             return JsonSerializer.Deserialize(
                 File.ReadAllText(path),
                 PackFrameJsonContext.Default.InstanceMetadata
-            );
+            ) ?? throw new InvalidDataException("Instance metadata is null: " + path);
         }
-        catch
+        catch (Exception exception)
         {
-            return null;
+            AppLog.Error("Read instance metadata: " + path, exception);
+            throw new IOException($"Could not read instance metadata: {path}", exception);
         }
     }
 
     private static void WriteMetadata(string directory, string name, string source)
     {
-        var metadata = new InstanceMetadata
-        {
-            Name = name,
-            Source = source
-        };
-        File.WriteAllText(
-            Path.Combine(directory, MetadataFileName),
+        var metadata = ReadMetadata(directory) ?? new InstanceMetadata();
+        metadata.Name = name;
+        metadata.Source = source;
+        FileTransactions.WriteAtomic(
+            Path.Combine(directory, MetadataFileName), temporary => File.WriteAllText(temporary,
             JsonSerializer.Serialize(
                 metadata,
                 PackFrameJsonContext.Default.InstanceMetadata
             )
-        );
+        ));
     }
 
-    private static int GetNextIndex(string packRoot)
+    internal static int GetNextIndex(string packRoot)
     {
         var indices = new List<int>();
         if (Directory.Exists(packRoot))

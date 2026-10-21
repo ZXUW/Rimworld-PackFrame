@@ -177,7 +177,7 @@ public static class GitHubIndexPublisher
         IReadOnlyList<string> packageIds,
         string collectionUrl,
         Action<string>? status,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default, string? language = null
     )
     {
         if (string.IsNullOrWhiteSpace(token))
@@ -202,11 +202,11 @@ public static class GitHubIndexPublisher
             cancellationToken
         );
 
-        status?.Invoke("正在准备整合包列表审核...");
+        status?.Invoke(OperationText.IndexPrepare(language));
         string headOwner = upstreamOwner;
         if (!string.Equals(login, upstreamOwner, StringComparison.OrdinalIgnoreCase))
         {
-            status?.Invoke("正在创建整合包索引仓库分支...");
+            status?.Invoke(OperationText.IndexFork(language));
             await EnsureForkAsync(
                 client,
                 upstreamOwner,
@@ -237,7 +237,7 @@ public static class GitHubIndexPublisher
             cancellationToken
         );
 
-        status?.Invoke("正在写入整合包文件...");
+        status?.Invoke(OperationText.IndexWrite(language));
         var packPath = "packs/" + Slug(packId) + ".json";
         var contentUrl =
             $"https://api.github.com/repos/{headOwner}/{upstreamRepo}/contents/{packPath}"
@@ -277,7 +277,7 @@ public static class GitHubIndexPublisher
             "Add or update modpack " + packId,
             cancellationToken
         );
-        status?.Invoke("正在创建审核 PR...");
+        status?.Invoke(OperationText.IndexPr(language));
         var prUrl = await CreatePullRequestAsync(
             client,
             upstreamOwner,
@@ -290,7 +290,7 @@ public static class GitHubIndexPublisher
             collectionUrl,
             cancellationToken
         );
-        status?.Invoke("审核 PR 已创建。");
+        status?.Invoke(OperationText.IndexDone(language));
         return new GitHubIndexPublishResult(prUrl);
     }
 

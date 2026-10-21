@@ -229,7 +229,8 @@ public static class ModpackService
         bool useSteamCmd = false,
         bool skipModsDownload = false,
         Action<string>? status = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        string? language = null
     )
     {
         if (string.IsNullOrWhiteSpace(game.GamePath))
@@ -255,14 +256,14 @@ public static class ModpackService
             );
             try
             {
-                status?.Invoke("正在下载本地模组压缩包...");
+                status?.Invoke(OperationText.Download(language));
                 await DownloadAsync(
                     archiveUri,
                     temporaryArchive,
                     status,
-                    cancellationToken
+                    cancellationToken, language
                 );
-                status?.Invoke("正在解压本地模组...");
+                status?.Invoke(OperationText.Extract(language));
                 ZipFile.ExtractToDirectory(
                     temporaryArchive,
                     modsRoot,
@@ -296,7 +297,7 @@ public static class ModpackService
                 pack,
                 configSourcePath,
                 status,
-                cancellationToken
+                cancellationToken, language
             );
         }
 
@@ -425,14 +426,14 @@ public static class ModpackService
                 var steamCmd = await SteamCmdClient.EnsureAsync(
                     packRoot,
                     status,
-                    cancellationToken
+                    cancellationToken, language
                 );
                 await SteamCmdClient.DownloadWorkshopAsync(
                     steamCmd,
                     modsRoot,
                     workshopIds,
                     status,
-                    cancellationToken
+                    cancellationToken, language
                 );
             }
             else
@@ -520,7 +521,8 @@ public static class ModpackService
         IReadOnlyList<string> configFiles,
         string targetConfigDirectory,
         Action<string>? status = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        string? language = null
     )
     {
         if (string.IsNullOrWhiteSpace(configBaseUrl) || configFiles.Count == 0)
@@ -528,53 +530,39 @@ public static class ModpackService
             throw new InvalidOperationException("This instance has no config source.");
         }
 
-        Directory.CreateDirectory(targetConfigDirectory);
-        var baseUrl = configBaseUrl.TrimEnd('/');
-        foreach (var file in configFiles)
+        var staging = Path.Combine(Path.GetTempPath(), "packframe-config-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(staging);
+        try
         {
-            var name = Path.GetFileName(file);
-            if (string.IsNullOrWhiteSpace(name))
+            var baseUrl = configBaseUrl.TrimEnd('/');
+            foreach (var file in configFiles)
             {
-                continue;
+                var name = Path.GetFileName(file);
+                if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
+                    throw new InvalidDataException("Invalid config file name.");
+                status?.Invoke(OperationText.Config(language, name));
+                var url = baseUrl + "/" + Uri.EscapeDataString(name);
+                var destination = Path.Combine(staging, name);
+                await DownloadAsync(new Uri(url), destination, null, cancellationToken);
+                if (Path.GetExtension(name).Equals(".xml", StringComparison.OrdinalIgnoreCase))
+                    XDocument.Load(destination);
             }
-
-            status?.Invoke($"正在下载配置 {name}...");
-            var url = baseUrl + "/" + Uri.EscapeDataString(name);
-            var bytes = await Http.GetByteArrayAsync(url, cancellationToken);
-            await File.WriteAllBytesAsync(
-                Path.Combine(targetConfigDirectory, name),
-                bytes,
-                cancellationToken
-            );
+            cancellationToken.ThrowIfCancellationRequested();
+            // Once commit starts, finish or roll back rather than interrupting it.
+            await Task.Run(() => FileTransactions.ApplyFiles(staging, targetConfigDirectory));
         }
+        finally { FileTransactions.TryDeleteDirectory(staging); }
     }
 
     private static async Task DownloadConfigAsync(
         ModpackDefinition pack,
         string configRoot,
         Action<string>? status,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken, string? language
     )
     {
-        Directory.CreateDirectory(configRoot);
-        var baseUrl = pack.ConfigBaseUrl!.TrimEnd('/');
-        foreach (var file in pack.ConfigFiles)
-        {
-            var name = Path.GetFileName(file);
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                continue;
-            }
-
-            status?.Invoke($"正在下载配置 {name}...");
-            var url = baseUrl + "/" + Uri.EscapeDataString(name);
-            var bytes = await Http.GetByteArrayAsync(url, cancellationToken);
-            await File.WriteAllBytesAsync(
-                Path.Combine(configRoot, name),
-                bytes,
-                cancellationToken
-            );
-        }
+        await DownloadConfigToAsync(pack.ConfigBaseUrl!, pack.ConfigFiles,
+            configRoot, status, cancellationToken, language);
     }
 
     public static ulong? ParseWorkshopId(string? value)
@@ -967,7 +955,7 @@ public static class ModpackService
         Uri uri,
         string path,
         Action<string>? status,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken, string? language = null
     )
     {
         using var response = await Http.GetAsync(
@@ -1006,7 +994,7 @@ public static class ModpackService
                 var progress = totalLength > 0
                     ? $"{FormatBytes(total)} / {FormatBytes(totalLength)} ({total * 100d / totalLength:0.0}%)"
                     : FormatBytes(total);
-                status?.Invoke($"正在下载本地模组压缩包... {progress}  {FormatBytes(speed)}/s");
+                status?.Invoke($"{OperationText.Download(language)} {progress}  {FormatBytes(speed)}/s");
                 lastBytes = total;
                 lastSeconds = now;
             }
@@ -1200,8 +1188,6 @@ public static class ModpackService
         return client;
     }
 }
-
-
 
 
 

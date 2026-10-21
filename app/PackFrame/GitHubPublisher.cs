@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -29,7 +30,7 @@ public static class GitHubPublisher
         string description,
         string collectionUrl,
         Action<string>? status,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default, string? language = null
     )
     {
         if (string.IsNullOrWhiteSpace(token))
@@ -43,7 +44,7 @@ public static class GitHubPublisher
         }
 
         using var client = CreateClient(token);
-        status?.Invoke("正在验证 GitHub 登录...");
+        status?.Invoke(OperationText.GithubLogin(language));
         var owner = await GetLoginAsync(client, cancellationToken);
         var name = SanitizeRepositoryName(repoName);
         if (name.Length == 0)
@@ -51,7 +52,7 @@ public static class GitHubPublisher
             throw new InvalidOperationException("GitHub repository name is empty.");
         }
 
-        status?.Invoke("正在创建 GitHub 仓库...");
+        status?.Invoke(OperationText.GithubRepo(language));
         await EnsureRepositoryAsync(
             client,
             owner,
@@ -61,7 +62,8 @@ public static class GitHubPublisher
             cancellationToken
         );
 
-        ModpackRepoExporter.SetRepoInfo(repoPath, owner, name, "main");
+        var branch = await GetDefaultBranchAsync(client, owner, name, cancellationToken);
+        ModpackRepoExporter.SetRepoInfo(repoPath, owner, name, branch);
         var files = Directory.EnumerateFiles(repoPath, "*", SearchOption.AllDirectories)
             .Where(file => !IsIgnored(repoPath, file))
             .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
@@ -72,30 +74,24 @@ public static class GitHubPublisher
         );
         if (largeArchive is not null)
         {
-            status?.Invoke("mods.zip is larger than 95 MB; uploading as a GitHub Release asset...");
+            status?.Invoke(OperationText.GithubAsset(language));
             var archiveUrl = await UploadLargeArchiveAsReleaseAsync(
                 client,
                 owner,
                 name,
                 largeArchive,
-                cancellationToken
+                cancellationToken, branch
             );
             SetModsArchive(repoPath, archiveUrl);
-            await DeleteRemoteModsArchiveAsync(
-                client,
-                owner,
-                name,
-                cancellationToken
-            );
             files.Remove(largeArchive);
         }
 
-        for (var index = 0; index < files.Count; index++)
+        await PublishFilesAsync(client, owner, name, repoPath, files, largeArchive is not null,
+            status, cancellationToken, language);
+        if (largeArchive is not null)
         {
-            var file = files[index];
-            var relative = Path.GetRelativePath(repoPath, file).Replace('\\', '/');
-            status?.Invoke($"正在上传文件 {index + 1}/{files.Count}：{relative}");
-            await UploadFileAsync(client, owner, name, relative, file, cancellationToken);
+            try { await CleanupArchiveAssetsAsync(client, owner, name, largeArchive, cancellationToken); }
+            catch (Exception exception) { AppLog.Error("Cleanup old archive assets after publication", exception); }
         }
 
         await UpdateRepositoryAsync(
@@ -106,7 +102,7 @@ public static class GitHubPublisher
             collectionUrl,
             cancellationToken
         );
-        status?.Invoke("GitHub 上传完成。");
+        status?.Invoke(OperationText.GithubDone(language));
         return new GitHubPublishResult(
             owner,
             name,
@@ -307,73 +303,132 @@ public static class GitHubPublisher
         }
     }
 
-    private static async Task UploadFileAsync(
+    internal static async Task PublishFilesAsync(
         HttpClient client,
         string owner,
         string name,
-        string relative,
-        string path,
-        CancellationToken cancellationToken
+        string repoPath,
+        IReadOnlyList<string> files,
+        bool removeArchive,
+        Action<string>? status,
+        CancellationToken cancellationToken,
+        string? language = null
     )
     {
-        var content = Convert.ToBase64String(await File.ReadAllBytesAsync(
-            path,
-            cancellationToken
-        ));
-        var encodedPath = string.Join(
-            "/",
-            relative.Split('/').Select(Uri.EscapeDataString)
-        );
-        var url = $"https://api.github.com/repos/{owner}/{name}/contents/{encodedPath}";
-        var sha = await GetFileShaAsync(client, url, cancellationToken);
-        JsonObject payload = string.IsNullOrWhiteSpace(sha)
-            ? new JsonObject
-            {
-                ["message"] = "Add " + relative,
-                ["content"] = content
-            }
-            : new JsonObject
-            {
-                ["message"] = "Update " + relative,
-                ["content"] = content,
-                ["sha"] = sha
-            };
-
-        using var response = await client.PutAsync(
-            url,
-            JsonContent(payload),
-            cancellationToken
-        );
-        if (!response.IsSuccessStatusCode)
+        var root = $"https://api.github.com/repos/{owner}/{name}";
+        var branch = Uri.EscapeDataString(await GetDefaultBranchAsync(client, owner, name, cancellationToken));
+        using var head = await GitRequestAsync(client, HttpMethod.Get, root + "/git/ref/heads/" + branch, null, cancellationToken);
+        var parent = head.RootElement.GetProperty("object").GetProperty("sha").GetString()!;
+        using var previous = await GitRequestAsync(client, HttpMethod.Get, root + "/git/commits/" + parent, null, cancellationToken);
+        var baseTree = previous.RootElement.GetProperty("tree").GetProperty("sha").GetString()!;
+        var entries = new JsonArray();
+        for (var index = 0; index < files.Count; index++)
         {
-            using var document = await ReadDocumentAsync(response, cancellationToken);
-            throw new InvalidOperationException(
-                ApiError("PUT " + url, response, document)
-            );
+            var relative = Path.GetRelativePath(repoPath, files[index]).Replace('\\', '/');
+            status?.Invoke($"{OperationText.GithubFiles(language)} {index + 1}/{files.Count}: {relative}");
+            using var blob = await GitRequestAsync(client, HttpMethod.Post, root + "/git/blobs", new JsonObject
+            {
+                ["content"] = Convert.ToBase64String(await File.ReadAllBytesAsync(files[index], cancellationToken)),
+                ["encoding"] = "base64"
+            }, cancellationToken);
+            entries.Add((JsonNode)new JsonObject { ["path"] = relative, ["mode"] = "100644", ["type"] = "blob",
+                ["sha"] = blob.RootElement.GetProperty("sha").GetString() });
+        }
+        if (removeArchive)
+        {
+            using var oldTree = await GitRequestAsync(client, HttpMethod.Get, root + "/git/trees/" + baseTree, null, cancellationToken);
+            if (oldTree.RootElement.GetProperty("tree").EnumerateArray().Any(item => item.GetProperty("path").GetString() == "mods.zip"))
+                entries.Add((JsonNode)new JsonObject { ["path"] = "mods.zip", ["mode"] = "100644", ["type"] = "blob", ["sha"] = null });
+        }
+        using var tree = await GitRequestAsync(client, HttpMethod.Post, root + "/git/trees",
+            new JsonObject { ["base_tree"] = baseTree, ["tree"] = entries }, cancellationToken);
+        var treeSha = tree.RootElement.GetProperty("sha").GetString();
+        if (treeSha == baseTree) return; // No empty commits on an unchanged publication.
+        using var commit = await GitRequestAsync(client, HttpMethod.Post, root + "/git/commits", new JsonObject
+        {
+            ["message"] = "Update PackFrame modpack", ["tree"] = treeSha,
+            ["parents"] = new JsonArray(JsonValue.Create(parent))
+        }, cancellationToken);
+        // A concurrent push makes this non-fast-forward; never force over user changes.
+        using var updated = await GitRequestAsync(client, HttpMethod.Patch, root + "/git/refs/heads/" + branch,
+            new JsonObject { ["sha"] = commit.RootElement.GetProperty("sha").GetString(), ["force"] = false }, cancellationToken);
+    }
+
+    private static async Task<JsonDocument> GitRequestAsync(HttpClient client, HttpMethod method,
+        string url, JsonObject? payload, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(method, url);
+        if (payload is not null) request.Content = JsonContent(payload);
+        using var response = await client.SendAsync(request, cancellationToken);
+        var document = await ReadDocumentAsync(response, cancellationToken);
+        if (response.IsSuccessStatusCode) return document;
+        using (document) throw new InvalidOperationException(ApiError(method + " " + url, response, document));
+    }
+    internal static async Task<string> GetDefaultBranchAsync(HttpClient client, string owner, string name, CancellationToken token)
+    {
+        using var repo = await GitRequestAsync(client, HttpMethod.Get,
+            $"https://api.github.com/repos/{owner}/{name}", null, token);
+        var branch = repo.RootElement.GetProperty("default_branch").GetString();
+        return !string.IsNullOrWhiteSpace(branch) ? branch : throw new IOException("Repository has no default branch.");
+    }
+
+    private const string ArchiveTag = "packframe-mods";
+
+    private static async Task<string> ArchiveAssetNameAsync(string path, CancellationToken token)
+    {
+        await using var stream = File.OpenRead(path);
+        return "mods-" + Convert.ToHexString(await SHA256.HashDataAsync(stream, token)).ToLowerInvariant() + ".zip";
+    }
+
+    private static async Task CleanupArchiveAssetsAsync(HttpClient client, string owner, string name, string path, CancellationToken token)
+    {
+        var keep = await ArchiveAssetNameAsync(path, token);
+        var root = $"https://api.github.com/repos/{owner}/{name}";
+        using var release = await GitRequestAsync(client, HttpMethod.Get, root + "/releases/tags/" + ArchiveTag, null, token);
+        var id = release.RootElement.GetProperty("id").GetInt64();
+        var obsolete = new List<long>();
+        for (var page = 1; ; page++)
+        {
+            using var assets = await GitRequestAsync(client, HttpMethod.Get, root + $"/releases/{id}/assets?per_page=100&page={page}", null, token);
+            // Defer deletion until listing finishes to avoid shifting pagination.
+            foreach (var asset in assets.RootElement.EnumerateArray())
+            {
+                var assetName = asset.GetProperty("name").GetString() ?? "";
+                if (assetName == keep || assetName.Length != 73 || !assetName.StartsWith("mods-") || !assetName.EndsWith(".zip")) continue;
+                obsolete.Add(asset.GetProperty("id").GetInt64());
+            }
+            if (assets.RootElement.GetArrayLength() < 100) break;
+        }
+        foreach (var assetId in obsolete)
+        {
+            using var deleted = await GitRequestAsync(client, HttpMethod.Delete, root + "/releases/assets/" + assetId, null, token);
         }
     }
-    private static async Task<string> UploadLargeArchiveAsReleaseAsync(
+
+    internal static async Task<string> UploadLargeArchiveAsReleaseAsync(
         HttpClient client,
         string owner,
         string name,
         string archivePath,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken, string branch
     )
     {
-        var tag = "packframe-mods-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N")[..6];
-        using var releaseResponse = await client.PostAsync(
+        var tag = ArchiveTag;
+        var assetName = await ArchiveAssetNameAsync(archivePath, cancellationToken);
+        using var existing = await client.GetAsync($"https://api.github.com/repos/{owner}/{name}/releases/tags/{tag}", cancellationToken);
+        using var releaseResponse = existing.StatusCode == HttpStatusCode.NotFound ? await client.PostAsync(
             $"https://api.github.com/repos/{owner}/{name}/releases",
             JsonContent(new JsonObject
             {
                 ["tag_name"] = tag,
-                ["target_commitish"] = "main",
+                ["target_commitish"] = branch,
                 ["name"] = "PackFrame local mods",
                 ["body"] = "Local mods archive uploaded by PackFrame.",
                 ["draft"] = false,
                 ["prerelease"] = false
             }),
             cancellationToken
-        );
+        ) : existing;
         using var releaseDocument = await ReadDocumentAsync(releaseResponse, cancellationToken);
         if (!releaseResponse.IsSuccessStatusCode)
         {
@@ -387,13 +442,16 @@ public static class GitHubPublisher
         }
 
         var releaseId = releaseDocument.RootElement.GetProperty("id").GetInt64();
+        foreach (var asset in releaseDocument.RootElement.GetProperty("assets").EnumerateArray())
+            if (asset.GetProperty("name").GetString() == assetName && asset.GetProperty("state").GetString() == "uploaded")
+                return asset.GetProperty("browser_download_url").GetString()!;
         using var stream = File.OpenRead(archivePath);
         using var content = new StreamContent(stream);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
         content.Headers.ContentLength = stream.Length;
 
         using var assetResponse = await client.PostAsync(
-            $"https://uploads.github.com/repos/{owner}/{name}/releases/{releaseId}/assets?name=mods.zip",
+            $"https://uploads.github.com/repos/{owner}/{name}/releases/{releaseId}/assets?name={assetName}",
             content,
             cancellationToken
         );
@@ -414,39 +472,7 @@ public static class GitHubPublisher
                 out var url
             ) && !string.IsNullOrWhiteSpace(url.GetString())
             ? url.GetString()!
-            : $"https://github.com/{owner}/{name}/releases/download/{tag}/mods.zip";
-    }
-
-    private static async Task DeleteRemoteModsArchiveAsync(
-        HttpClient client,
-        string owner,
-        string name,
-        CancellationToken cancellationToken
-    )
-    {
-        var url = $"https://api.github.com/repos/{owner}/{name}/contents/mods.zip";
-        var sha = await GetFileShaAsync(client, url, cancellationToken);
-        if (string.IsNullOrWhiteSpace(sha))
-        {
-            return;
-        }
-
-        using var request = new HttpRequestMessage(HttpMethod.Delete, url)
-        {
-            Content = JsonContent(new JsonObject
-            {
-                ["message"] = "Move mods archive to GitHub Release",
-                ["sha"] = sha
-            })
-        };
-        using var response = await client.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            using var document = await ReadDocumentAsync(response, cancellationToken);
-            throw new InvalidOperationException(
-                ApiError("DELETE mods.zip", response, document)
-            );
-        }
+            : $"https://github.com/{owner}/{name}/releases/download/{tag}/{assetName}";
     }
 
     private static void SetModsArchive(string repoPath, string url)

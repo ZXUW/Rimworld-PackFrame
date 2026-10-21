@@ -544,7 +544,7 @@ public partial class ExportCollectionWindow : Window
                 info.Summary,
                 info.PackageIds,
                 GithubCollectionUrlBox.Text?.Trim() ?? string.Empty,
-                text => Dispatcher.UIThread.Post(() => IndexStatus.Text = text)
+                text => Dispatcher.UIThread.Post(() => IndexStatus.Text = text), language: _language
             );
             _indexPrUrl = result.PullRequestUrl;
             _indexSubmitted = true;
@@ -633,7 +633,7 @@ public partial class ExportCollectionWindow : Window
                 text => Dispatcher.UIThread.Post(() =>
                 {
                     GithubStatus.Text = text;
-                })
+                }), language: _language
             ));
 
             _githubUrl = published.Url;

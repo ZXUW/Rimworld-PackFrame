@@ -15,6 +15,8 @@ public sealed class ModBadge : Control
     private static readonly Typeface BadgeTypeface = new(FontFamily.Default);
     private static readonly IBrush BadgeBrush =
         new SolidColorBrush(Color.Parse("#EAF1F8"));
+    // Lazily populated on the UI render thread, after Avalonia's font services exist.
+    private static readonly Dictionary<(string, double), FormattedText> TextCache = new();
 
     static ModBadge()
     {
@@ -79,14 +81,18 @@ public sealed class ModBadge : Control
         double fontSize
     )
     {
-        var formatted = new FormattedText(
+        if (!TextCache.TryGetValue((text, fontSize), out var formatted))
+        {
+        formatted = new FormattedText(
             text,
-            CultureInfo.CurrentCulture,
+            CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight,
             BadgeTypeface,
             fontSize,
             BadgeBrush
         );
+        if (text is "S" or "V" or "R" or "L") TextCache[(text, fontSize)] = formatted;
+        }
         var x = cell.X + (cell.Width - formatted.Width) / 2;
         var y = cell.Y + (cell.Height - formatted.Height) / 2;
         context.DrawText(formatted, new Point(x, y));

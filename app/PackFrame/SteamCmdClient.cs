@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Formats.Tar;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -14,8 +15,11 @@ namespace PackFrame;
 internal static class SteamCmdClient
 {
     private const uint RimWorldAppId = 294100;
-    private const string DownloadUrl =
-        "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip";
+    private static string DownloadUrl => OperatingSystem.IsWindows()
+        ? "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
+        : OperatingSystem.IsMacOS()
+            ? "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz"
+            : "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz";
 
     private static readonly HttpClient Http = CreateHttpClient();
 
@@ -47,7 +51,7 @@ internal static class SteamCmdClient
     public static async Task<string> EnsureAsync(
         string packRoot,
         Action<string>? status = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default, string? language = null
     )
     {
         var existing = Find(packRoot);
@@ -60,12 +64,13 @@ internal static class SteamCmdClient
         Directory.CreateDirectory(root);
         var zipPath = Path.Combine(
             Path.GetTempPath(),
-            "packframe-steamcmd-" + Guid.NewGuid().ToString("N") + ".zip"
+            "packframe-steamcmd-" + Guid.NewGuid().ToString("N") +
+                (OperatingSystem.IsWindows() ? ".zip" : ".tar.gz")
         );
 
         try
         {
-            status?.Invoke("首次运行 SteamCMD：正在下载并更新（约 43 MB）...");
+            status?.Invoke(OperationText.SteamDownload(language));
             await using (var input = await Http.GetStreamAsync(
                              DownloadUrl,
                              cancellationToken
@@ -75,9 +80,17 @@ internal static class SteamCmdClient
                 await input.CopyToAsync(output, cancellationToken);
             }
 
-            status?.Invoke("正在解压 SteamCMD...");
+            status?.Invoke(OperationText.SteamExtract(language));
             await Task.Run(
-                () => ZipFile.ExtractToDirectory(zipPath, root, overwriteFiles: true),
+                () =>
+                {
+                    if (OperatingSystem.IsWindows())
+                        ZipFile.ExtractToDirectory(zipPath, root, overwriteFiles: true);
+                    else
+                    {
+                        ExtractUnixArchive(zipPath, root);
+                    }
+                },
                 cancellationToken
             );
 
@@ -107,7 +120,7 @@ internal static class SteamCmdClient
                 );
             }
 
-            status?.Invoke("正在初始化 SteamCMD...");
+            status?.Invoke(OperationText.SteamInit(language));
             try
             {
                 await RunAsync(
@@ -145,12 +158,19 @@ internal static class SteamCmdClient
         }
     }
 
+    internal static void ExtractUnixArchive(string path, string destination)
+    {
+        using var archive = File.OpenRead(path);
+        using var gzip = new GZipStream(archive, CompressionMode.Decompress);
+        TarFile.ExtractToDirectory(gzip, destination, overwriteFiles: true);
+    }
+
     public static async Task<IReadOnlyList<string>> DownloadWorkshopAsync(
         string steamCmdPath,
         string modsRoot,
         IReadOnlyList<ulong> workshopIds,
         Action<string>? status = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default, string? language = null
     )
     {
         if (workshopIds.Count == 0)
@@ -179,7 +199,7 @@ internal static class SteamCmdClient
             RimWorldAppId.ToString()
         );
 
-        status?.Invoke($"正在用 SteamCMD 下载 {workshopIds.Count} 个物品...");
+        status?.Invoke($"{OperationText.SteamProgress(language)} 0/{workshopIds.Count}");
         using var pollSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken
         );
@@ -187,7 +207,7 @@ internal static class SteamCmdClient
             cacheRoot,
             workshopIds,
             status,
-            pollSource.Token
+            pollSource.Token, language
         );
         try
         {
@@ -336,7 +356,7 @@ internal static class SteamCmdClient
         string cacheRoot,
         IReadOnlyList<ulong> workshopIds,
         Action<string>? status,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken, string? language
     )
     {
         var last = -1;
@@ -355,7 +375,7 @@ internal static class SteamCmdClient
             {
                 last = completed;
                 status?.Invoke(
-                    $"SteamCMD 下载中 {completed}/{workshopIds.Count}"
+                    $"{OperationText.SteamProgress(language)} {completed}/{workshopIds.Count}"
                 );
             }
 

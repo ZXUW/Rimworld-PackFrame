@@ -32,8 +32,9 @@ public sealed class AppConfig
                 PackFrameJsonContext.Default.AppConfig
             ) ?? new AppConfig();
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("Read app config: " + ConfigPath, exception);
             return new AppConfig();
         }
     }
@@ -50,8 +51,9 @@ public sealed class AppConfig
             File.WriteAllText(temporaryPath, json);
             File.Move(temporaryPath, ConfigPath, true);
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("Save app config: " + ConfigPath, exception);
         }
     }
 }

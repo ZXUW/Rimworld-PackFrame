@@ -968,34 +968,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var map = _instances.ToDictionary(
-                instance => instance.FolderName,
-                StringComparer.OrdinalIgnoreCase
-            );
-
-            foreach (var snapshot in entry.Instances)
-            {
-                if (!map.ContainsKey(snapshot.FolderName))
-                {
-                    ShowUndoFailed();
-                    return;
-                }
-            }
-
-            var redoSnapshots = entry.Instances
-                .Select(snapshot => new InstanceSnapshot(
-                    snapshot.FolderName,
-                    map[snapshot.FolderName].ActivePackageIds.ToList()
-                ))
-                .ToList();
-
-            foreach (var snapshot in entry.Instances)
-            {
-                InstanceStore.StageActiveMods(
-                    map[snapshot.FolderName],
-                    snapshot.ActivePackageIds
-                );
-            }
+            var redoSnapshots = ModListOperations.Restore(entry.Instances, _instances);
 
             _undoHistory.RemoveAt(_undoHistory.Count - 1);
             _redoHistory.Add(new UndoEntry(
@@ -1072,34 +1045,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var map = _instances.ToDictionary(
-                instance => instance.FolderName,
-                StringComparer.OrdinalIgnoreCase
-            );
-
-            foreach (var snapshot in entry.Instances)
-            {
-                if (!map.ContainsKey(snapshot.FolderName))
-                {
-                    ShowRedoFailed();
-                    return;
-                }
-            }
-
-            var undoSnapshots = entry.Instances
-                .Select(snapshot => new InstanceSnapshot(
-                    snapshot.FolderName,
-                    map[snapshot.FolderName].ActivePackageIds.ToList()
-                ))
-                .ToList();
-
-            foreach (var snapshot in entry.Instances)
-            {
-                InstanceStore.StageActiveMods(
-                    map[snapshot.FolderName],
-                    snapshot.ActivePackageIds
-                );
-            }
+            var undoSnapshots = ModListOperations.Restore(entry.Instances, _instances);
 
             _redoHistory.RemoveAt(_redoHistory.Count - 1);
             _undoHistory.Add(new UndoEntry(
@@ -1148,10 +1094,6 @@ public partial class MainWindow : Window
         ShowToast(text);
     }
 
-    private sealed record InstanceSnapshot(
-        string FolderName,
-        List<string> ActivePackageIds
-    );
 
     private sealed record UndoEntry(
         List<InstanceSnapshot> Instances,
@@ -1262,6 +1204,13 @@ public partial class MainWindow : Window
             hasSection = true;
         }
 
+        var conflicts = mods.Where(mod => mod.IncompatibleNames.Count > 0).ToList();
+        if (conflicts.Count > 0)
+        {
+            AddSortSection(content, OperationText.Choose(_config.Language, "Incompatible mods", "不兼容模组", "不相容模組", "非互換 MOD"),
+                conflicts, mod => Localization.IncompatibleMods(_config.Language, string.Join(", ", mod.IncompatibleNames)), !hasSection);
+            hasSection = true;
+        }
         if (!hasSection)
         {
             var names = GetProblemModNames(mods);
@@ -2147,8 +2096,9 @@ public partial class MainWindow : Window
                 RefreshManager(true);
             });
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("Load mods and instances: " + game.GamePath, exception);
             if (version == _loadVersion)
             {
                 await Dispatcher.UIThread.InvokeAsync(() =>
@@ -2156,6 +2106,7 @@ public partial class MainWindow : Window
                     if (version == _loadVersion)
                     {
                         ResetCatalog();
+                        ShowToast(Localization.RefreshFailed(_config.Language));
                     }
                 });
             }
@@ -2311,6 +2262,8 @@ public partial class MainWindow : Window
 
     private void ResetCatalog()
     {
+        foreach (var timer in _searchTimers.Values) timer.Stop();
+        _searchSources.Clear();
         _allMods = new List<ModInfo>();
         _modsById = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
         _modsByPackage = new Dictionary<string, List<ModInfo>>(StringComparer.OrdinalIgnoreCase);
@@ -2345,8 +2298,15 @@ public partial class MainWindow : Window
         UpdateProblemSummary(_activeProblemS2, _activeProblemV2, _activeProblemR2, empty);
     }
 
+    private readonly Dictionary<ListBox, List<ModInfo>> _searchSources = new();
+    private readonly Dictionary<ListBox, DispatcherTimer> _searchTimers = new();
+
     private void RefreshManager(bool selectFirst)
     {
+        ToolTip.SetTip(_instanceCombo1, GetSelectedInstance(0)?.LoadError);
+        ToolTip.SetTip(_instanceCombo2, GetSelectedInstance(1)?.LoadError);
+        foreach (var timer in _searchTimers.Values) timer.Stop();
+        _searchSources.Clear();
         if (_allMods.Count == 0)
         {
             ResetCatalog();
@@ -2400,7 +2360,10 @@ public partial class MainWindow : Window
             ),
             targetInstance
         );
-        var inactive = PrepareSearchList(inactiveSource, _inactiveSearch);
+        _searchSources[_inactiveList] = inactiveSource.ToList();
+        _searchSources[_activeList1] = active1;
+        _searchSources[_activeList2] = active2;
+        var inactive = PrepareSearchList(_searchSources[_inactiveList], _inactiveSearch);
         inactive = SortInactive(inactive);
         active1 = PrepareSearchList(active1, _activeSearch1);
         active2 = PrepareSearchList(active2, _activeSearch2);
@@ -2499,7 +2462,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        RefreshSearch(list);
+        if (!_searchTimers.TryGetValue(list, out var timer))
+        {
+            timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+            timer.Tick += (_, _) => { timer.Stop(); RefreshSearch(list); };
+            _searchTimers[list] = timer;
+        }
+        timer.Stop();
+        timer.Start();
     }
 
     private void OnSearchFieldChanged(
@@ -2520,73 +2490,41 @@ public partial class MainWindow : Window
         }
     }
 
-    private List<ModInfo> PrepareSearchList(
-        IEnumerable<ModInfo> source,
-        ModSearchState state
-    )
-    {
-        var result = new List<ModInfo>();
-        foreach (var mod in source)
-        {
-            var matched = MatchesSearch(mod, state);
-            if (state.HideUnmatched && !matched)
-            {
-                continue;
-            }
-
-            result.Add(mod with { SearchMatched = matched });
-        }
-
-        return result;
-    }
-    private bool MatchesSearch(ModInfo mod, ModSearchState state)
-    {
-        if (state.SourceIndex == 1 && mod.Source != ModSource.Workshop)
-        {
-            return false;
-        }
-        if (state.SourceIndex == 2 && mod.Source != ModSource.Local)
-        {
-            return false;
-        }
-
-        var query = state.Query.Trim();
-        if (query.Length == 0)
-        {
-            return true;
-        }
-
-        var value = state.FieldIndex switch
-        {
-            1 => mod.Author,
-            2 => mod.Path,
-            3 => mod.PackageId,
-            4 => mod.GameVersions,
-            _ => mod.Name
-        };
-
-        return value.Contains(query, StringComparison.OrdinalIgnoreCase);
-    }
-
     private void RefreshSearch(ListBox list)
     {
-        RefreshManager(false);
-        var first = list.Items.Cast<ModInfo>().FirstOrDefault();
-        if (first is null)
+        if (_searchTimers.TryGetValue(list, out var timer)) timer.Stop();
+        if (!_searchSources.TryGetValue(list, out var source))
         {
-            ShowDetails(null);
+            RefreshManager(false);
             return;
         }
-
+        var inactive = ReferenceEquals(list, _inactiveList);
+        var firstColumn = ReferenceEquals(list, _activeList1);
+        var state = inactive ? _inactiveSearch : firstColumn ? _activeSearch1 : _activeSearch2;
+        var filter = inactive ? _inactiveFilter : firstColumn ? _activeFilter1 : _activeFilter2;
+        var matches = PrepareSearchList(source, state);
+        if (inactive) matches = SortInactive(matches);
+        var visible = ApplyModColors(ApplyProblemFilters(matches, filter), ModColorStore.Load(_packRoot));
+        var selectedId = (list.SelectedItem as ModInfo)?.PackageId;
         _refreshing = true;
+        // Search becomes the active selection context, as with clicking a different column.
         foreach (var other in GetModLists())
-        {
-            other.SelectedItems!.Clear();
-        }
+            if (!ReferenceEquals(other, list)) other.SelectedItems!.Clear();
+        list.ItemsSource = visible;
+        var first = visible.FirstOrDefault(mod => mod.PackageId == selectedId) ?? visible.FirstOrDefault();
         list.SelectedItem = first;
         _selectionAnchorList = list;
-        _selectionAnchorIndex = 0;
+        _selectionAnchorIndex = first is null ? -1 : visible.IndexOf(first);
+        _lastPressList = list;
         _refreshing = false;
+        if (inactive) _inactiveCount = visible.Count;
+        else if (firstColumn) _active1Count = visible.Count;
+        else _active2Count = visible.Count;
+        UpdateHeaders();
+        UpdateProblemSummary(
+            inactive ? _inactiveProblemS : firstColumn ? _activeProblemS1 : _activeProblemS2,
+            inactive ? _inactiveProblemV : firstColumn ? _activeProblemV1 : _activeProblemV2,
+            inactive ? _inactiveProblemR : firstColumn ? _activeProblemR1 : _activeProblemR2, matches);
         ShowDetails(first);
     }
 
@@ -3418,7 +3356,8 @@ public partial class MainWindow : Window
             ),
             targetInstance
         );
-        var inactive = PrepareSearchList(inactiveSource, _inactiveSearch);
+        _searchSources[_inactiveList] = inactiveSource.ToList();
+        var inactive = PrepareSearchList(_searchSources[_inactiveList], _inactiveSearch);
         inactive = SortInactive(inactive);
         var inactiveForSummary = inactive;
         inactive = ApplyProblemFilters(inactive, _inactiveFilter);
@@ -3443,127 +3382,6 @@ public partial class MainWindow : Window
     {
         var index = comboBox.SelectedIndex;
         return index >= 0 && index < _instances.Count ? index : -1;
-    }
-
-    private List<ModInfo> ApplyOrderFlags(List<ModInfo> active, int column)
-    {
-        if (active.Count == 0)
-        {
-            return active;
-        }
-
-        var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < active.Count; i++)
-        {
-            positions[active[i].PackageId] = i;
-        }
-
-        var result = new List<ModInfo>(active.Count);
-        for (var i = 0; i < active.Count; i++)
-        {
-            var mod = active[i];
-            var names = new List<string>();
-            var ids = new List<string>();
-            var missingNames = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var missingSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            void AddAfterName(string id, string name)
-            {
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    name = id;
-                }
-
-                if (seen.Add(name))
-                {
-                    names.Add(name);
-                    ids.Add(id);
-                }
-            }
-
-            void AddRequiredAfter(IEnumerable<string> ids)
-            {
-                foreach (var id in ids)
-                {
-                    if (string.Equals(id, mod.PackageId, StringComparison.OrdinalIgnoreCase) ||
-                        !positions.TryGetValue(id, out var targetIndex) ||
-                        targetIndex <= i)
-                    {
-                        continue;
-                    }
-
-                    AddAfterName(id, active[targetIndex].Name);
-                }
-            }
-
-            AddRequiredAfter(mod.ForceLoadAfter);
-            AddRequiredAfter(mod.LoadAfter);
-
-            foreach (var id in mod.ModDependencies)
-            {
-                if (string.Equals(id, mod.PackageId, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (positions.TryGetValue(id, out var targetIndex))
-                {
-                    if (targetIndex > i)
-                    {
-                        AddAfterName(id, active[targetIndex].Name);
-                    }
-                    continue;
-                }
-
-                var name = _modsById.TryGetValue(id, out var installed)
-                    ? installed.Name
-                    : id;
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    name = id;
-                }
-                if (missingSeen.Add(name))
-                {
-                    missingNames.Add(name);
-                }
-            }
-
-            if (names.Count == 0 && missingNames.Count == 0)
-            {
-                result.Add(mod);
-                continue;
-            }
-
-            var details = new List<string>();
-            if (names.Count > 0)
-            {
-                details.Add(Localization.SortAfterTooltip(
-                    _config.Language,
-                    string.Join(", ", names)
-                ));
-            }
-            if (missingNames.Count > 0)
-            {
-                details.Add(Localization.MissingDependencies(
-                    _config.Language,
-                    string.Join(", ", missingNames)
-                ));
-            }
-
-            var flagged = mod with
-            {
-                SortError = true,
-                SortAfter = string.Join(Environment.NewLine, details),
-                SortOrderAfterNames = names,
-                SortOrderAfterIds = ids,
-                BadgeColumn = column,
-                MissingDependencyNames = missingNames
-            };
-            result.Add(flagged);
-        }
-
-        return result;
     }
 
     private List<ModInfo> DeduplicateModsForInstance(
@@ -4017,7 +3835,7 @@ public partial class MainWindow : Window
         var executable = _gameInstallation?.ExecutablePath;
         var executableExists = !string.IsNullOrWhiteSpace(executable) &&
             (File.Exists(executable) || Directory.Exists(executable));
-        var configExists = instance is not null &&
+        var configExists = instance is not null && !instance.IsDamaged &&
             Directory.Exists(instance.ConfigDirectoryPath);
         _launchButton.IsEnabled = executableExists && configExists;
     }
@@ -4046,7 +3864,7 @@ public partial class MainWindow : Window
         for (var column = 0; column < 2; column++)
         {
             var instance = GetSelectedInstance(column);
-            if (instance is null || string.IsNullOrWhiteSpace(instance.DirectoryPath))
+            if (instance is null || instance.IsDamaged || string.IsNullOrWhiteSpace(instance.DirectoryPath))
             {
                 continue;
             }
@@ -4065,43 +3883,54 @@ public partial class MainWindow : Window
         }
     }
 
-    private void PruneMissingActiveMods(ManagedInstance? instance)
+    private void OnSaveClick(object? sender, RoutedEventArgs e)
     {
-        if (instance is null || _modsById.Count == 0)
-        {
-            return;
-        }
-
-        var active = instance.ActivePackageIds
-            .Where(id => _modsById.ContainsKey(id))
-            .ToList();
-        if (!ActiveIdsEqual(instance.ActivePackageIds, active))
-        {
-            InstanceStore.StageActiveMods(instance, active);
-        }
+        SaveChanges();
     }
 
-    private void OnSaveClick(object? sender, RoutedEventArgs e)
+    private bool SaveChanges()
     {
         try
         {
             SaveModFullNameLists();
-            PruneMissingActiveMods(GetSelectedInstance(0));
-            PruneMissingActiveMods(GetSelectedInstance(1));
             InstanceStore.SavePendingMods();
             RefreshManager(false);
             ShowToast(Localization.Saved(_config.Language));
+            return true;
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("Save mod lists", exception);
             ShowToast(Localization.SaveFailed(_config.Language));
+            return false;
         }
+    }
+
+    private bool _pendingChangesPromptOpen;
+    private bool _closeApproved;
+
+    private async Task<bool> ResolvePendingChangesAsync()
+    {
+        if (!InstanceStore.HasPendingMods) return true;
+        if (_pendingChangesPromptOpen) return false;
+        _pendingChangesPromptOpen = true;
+        try
+        {
+            var choice = await new PendingChangesWindow(_config.Language)
+                .ShowDialog<PendingChangesChoice>(this);
+            if (choice == PendingChangesChoice.Save) return SaveChanges();
+            if (choice != PendingChangesChoice.Discard) return false;
+            InstanceStore.DiscardPendingMods();
+            return true;
+        }
+        finally { _pendingChangesPromptOpen = false; }
     }
 
     private async void OnSyncConfigClick(object? sender, RoutedEventArgs e)
     {
         var column = _lastEnableColumn - 1;
         var instance = GetSelectedInstance(column);
+        if (instance?.IsDamaged == true) { ShowToast(instance.LoadError!); return; }
         if (instance is null || instance.IsScratch ||
             string.IsNullOrWhiteSpace(instance.ConfigDirectoryPath))
         {
@@ -4109,7 +3938,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (IsRimWorldRunning())
+        if (GameLaunchService.IsRunning())
         {
             ShowToast(Localization.ModpackGameRunning(_config.Language));
             return;
@@ -4166,7 +3995,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        InstanceStore.DiscardPendingMods();
+        if (!await ResolvePendingChangesAsync()) return;
+        ModColorStore.Invalidate();
         UpdateSaveState();
         var inactiveOffset = GetListScrollOffset(_inactiveList);
         var activeOffset1 = GetListScrollOffset(_activeList1);
@@ -4196,8 +4026,9 @@ public partial class MainWindow : Window
             RestoreListScrollOffsets(inactiveOffset, activeOffset1, activeOffset2);
             ShowToast(Localization.Refreshed(_config.Language));
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("Refresh mod catalog", exception);
             ShowToast(Localization.RefreshFailed(_config.Language));
         }
         finally
@@ -4248,6 +4079,7 @@ public partial class MainWindow : Window
     private void OnLaunchClick(object? sender, RoutedEventArgs e)
     {
         var instance = GetSelectedInstance(_lastEnableColumn - 1);
+        if (instance?.IsDamaged == true) { ShowToast(instance.LoadError!); return; }
         var executable = _gameInstallation?.ExecutablePath;
         if (instance is null || string.IsNullOrWhiteSpace(executable))
         {
@@ -4255,19 +4087,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        string? saveDataFolder;
-        if (instance.IsOfficial)
-        {
-            var configFolder = instance.ConfigDirectoryPath.TrimEnd(
-                Path.DirectorySeparatorChar,
-                Path.AltDirectorySeparatorChar
-            );
-            saveDataFolder = Path.GetDirectoryName(configFolder);
-        }
-        else
-        {
-            saveDataFolder = instance.DirectoryPath;
-        }
+        var saveDataFolder = GameLaunchService.GetSaveDataFolder(instance);
 
         if (string.IsNullOrWhiteSpace(saveDataFolder))
         {
@@ -4281,7 +4101,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (IsRimWorldRunning())
+        if (GameLaunchService.IsRunning())
         {
             ShowToast(Localization.ModpackGameRunning(_config.Language));
             return;
@@ -4291,10 +4111,11 @@ public partial class MainWindow : Window
         {
             try
             {
-                ModLinkService.Prepare(gamePath, instance);
+                ModLinkService.Prepare(gamePath, instance, _packRoot);
             }
-            catch
+            catch (Exception exception)
             {
+                AppLog.Error("Prepare game launch: " + gamePath, exception);
                 ShowToast(Localization.ModpackLinkPrepareFailed(_config.Language));
                 return;
             }
@@ -4302,161 +4123,12 @@ public partial class MainWindow : Window
 
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                UseShellExecute = false,
-                WorkingDirectory = _gameInstallation?.GamePath
-                    ?? Path.GetDirectoryName(executable)
-                    ?? string.Empty
-            };
-
-            if (OperatingSystem.IsMacOS())
-            {
-                startInfo.FileName = "open";
-                startInfo.ArgumentList.Add("-a");
-                startInfo.ArgumentList.Add(executable);
-                startInfo.ArgumentList.Add("--args");
-            }
-            else
-            {
-                startInfo.FileName = executable;
-            }
-
-            startInfo.ArgumentList.Add("-logfile");
-            startInfo.ArgumentList.Add(Path.Combine(saveDataFolder, "player.log"));
-            startInfo.ArgumentList.Add($"-savedatafolder={saveDataFolder}");
-            var startedAt = DateTime.UtcNow;
-            var process = Process.Start(startInfo);
-            if (process is not null)
-            {
-                _ = MirrorLogAfterExitAsync(process, saveDataFolder, startedAt);
-                _ = CleanupModLinksAfterExitAsync(
-                    process,
-                    _gameInstallation!.GamePath!,
-                    instance
-                );
-            }
-            else if (_gameInstallation?.GamePath is { } path)
-            {
-                ModLinkService.Cleanup(path, instance);
-            }
+            GameLaunchService.Start(_gameInstallation!, instance, saveDataFolder);
         }
-        catch
+        catch (Exception exception)
         {
-            if (_gameInstallation?.GamePath is { } launchPath)
-            {
-                ModLinkService.Cleanup(launchPath, instance);
-            }
-
+            AppLog.Error("Launch game: " + executable, exception);
             ShowHistoryFailure(Localization.LaunchFailed(_config.Language));
-        }
-    }
-
-    private static bool IsRimWorldRunning()
-    {
-        foreach (var name in new[]
-                 {
-                     "RimWorld",
-                     "RimWorldWin",
-                     "RimWorldWin64",
-                     "RimWorldLinux"
-                 })
-        {
-            try
-            {
-                if (Process.GetProcessesByName(name).Length > 0)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return false;
-    }
-
-    private static async Task CleanupModLinksAfterExitAsync(
-        Process process,
-        string gamePath,
-        ManagedInstance instance
-    )
-    {
-        try
-        {
-            await process.WaitForExitAsync();
-            await Task.Delay(300);
-            ModLinkService.Cleanup(gamePath, instance);
-        }
-        catch
-        {
-        }
-    }
-
-    private static async Task MirrorLogAfterExitAsync(
-        Process process,
-        string saveDataFolder,
-        DateTime startedAt
-    )
-    {
-        try
-        {
-            await process.WaitForExitAsync();
-            await Task.Delay(300);
-
-            var target = Path.Combine(saveDataFolder, "player.log");
-            if (File.Exists(target) &&
-                File.GetLastWriteTimeUtc(target) >= startedAt)
-            {
-                return;
-            }
-
-            string? source = null;
-            for (var attempt = 0; attempt < 10; attempt++)
-            {
-                source = RimWorldLocator.FindPlayerLogPath();
-                if (!string.IsNullOrWhiteSpace(source) && File.Exists(source))
-                {
-                    break;
-                }
-
-                await Task.Delay(300);
-            }
-
-            if (string.IsNullOrWhiteSpace(source) || !File.Exists(source))
-            {
-                return;
-            }
-
-            Directory.CreateDirectory(saveDataFolder);
-            for (var attempt = 0; attempt < 20; attempt++)
-            {
-                try
-                {
-                    await using var input = new FileStream(
-                        source,
-                        FileMode.Open,
-                        FileAccess.Read,
-                        FileShare.ReadWrite
-                    );
-                    await using var output = new FileStream(
-                        target,
-                        FileMode.Create,
-                        FileAccess.Write,
-                        FileShare.Read
-                    );
-                    await input.CopyToAsync(output);
-                    return;
-                }
-                catch (IOException)
-                {
-                    await Task.Delay(200);
-                }
-            }
-        }
-        catch
-        {
         }
     }
 
@@ -5066,134 +4738,6 @@ public partial class MainWindow : Window
         RefreshManager(false);
     }
 
-    private async void OnPaintModeClick(object? sender, RoutedEventArgs e)
-    {
-        if (_paintMode)
-        {
-            SetPaintMode(false);
-            return;
-        }
-
-        var choice = await ChoosePaintColorAsync();
-        if (choice is null)
-        {
-            return;
-        }
-
-        _paintEraser = choice.Clear;
-        _paintColorHex = choice.Clear ? null : choice.Hex;
-        SetPaintMode(true);
-    }
-
-    private async Task<ModColorChoice?> ChoosePaintColorAsync()
-    {
-        if (_packRoot is null)
-        {
-            return null;
-        }
-
-        var data = ModColorStore.Load(_packRoot);
-        var picker = new ColorPaletteWindow(
-            _paintColorHex,
-            data.ColorLabels,
-            _config.Language
-        );
-        var choice = await picker.ShowDialog<ModColorChoice?>(this);
-        if (choice is null)
-        {
-            return null;
-        }
-
-        ModColorStore.SetLabels(_packRoot, choice.Labels);
-        return choice.Cancelled ? null : choice;
-    }
-
-    private void SetPaintMode(bool active)
-    {
-        if (!active)
-        {
-            FinishPaint();
-        }
-
-        _paintMode = active;
-        UpdatePaintButtonVisual();
-    }
-
-    private void UpdatePaintButtonVisual()
-    {
-        _paintModeButton.Content = _paintMode && _paintEraser
-            ? Localization.EraserTool(_config.Language)
-            : Localization.PaintTool(_config.Language);
-        _paintModeButton.Background = _paintMode
-            ? TextBrush
-            : SecondaryBorderBrush;
-        _paintModeButton.Foreground = _paintMode
-            ? new SolidColorBrush(Color.Parse("#20354A"))
-            : Brushes.White;
-        _paintModeButton.FontWeight = _paintMode
-            ? FontWeight.SemiBold
-            : FontWeight.Normal;
-    }
-
-    private void BeginPaint(ListBox list, ModInfo mod, PointerPressedEventArgs e)
-    {
-        if (_packRoot is null ||
-            (!_paintEraser && string.IsNullOrWhiteSpace(_paintColorHex)))
-        {
-            return;
-        }
-
-        _painting = true;
-        _paintList = list;
-        _paintColumn = GetListColumn(list);
-        _paintBeforeColors.Clear();
-        _paintedIds.Clear();
-        _paintData = ModColorStore.Load(_packRoot);
-        PaintMod(mod);
-        e.Pointer.Capture(list);
-        list.Focus();
-    }
-
-    private void PaintMod(ModInfo mod)
-    {
-        if (_paintData is null ||
-            (!_paintEraser && string.IsNullOrWhiteSpace(_paintColorHex)) ||
-            string.IsNullOrWhiteSpace(mod.PackageId) ||
-            !_paintedIds.Add(mod.PackageId))
-        {
-            return;
-        }
-
-        if (!_paintBeforeColors.ContainsKey(mod.PackageId))
-        {
-            _paintBeforeColors[mod.PackageId] =
-                _paintData.ModColors.TryGetValue(mod.PackageId, out var current)
-                    ? current
-                    : null;
-        }
-
-        ApplyColorToInfo(
-            mod,
-            _paintEraser ? null : _paintColorHex,
-            _paintData
-        );
-    }
-
-    private void PaintAtPointer(PointerEventArgs e)
-    {
-        if (_paintList is null)
-        {
-            return;
-        }
-
-        var item = FindListItem(_paintList, e.Source) ??
-            FindListItemAtPosition(_paintList, e.GetPosition(_paintList));
-        if (item?.DataContext is ModInfo mod)
-        {
-            PaintMod(mod);
-        }
-    }
-
     private static ListBoxItem? FindListItemAtPosition(ListBox list, Point point)
     {
         foreach (var item in list.GetVisualDescendants().OfType<ListBoxItem>())
@@ -5207,58 +4751,6 @@ public partial class MainWindow : Window
         }
 
         return null;
-    }
-
-    private void FinishPaint()
-    {
-        if (!_painting)
-        {
-            return;
-        }
-
-        var ids = _paintedIds.ToList();
-        var before = new Dictionary<string, string?>(
-            _paintBeforeColors,
-            StringComparer.OrdinalIgnoreCase
-        );
-        var color = _paintColorHex;
-        var eraser = _paintEraser;
-        var column = _paintColumn;
-        var data = _paintData;
-        _painting = false;
-        _paintList = null;
-        _paintData = null;
-        _paintedIds.Clear();
-        _paintBeforeColors.Clear();
-
-        if (_packRoot is null ||
-            (!eraser && string.IsNullOrWhiteSpace(color)) ||
-            ids.Count == 0 ||
-            data is null)
-        {
-            return;
-        }
-
-        var resultColor = eraser ? null : color;
-        var after = ids.ToDictionary(
-            id => id,
-            _ => resultColor,
-            StringComparer.OrdinalIgnoreCase
-        );
-        ModColorStore.SetModColors(_packRoot, after);
-        PushColorUndo(before, after, ids, column);
-
-        var idSet = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
-        foreach (var list in GetModLists())
-        {
-            foreach (var mod in list.Items.OfType<ModInfo>())
-            {
-                if (idSet.Contains(mod.PackageId))
-                {
-                    ApplyColorToInfo(mod, resultColor, data);
-                }
-            }
-        }
     }
 
     private void SelectForDoubleClick(ListBox list, int index, ModInfo mod)
@@ -5509,84 +5001,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void UpdateAutoScroll(PointerEventArgs e)
-    {
-        var target = GetTargetListAt(e);
-        if (target is null)
-        {
-            StopAutoScroll();
-            return;
-        }
-
-        var position = e.GetPosition(target);
-        const double margin = 32;
-        var direction = position.Y < margin
-            ? -1
-            : position.Y > target.Bounds.Height - margin
-                ? 1
-                : 0;
-
-        if (direction == 0)
-        {
-            StopAutoScroll();
-            return;
-        }
-
-        _autoScrollList = target;
-        _autoScrollDirection = direction;
-        if (!_autoScrollTimer.IsEnabled)
-        {
-            _autoScrollTimer.Start();
-        }
-    }
-
-    private void StopAutoScroll()
-    {
-        _autoScrollTimer.Stop();
-        _autoScrollList = null;
-        _autoScrollDirection = 0;
-    }
-
-    private void OnAutoScrollTick()
-    {
-        if (_autoScrollList is null || _autoScrollDirection == 0)
-        {
-            StopAutoScroll();
-            return;
-        }
-
-        var viewer = _autoScrollList
-            .GetVisualDescendants()
-            .OfType<ScrollViewer>()
-            .FirstOrDefault();
-        if (viewer is null)
-        {
-            StopAutoScroll();
-            return;
-        }
-
-        var maximum = Math.Max(0, viewer.Extent.Height - viewer.Viewport.Height);
-        var offset = Math.Clamp(
-            viewer.Offset.Y + _autoScrollDirection * 24,
-            0,
-            maximum
-        );
-        if (Math.Abs(offset - viewer.Offset.Y) < 0.5)
-        {
-            return;
-        }
-
-        viewer.Offset = new Vector(viewer.Offset.X, offset);
-    }
-    private void UpdateDragGhost(PointerEventArgs e)
-    {
-        var position = e.GetPosition(_dragOverlay);
-        var maxX = Math.Max(0, _dragOverlay.Bounds.Width - 240);
-        var ghostHeight = _dragGhost.Bounds.Height > 0 ? _dragGhost.Bounds.Height : 34;
-        var maxY = Math.Max(0, _dragOverlay.Bounds.Height - ghostHeight);
-        Canvas.SetLeft(_dragGhost, Math.Clamp(position.X + 16, 0, maxX));
-        Canvas.SetTop(_dragGhost, Math.Clamp(position.Y + 14, 0, maxY));
-    }
 
     private void UpdateInsertionLine(PointerEventArgs e)
     {
@@ -5795,32 +5209,13 @@ public partial class MainWindow : Window
         }
 
         var targetInstance = GetInstanceForColumn(targetColumn);
-        if (targetInstance is null)
+        if (targetInstance is null || targetInstance.IsDamaged)
         {
             return;
         }
 
-        var selectedSet = new HashSet<string>(selectedIds, StringComparer.OrdinalIgnoreCase);
         var targetOriginal = targetInstance.ActivePackageIds.ToList();
-        var insertionLimit = Math.Clamp(targetIndex, 0, targetOriginal.Count);
-        var selectedBefore = 0;
-        for (var i = 0; i < insertionLimit; i++)
-        {
-            if (selectedSet.Contains(targetOriginal[i]))
-            {
-                selectedBefore++;
-            }
-        }
-
-        var targetUpdated = targetOriginal
-            .Where(id => !selectedSet.Contains(id))
-            .ToList();
-        var insertIndex = Math.Clamp(
-            insertionLimit - selectedBefore,
-            0,
-            targetUpdated.Count
-        );
-        targetUpdated.InsertRange(insertIndex, selectedIds);
+        var targetUpdated = ModListOperations.InsertSelection(targetOriginal, selectedIds, targetIndex);
         if (ActiveIdsEqual(targetOriginal, targetUpdated))
         {
             return;
@@ -5862,6 +5257,7 @@ public partial class MainWindow : Window
         var selectedSet = new HashSet<string>(selectedIds, StringComparer.OrdinalIgnoreCase);
         var sourceInstance = GetInstanceForColumn(payload.SourceColumn);
         var targetInstance = GetInstanceForColumn(targetColumn);
+        if (sourceInstance?.IsDamaged == true || targetInstance?.IsDamaged == true) return;
         var changed = false;
         var undoSnapshots = new List<InstanceSnapshot>();
 
@@ -5912,16 +5308,6 @@ public partial class MainWindow : Window
                 }
 
                 var targetOriginal = targetInstance.ActivePackageIds.ToList();
-                var insertionLimit = Math.Clamp(targetIndex, 0, targetOriginal.Count);
-                var selectedBefore = 0;
-                for (var i = 0; i < insertionLimit; i++)
-                {
-                    if (selectedSet.Contains(targetOriginal[i]))
-                    {
-                        selectedBefore++;
-                    }
-                }
-
                 var sameInstance = sourceInstance is not null &&
                     string.Equals(
                         sourceInstance.DirectoryPath,
@@ -5931,15 +5317,7 @@ public partial class MainWindow : Window
 
                 if (sourceInstance is not null && sameInstance)
                 {
-                    var updated = sourceInstance.ActivePackageIds
-                        .Where(id => !selectedSet.Contains(id))
-                        .ToList();
-                    var insertIndex = Math.Clamp(
-                        insertionLimit - selectedBefore,
-                        0,
-                        updated.Count
-                    );
-                    updated.InsertRange(insertIndex, selectedIds);
+                    var updated = ModListOperations.InsertSelection(sourceInstance.ActivePackageIds, selectedIds, targetIndex);
                     if (!ActiveIdsEqual(targetOriginal, updated))
                     {
                         InstanceStore.StageActiveMods(targetInstance, updated);
@@ -5960,15 +5338,7 @@ public partial class MainWindow : Window
                         }
                     }
 
-                    var targetUpdated = targetOriginal
-                        .Where(id => !selectedSet.Contains(id))
-                        .ToList();
-                    var insertIndex = Math.Clamp(
-                        insertionLimit - selectedBefore,
-                        0,
-                        targetUpdated.Count
-                    );
-                    targetUpdated.InsertRange(insertIndex, selectedIds);
+                    var targetUpdated = ModListOperations.InsertSelection(targetOriginal, selectedIds, targetIndex);
                     if (!ActiveIdsEqual(targetOriginal, targetUpdated))
                     {
                         InstanceStore.StageActiveMods(targetInstance, targetUpdated);
@@ -6021,80 +5391,6 @@ public partial class MainWindow : Window
     }
     private sealed record DragPayload(int SourceColumn, List<ModInfo> Mods);
 
-    private static void MoveInstalledMods(string? sourceMods, string instancePath)
-    {
-        if (string.IsNullOrWhiteSpace(sourceMods) || !Directory.Exists(sourceMods))
-        {
-            return;
-        }
-
-        var targetMods = Path.Combine(instancePath, "Mods");
-        Directory.CreateDirectory(targetMods);
-        foreach (var directory in Directory.EnumerateDirectories(sourceMods))
-        {
-            var target = Path.Combine(targetMods, Path.GetFileName(directory));
-            if (Directory.Exists(target))
-            {
-                Directory.Delete(target, true);
-            }
-
-            Directory.Move(directory, target);
-        }
-
-        try
-        {
-            Directory.Delete(sourceMods, true);
-        }
-        catch
-        {
-        }
-    }
-
-    private static void CopyInstalledConfig(string? sourceConfig, string instancePath)
-    {
-        if (string.IsNullOrWhiteSpace(sourceConfig) || !Directory.Exists(sourceConfig))
-        {
-            return;
-        }
-
-        var targetConfig = Path.Combine(instancePath, "Config");
-        Directory.CreateDirectory(targetConfig);
-        foreach (var file in Directory.EnumerateFiles(sourceConfig))
-        {
-            File.Copy(
-                file,
-                Path.Combine(targetConfig, Path.GetFileName(file)),
-                overwrite: true
-            );
-        }
-    }
-
-    private static void DeleteInstallStaging(string? sourceMods, string? sourceConfig)
-    {
-        var path = sourceMods ?? sourceConfig;
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
-
-        var stagingRoot = Path.GetDirectoryName(path);
-        if (string.IsNullOrWhiteSpace(stagingRoot))
-        {
-            return;
-        }
-
-        try
-        {
-            if (Directory.Exists(stagingRoot))
-            {
-                Directory.Delete(stagingRoot, true);
-            }
-        }
-        catch
-        {
-        }
-    }
-
     private async void OnModpack1Click(object? sender, RoutedEventArgs e)
     {
         await OpenModpacksAsync(0);
@@ -6141,16 +5437,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var created = await Task.Run(() => InstanceStore.CreateNew(
-                _packRoot,
-                null,
-                _gameVersion,
-                result.PackageIds
-            ));
-            InstanceStore.RenameInstance(created, result.Name);
-            MoveInstalledMods(result.ModsSourcePath, created.DirectoryPath);
-            CopyInstalledConfig(result.ConfigSourcePath, created.DirectoryPath);
-            DeleteInstallStaging(result.ModsSourcePath, result.ConfigSourcePath);
+            var created = await Task.Run(() => ModpackInstanceInstaller.Create(_packRoot, _gameVersion, result));
             if (_gameInstallation is not null)
             {
                 await LoadModsAsync(_gameInstallation);
@@ -6174,8 +5461,9 @@ public partial class MainWindow : Window
                     result.PackageIds.Count
                 ));
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("Create installed modpack instance", exception);
             ShowToast(Localization.ModpackCreateFailed(_config.Language));
         }
     }
@@ -6194,6 +5482,16 @@ public partial class MainWindow : Window
         var hasInstance = hasPackRoot && selected is not null;
 
         var flyout = new MenuFlyout();
+        if (selected?.IsDamaged == true)
+        {
+            flyout.Items.Add(new MenuItem { Header = "⚠ " + selected.LoadError, IsEnabled = false });
+            flyout.Items.Add(CreateMenuItem(Localization.OpenInstance(language), true, () => OpenInstance(column)));
+            flyout.Items.Add(CreateMenuItem(Localization.ImportInstance(language), hasPackRoot, () => _ = ImportInstancesAsync(column)));
+            if (!selected.IsOfficial)
+                flyout.Items.Add(CreateMenuItem(Localization.DeleteInstance(language), true, () => _ = DeleteInstanceAsync(column)));
+            flyout.ShowAt(button);
+            return;
+        }
         if (selected is null || selected.IsScratch)
         {
             flyout.Items.Add(CreateMenuItem(
@@ -6790,12 +6088,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowDetails(ModInfo? mod)
-    {
-        _previewImage.Source = null;
-        _previewBitmap?.Dispose();
-        _previewBitmap = null;
+    private string? _previewPath;
+    private int _previewVersion;
+    private bool _windowClosed;
 
+    private async void ShowDetails(ModInfo? mod)
+    {
         if (mod is null)
         {
             _nameValue.Text = string.Empty;
@@ -6803,6 +6101,11 @@ public partial class MainWindow : Window
             _pathValue.Text = string.Empty;
             _packageValue.Text = string.Empty;
             _descriptionValue.Text = string.Empty;
+            _previewVersion++;
+            _previewPath = null;
+            _previewImage.Source = null;
+            _previewBitmap?.Dispose();
+            _previewBitmap = null;
             return;
         }
 
@@ -6812,6 +6115,12 @@ public partial class MainWindow : Window
         _packageValue.Text = mod.PackageId;
         _descriptionValue.Text = mod.Description;
 
+        if (_previewPath == mod.PreviewPath) return;
+        _previewPath = mod.PreviewPath;
+        var version = ++_previewVersion;
+        _previewImage.Source = null;
+        _previewBitmap?.Dispose();
+        _previewBitmap = null;
         if (string.IsNullOrWhiteSpace(mod.PreviewPath))
         {
             return;
@@ -6819,13 +6128,25 @@ public partial class MainWindow : Window
 
         try
         {
-            _previewBitmap = new Bitmap(mod.PreviewPath);
+            var path = mod.PreviewPath;
+            var width = Math.Clamp((int)(_previewImage.Bounds.Width * RenderScaling), 256, 1024);
+            var bitmap = await Task.Run(() =>
+            {
+                using var stream = File.OpenRead(path);
+                return Bitmap.DecodeToWidth(stream, width);
+            });
+            if (_windowClosed || version != _previewVersion)
+            {
+                bitmap.Dispose();
+                return;
+            }
+            _previewBitmap = bitmap;
             _previewImage.Source = _previewBitmap;
         }
-        catch
+        catch (Exception exception)
         {
-            _previewBitmap?.Dispose();
-            _previewBitmap = null;
+            AppLog.Error("Load preview: " + mod.PreviewPath, exception);
+            if (version == _previewVersion) _previewPath = null;
         }
     }
 
@@ -6843,9 +6164,25 @@ public partial class MainWindow : Window
         _pathBox.Foreground = valid ? TextBrush : Brushes.White;
     }
 
-    private void OnClosing(object? sender, WindowClosingEventArgs e)
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        if (!_closeApproved && InstanceStore.HasPendingMods)
+        {
+            e.Cancel = true;
+            if (await ResolvePendingChangesAsync())
+            {
+                _closeApproved = true;
+                Close();
+            }
+            return;
+        }
         _problemTooltipTimer.Stop();
+        foreach (var timer in _searchTimers.Values) timer.Stop();
+        _windowClosed = true;
+        _previewVersion++;
+        _previewImage.Source = null;
+        _previewBitmap?.Dispose();
+        _previewBitmap = null;
         CloseProblemTooltip();
         _config.GamePath = _pathBox.Text ?? string.Empty;
         _config.ProfileFolder1 = GetSelectedInstanceFolder(0);
@@ -6853,20 +6190,5 @@ public partial class MainWindow : Window
         _config.Save();
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
