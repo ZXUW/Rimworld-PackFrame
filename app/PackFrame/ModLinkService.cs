@@ -122,7 +122,7 @@ internal static class ModLinkService
             if (modRoot?.Name != "Mods" || modRoot.Parent?.Parent?.FullName != Path.GetFullPath(root)) continue;
             var packageId = ModCatalog.ReadPackageId(target);
             if (packageId is not null && info.Name == "PF_" + Sanitize(packageId))
-                Directory.Delete(path);
+                DeleteLink(path);
             }
             catch (Exception exception)
             {
@@ -181,7 +181,7 @@ internal static class ModLinkService
                 if (!actual.Equals(Path.GetFullPath(target), OperatingSystem.IsWindows()
                     ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                     throw new IOException($"Managed link target changed: {linkPath}");
-                Directory.Delete(linkPath); // Deletes the link itself, including a broken link.
+                DeleteLink(linkPath);
             }
             catch (Exception exception)
             {
@@ -257,6 +257,18 @@ internal static class ModLinkService
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal
         );
+    }
+
+    private static void DeleteLink(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.Delete(path);
+        }
+        else
+        {
+            File.Delete(path);
+        }
     }
 
     private static string Sanitize(string value)
