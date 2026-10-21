@@ -130,6 +130,8 @@ public partial class ExportCollectionWindow : Window
             Localization.ExportCollectionTitleLabel(_language);
         CollectionDescriptionLabel.Text =
             Localization.ExportCollectionDescriptionLabel(_language);
+        InsertFrameworkLinkButton.Content =
+            Localization.ExportCollectionInsertFrameworkLink(_language);
         CollectionNameBox.Text = _packName;
         CollectionDescriptionBox.Text = _packDescription;
         PrivateNote.Text = Localization.ExportCollectionHint(_language);
@@ -364,6 +366,17 @@ public partial class ExportCollectionWindow : Window
             _packName,
             _packDescription
         );
+    }
+
+    private void OnInsertFrameworkLinkClick(object? sender, RoutedEventArgs e)
+    {
+        var current = CollectionDescriptionBox.Text?.TrimEnd() ?? string.Empty;
+        var link = Localization.ExportCollectionFrameworkLinkText(_language);
+        CollectionDescriptionBox.Text = current.Length == 0
+            ? link
+            : current + Environment.NewLine + Environment.NewLine + link;
+        CollectionDescriptionBox.CaretIndex = CollectionDescriptionBox.Text?.Length ?? 0;
+        CollectionDescriptionBox.Focus();
     }
 
     private async void OnCreateCollectionClick(object? sender, RoutedEventArgs e)

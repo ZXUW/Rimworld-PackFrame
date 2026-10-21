@@ -1851,6 +1851,33 @@ public static class Localization
         };
     }
 
+    public static string ExportCollectionInsertFrameworkLink(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "插入框架链接",
+            TraditionalChinese => "插入框架連結",
+            Japanese => "フレームワークリンクを挿入",
+            _ => "Insert framework link"
+        };
+    }
+
+    public static string ExportCollectionFrameworkLinkText(string? language)
+    {
+        const string url = "https://github.com/ZXUW/Rimworld-PackFrame";
+        return language switch
+        {
+            SimplifiedChinese =>
+                $"合集为整合包框架自动上传\n使用[url={url}]Rimworld PackFrame[/url]来一键安装排序和平衡补丁",
+            TraditionalChinese =>
+                $"合集為整合包框架自動上傳\n使用[url={url}]Rimworld PackFrame[/url]來一鍵安裝排序和平衡補丁",
+            Japanese =>
+                $"コレクションはMODパックフレームワークによって自動アップロードされます\n[url={url}]Rimworld PackFrame[/url]でワンクリックでインストール・並べ替え・バランス調整ができます",
+            _ =>
+                $"This collection is automatically uploaded by the modpack framework.\nUse [url={url}]Rimworld PackFrame[/url] to install, sort, and apply balance patches in one click."
+        };
+    }
+
     public static string ExportCollectionUpload(string? language)
     {
         return language switch
