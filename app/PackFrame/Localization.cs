@@ -766,6 +766,17 @@ public static class Localization
         };
     }
 
+    public static string LoadingMods(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "正在读取模组…",
+            TraditionalChinese => "正在讀取模組…",
+            Japanese => "MODを読み込み中…",
+            _ => "Loading mods…"
+        };
+    }
+
     public static string Refreshed(string? language)
     {
         return language switch

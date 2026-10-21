@@ -143,6 +143,7 @@ public partial class MainWindow : Window
     private List<MissingModRow> _missingMods2 = new();
     private int _loadVersion;
     private bool _refreshing;
+    private bool _loadingMods;
     private bool _updatingInstances;
     private string? _lastLoadedGamePath;
     private string? _packRoot;
@@ -2019,6 +2020,12 @@ public partial class MainWindow : Window
 
             _pathBox.Text = path;
             ValidatePath(save: true);
+            if (!_loadingMods &&
+                _allMods.Count == 0 &&
+                _gameInstallation is not null)
+            {
+                _ = LoadModsAsync(_gameInstallation);
+            }
             ShowToast(Localization.AutoDetected(_config.Language));
         }
         catch
@@ -2095,9 +2102,12 @@ public partial class MainWindow : Window
     private async Task LoadModsAsync(RimWorldInstallation game)
     {
         var version = ++_loadVersion;
+        _loadingMods = true;
         _lastLoadedGamePath = game.GamePath;
         ResetCatalog();
         ClearUndoHistory();
+        _refreshButton.Content = Localization.LoadingMods(_config.Language);
+        _refreshButton.IsEnabled = false;
 
         try
         {
@@ -2149,6 +2159,15 @@ public partial class MainWindow : Window
                         ResetCatalog();
                     }
                 });
+            }
+        }
+        finally
+        {
+            if (version == _loadVersion)
+            {
+                _loadingMods = false;
+                _refreshButton.Content = Localization.Refresh(_config.Language);
+                _refreshButton.IsEnabled = true;
             }
         }
     }
