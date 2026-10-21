@@ -118,6 +118,10 @@ public partial class ModpackWindow : Window
             Localization.ModpackSteamCmdInstall(_language)
         );
         SetButtonText(
+            Find<Button>("WorkshopOnlyButton"),
+            Localization.ModpackWorkshopOnlyInstall(_language)
+        );
+        SetButtonText(
             Find<Button>("ApplyConfigButton"),
             Localization.ModpackApplyConfig(_language)
         );
@@ -515,6 +519,7 @@ public partial class ModpackWindow : Window
     {
         var ready = enabled && !_busy;
         Find<Button>("RefreshButton").IsEnabled = ready;
+        Find<Button>("WorkshopOnlyButton").IsEnabled = ready;
         Find<TextBox>("RepoBox").IsEnabled = ready;
         Find<ListBox>("PackList").IsEnabled = ready;
         Find<Button>("CancelOperationButton").IsVisible =
@@ -577,7 +582,12 @@ public partial class ModpackWindow : Window
         await InstallFromLinkAsync(true);
     }
 
-    private async Task InstallFromLinkAsync(bool useSteamCmd)
+    private async void OnWorkshopOnlyInstallClick(object? sender, RoutedEventArgs e)
+    {
+        await InstallFromLinkAsync(false, skipModsDownload: true);
+    }
+
+    private async Task InstallFromLinkAsync(bool useSteamCmd, bool skipModsDownload = false)
     {
         var link = Find<TextBox>("LinkBox").Text?.Trim();
         if (ModpackService.ParseWorkshopId(link) is null)
@@ -587,7 +597,7 @@ public partial class ModpackWindow : Window
             return;
         }
 
-        await InstallAsync(link, useSteamCmd);
+        await InstallAsync(link, useSteamCmd, skipModsDownload);
     }
 
     private async void OnApplyConfigClick(object? sender, RoutedEventArgs e)
@@ -676,7 +686,7 @@ public partial class ModpackWindow : Window
         return false;
     }
 
-    private async Task InstallAsync(string? workshopLink, bool useSteamCmd)
+    private async Task InstallAsync(string? workshopLink, bool useSteamCmd, bool skipModsDownload = false)
     {
         if (_busy || _selectedPack is null || _game is null || _packRoot is null)
         {
@@ -707,6 +717,7 @@ public partial class ModpackWindow : Window
                 modsRoot,
                 workshopLink,
                 useSteamCmd,
+                skipModsDownload,
                 text =>
                 {
                     Dispatcher.UIThread.Post(() =>

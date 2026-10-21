@@ -227,6 +227,7 @@ public static class ModpackService
         string modsRoot,
         string? workshopLink = null,
         bool useSteamCmd = false,
+        bool skipModsDownload = false,
         Action<string>? status = null,
         CancellationToken cancellationToken = default
     )
@@ -238,7 +239,7 @@ public static class ModpackService
 
         Directory.CreateDirectory(modsRoot);
         var modsArchiveExtracted = false;
-        if (!string.IsNullOrWhiteSpace(pack.ModsArchive))
+        if (!skipModsDownload && !string.IsNullOrWhiteSpace(pack.ModsArchive))
         {
             var archiveUri = ResolveModsArchiveUri(pack);
             if (archiveUri is null)
@@ -313,6 +314,12 @@ public static class ModpackService
             var packageId = NormalizePackageId(mod.PackageId);
             if (source == "github")
             {
+                if (skipModsDownload)
+                {
+                    AddPackageId(packageId, Array.Empty<string>(), packageIds, resolvedPackageIds);
+                    continue;
+                }
+
                 var installedIds = await InstallGithubModAsync(
                     mod,
                     modsRoot,
@@ -326,6 +333,12 @@ public static class ModpackService
             if (source == "local")
             {
                 localCount++;
+                if (skipModsDownload)
+                {
+                    AddPackageId(packageId, Array.Empty<string>(), packageIds, resolvedPackageIds);
+                    continue;
+                }
+
                 if (modsArchiveExtracted)
                 {
                     AddPackageId(

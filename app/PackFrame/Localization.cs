@@ -1491,6 +1491,17 @@ public static class Localization
         };
     }
 
+    public static string ModpackWorkshopOnlyInstall(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "只下载合集、配置和排序",
+            TraditionalChinese => "只下載合集、設定和排序",
+            Japanese => "コレクション・設定・並び順のみ",
+            _ => "Collection, config and order only"
+        };
+    }
+
     public static string ModpackSteamCmdSoon(string? language)
     {
         return language switch
