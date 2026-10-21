@@ -66,6 +66,30 @@ public static class GitHubPublisher
             .Where(file => !IsIgnored(repoPath, file))
             .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var largeArchive = files.FirstOrDefault(file =>
+            Path.GetFileName(file).Equals("mods.zip", StringComparison.OrdinalIgnoreCase) &&
+            new FileInfo(file).Length > 95L * 1024 * 1024
+        );
+        if (largeArchive is not null)
+        {
+            status?.Invoke("mods.zip is larger than 95 MB; uploading as a GitHub Release asset...");
+            var archiveUrl = await UploadLargeArchiveAsReleaseAsync(
+                client,
+                owner,
+                name,
+                largeArchive,
+                cancellationToken
+            );
+            SetModsArchive(repoPath, archiveUrl);
+            await DeleteRemoteModsArchiveAsync(
+                client,
+                owner,
+                name,
+                cancellationToken
+            );
+            files.Remove(largeArchive);
+        }
+
         for (var index = 0; index < files.Count; index++)
         {
             var file = files[index];
@@ -104,7 +128,7 @@ public static class GitHubPublisher
     {
         var client = new HttpClient
         {
-            Timeout = TimeSpan.FromMinutes(5)
+            Timeout = TimeSpan.FromMinutes(15)
         };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("PackFrame");
         client.DefaultRequestHeaders.Authorization =
@@ -328,6 +352,125 @@ public static class GitHubPublisher
             );
         }
     }
+    private static async Task<string> UploadLargeArchiveAsReleaseAsync(
+        HttpClient client,
+        string owner,
+        string name,
+        string archivePath,
+        CancellationToken cancellationToken
+    )
+    {
+        var tag = "packframe-mods-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N")[..6];
+        using var releaseResponse = await client.PostAsync(
+            $"https://api.github.com/repos/{owner}/{name}/releases",
+            JsonContent(new JsonObject
+            {
+                ["tag_name"] = tag,
+                ["target_commitish"] = "main",
+                ["name"] = "PackFrame local mods",
+                ["body"] = "Local mods archive uploaded by PackFrame.",
+                ["draft"] = false,
+                ["prerelease"] = false
+            }),
+            cancellationToken
+        );
+        using var releaseDocument = await ReadDocumentAsync(releaseResponse, cancellationToken);
+        if (!releaseResponse.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                ApiError(
+                    $"POST /repos/{owner}/{name}/releases",
+                    releaseResponse,
+                    releaseDocument
+                )
+            );
+        }
+
+        var releaseId = releaseDocument.RootElement.GetProperty("id").GetInt64();
+        using var stream = File.OpenRead(archivePath);
+        using var content = new StreamContent(stream);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        content.Headers.ContentLength = stream.Length;
+
+        using var assetResponse = await client.PostAsync(
+            $"https://uploads.github.com/repos/{owner}/{name}/releases/{releaseId}/assets?name=mods.zip",
+            content,
+            cancellationToken
+        );
+        using var assetDocument = await ReadDocumentAsync(assetResponse, cancellationToken);
+        if (!assetResponse.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                ApiError(
+                    $"POST release asset {tag}/mods.zip",
+                    assetResponse,
+                    assetDocument
+                )
+            );
+        }
+
+        return assetDocument.RootElement.TryGetProperty(
+                "browser_download_url",
+                out var url
+            ) && !string.IsNullOrWhiteSpace(url.GetString())
+            ? url.GetString()!
+            : $"https://github.com/{owner}/{name}/releases/download/{tag}/mods.zip";
+    }
+
+    private static async Task DeleteRemoteModsArchiveAsync(
+        HttpClient client,
+        string owner,
+        string name,
+        CancellationToken cancellationToken
+    )
+    {
+        var url = $"https://api.github.com/repos/{owner}/{name}/contents/mods.zip";
+        var sha = await GetFileShaAsync(client, url, cancellationToken);
+        if (string.IsNullOrWhiteSpace(sha))
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, url)
+        {
+            Content = JsonContent(new JsonObject
+            {
+                ["message"] = "Move mods archive to GitHub Release",
+                ["sha"] = sha
+            })
+        };
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            using var document = await ReadDocumentAsync(response, cancellationToken);
+            throw new InvalidOperationException(
+                ApiError("DELETE mods.zip", response, document)
+            );
+        }
+    }
+
+    private static void SetModsArchive(string repoPath, string url)
+    {
+        var path = Path.Combine(repoPath, "pack.json");
+        var manifest = JsonSerializer.Deserialize(
+            File.ReadAllText(path),
+            PackFrameJsonContext.Default.ModpackRepoManifest
+        );
+        if (manifest is null)
+        {
+            throw new InvalidOperationException("pack.json could not be read.");
+        }
+
+        manifest.ModsArchive = url;
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(
+                manifest,
+                PackFrameJsonContext.Default.ModpackRepoManifest
+            )
+        );
+    }
+
     private static async Task<string?> GetFileShaAsync(
         HttpClient client,
         string url,

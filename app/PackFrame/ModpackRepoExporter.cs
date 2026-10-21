@@ -206,7 +206,7 @@ public static class ModpackRepoExporter
             + "```text\n"
             + "pack.json          modpack manifest\n"
             + "config/            RimWorld mod config\n"
-            + "mods.zip           local mods\n"
+            + "mods.zip           local mods (large archives use a GitHub Release asset)\n"
             + "images/            cover images\n"
             + "```\n"
         );
