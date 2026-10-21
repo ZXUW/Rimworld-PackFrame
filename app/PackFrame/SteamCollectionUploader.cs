@@ -136,6 +136,7 @@ internal sealed class SteamCollectionClient
         string description,
         IReadOnlyList<ulong> workshopIds,
         string? previewPath = null,
+        IReadOnlyDictionary<ulong, string>? workshopNames = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -289,11 +290,16 @@ internal sealed class SteamCollectionClient
             for (var index = 0; index < workshopIds.Count; index++)
             {
                 var child = workshopIds[index];
+                var childLabel = workshopNames is not null &&
+                                 workshopNames.TryGetValue(child, out var childName) &&
+                                 !string.IsNullOrWhiteSpace(childName)
+                    ? $"{child} ({childName})"
+                    : child.ToString();
                 var addCall = addDependency(ugc, collectionId, child);
                 if (addCall == 0)
                 {
                     throw new InvalidOperationException(
-                        $"AddDependency returned an invalid call for {child}."
+                        $"AddDependency returned an invalid call for {childLabel}."
                     );
                 }
 
@@ -305,7 +311,7 @@ internal sealed class SteamCollectionClient
                 if (added.Result != ResultOk)
                 {
                     throw new InvalidOperationException(
-                        $"AddDependency failed for {child} with EResult {added.Result}."
+                        $"AddDependency failed for {childLabel} with EResult {added.Result}."
                     );
                 }
             }

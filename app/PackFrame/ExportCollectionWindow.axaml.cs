@@ -397,6 +397,7 @@ public partial class ExportCollectionWindow : Window
                     collectionDescription,
                     _result.WorkshopIds,
                     GetCoverPath(),
+                    _result.WorkshopMods.ToDictionary(mod => mod.Id, mod => mod.Name),
                     cancellation.Token
                 )
             );
