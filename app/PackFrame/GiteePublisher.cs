@@ -79,7 +79,7 @@ public static class GiteePublisher
         {
             var relative = Path.GetRelativePath(repoPath, files[index]).Replace('\\', '/');
             status?.Invoke($"{OperationText.GiteeFiles(language)} {index + 1}/{files.Count}: {relative}");
-            actions.Add(new JsonObject
+            actions.Add((JsonNode)new JsonObject
             {
                 ["action"] = existing.Contains(relative) ? "update" : "create",
                 ["path"] = relative,
@@ -91,7 +91,7 @@ public static class GiteePublisher
         }
         foreach (var stale in existing.Where(path => !relativeFiles.Contains(path)))
         {
-            actions.Add(new JsonObject
+            actions.Add((JsonNode)new JsonObject
             {
                 ["action"] = "delete",
                 ["path"] = stale
