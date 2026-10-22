@@ -146,3 +146,7 @@ dotnet publish app/PackFrame -c Release -r osx-x64 --self-contained true -p:Publ
 ```
 
 发行 ZIP 需要从对应发布产物重新打包；本地 `dotnet build` 不会自动更新已有 ZIP。
+## 许可证
+
+- 代码：[MIT](LICENSE)
+- 第三方依赖：[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
