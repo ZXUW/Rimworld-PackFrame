@@ -181,10 +181,10 @@ public partial class ExportCollectionWindow : Window
         );
         IndexGiteeRepoLabel.Text = OperationText.Choose(
             _language,
-            "Gitee modpack repository link (optional)",
-            "Gitee 整合包仓库链接（可选）",
-            "Gitee 整合包倉庫連結（可選）",
-            "Gitee MOD パックリポジトリリンク（任意）"
+            "Gitee modpack repository link (preferred)",
+            "Gitee 整合包仓库链接（优先）",
+            "Gitee 整合包倉庫連結（優先）",
+            "Gitee MOD パックリポジトリリンク（優先）"
         );
         IndexTokenLabel.Text = OperationText.Choose(
             _language,
@@ -193,13 +193,7 @@ public partial class ExportCollectionWindow : Window
             "GitHub Token（用於提交索引 PR）",
             "GitHub トークン（Index PR の作成用）"
         );
-        IndexHint.Text = OperationText.Choose(
-            _language,
-            "Fill either link, or both. Gitee is preferred when both are available; GitHub is the fallback.",
-            "只需填写其中一个，也可以两个都填；两个都填时优先使用 Gitee，GitHub 作为备用。",
-            "只需填寫其中一個，也可以兩個都填；兩個都填時優先使用 Gitee，GitHub 作為備用。",
-            "どちらか一方、または両方を入力できます。両方ある場合は Gitee を優先し、GitHub を予備として使います。"
-        );
+        IndexHint.Text = string.Empty;
         SubmitIndexButton.Content =
             Localization.ExportCollectionSubmitIndex(_language);
         OpenIndexPrButton.Content =
