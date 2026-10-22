@@ -609,16 +609,31 @@ public partial class ModpackWindow : Window
             return;
         }
 
+        var workshopId = ModpackService.ParseWorkshopId(url);
+        var steamUrl = workshopId is { } id
+            ? $"steam://url/CommunityFilePage/{id}"
+            : url;
         try
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = url,
+                FileName = steamUrl,
                 UseShellExecute = true
             });
         }
         catch
         {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+            }
         }
     }
 
