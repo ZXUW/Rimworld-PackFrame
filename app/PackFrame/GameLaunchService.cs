@@ -1,15 +1,23 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace PackFrame;
 
 internal static class GameLaunchService
 {
+    private const string RimWorldAppId = "294100";
+    private static readonly TimeSpan SteamLaunchTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan SteamPollInterval = TimeSpan.FromSeconds(2);
+    private static readonly string[] GameProcessNames =
+        { "RimWorld", "RimWorldWin", "RimWorldWin64", "RimWorldLinux", "RimWorldLinux.x86_64" };
+
     public static bool IsRunning()
     {
-        foreach (var name in new[] { "RimWorld", "RimWorldWin", "RimWorldWin64", "RimWorldLinux", "RimWorldLinux.x86_64" })
+        foreach (var name in GameProcessNames)
         {
             try
             {
@@ -43,18 +51,50 @@ internal static class GameLaunchService
         return info;
     }
 
+    internal static ProcessStartInfo BuildSteamStartInfo(string steamExecutable, string saveDataFolder)
+    {
+        var info = new ProcessStartInfo
+        {
+            UseShellExecute = false,
+            WorkingDirectory = Path.GetDirectoryName(steamExecutable) ?? string.Empty,
+            FileName = steamExecutable
+        };
+        info.ArgumentList.Add("-applaunch");
+        info.ArgumentList.Add(RimWorldAppId);
+        info.ArgumentList.Add("-logfile");
+        info.ArgumentList.Add(Path.Combine(saveDataFolder, "player.log"));
+        info.ArgumentList.Add($"-savedatafolder={saveDataFolder}");
+        return info;
+    }
+
     // Link preparation remains a separate step so the UI can show its existing specific error.
-    public static void Start(RimWorldInstallation game, ManagedInstance instance, string saveDataFolder)
+    public static Task Start(RimWorldInstallation game, ManagedInstance instance, string saveDataFolder,
+        CancellationToken cancellationToken = default)
     {
         instance.EnsureHealthy();
         try
         {
             InstanceStore.NormalizeConfigForLaunch(instance);
             var startedAt = DateTime.UtcNow;
+            string? steam = FindSteamExecutable(game.GamePath);
+            if (steam != null)
+            {
+                var existing = GetRunningGameProcessIds();
+                if (existing.Count > 0)
+                {
+                    throw new IOException("RimWorld is already running.");
+                }
+
+                var steamProcess = Process.Start(BuildSteamStartInfo(steam, saveDataFolder))
+                    ?? throw new IOException("The Steam process could not be started.");
+                return ObserveSteamLaunchAsync(steamProcess, existing, game.GamePath!,
+                    instance, saveDataFolder, startedAt, cancellationToken);
+            }
+
             var process = Process.Start(BuildStartInfo(game.ExecutablePath!, game.GamePath,
                 saveDataFolder, OperatingSystem.IsMacOS()))
                 ?? throw new IOException("The game process could not be started.");
-            _ = ObserveExitAsync(process, game.GamePath!, instance, saveDataFolder, startedAt);
+            return ObserveExitAsync(process, game.GamePath!, instance, saveDataFolder, startedAt);
         }
         catch
         {
@@ -62,6 +102,140 @@ internal static class GameLaunchService
             catch (Exception exception) { AppLog.Error("Cleanup failed launch", exception); }
             throw;
         }
+    }
+
+    internal static string? FindSteamExecutable(string? gamePath)
+    {
+        return OperatingSystem.IsWindows() ? FindSteamExecutable(gamePath, true) : null;
+    }
+
+    internal static string? FindSteamExecutable(string? gamePath, bool windows)
+    {
+        if (!windows || string.IsNullOrWhiteSpace(gamePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var fullGamePath = Path.GetFullPath(gamePath);
+            var directory = new DirectoryInfo(fullGamePath);
+            for (var current = directory; current != null; current = current.Parent)
+            {
+                if (!current.Name.Equals("steamapps", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var steamRoot = current.Parent;
+                if (steamRoot is null)
+                {
+                    return null;
+                }
+
+                var steamExecutable = Path.Combine(steamRoot.FullName, "steam.exe");
+                var manifest = Path.Combine(current.FullName, "appmanifest_294100.acf");
+                var common = Path.Combine(current.FullName, "common");
+                if (File.Exists(steamExecutable) &&
+                    File.Exists(manifest) &&
+                    IsUnder(fullGamePath, common, windows))
+                {
+                    return steamExecutable;
+                }
+
+                return null;
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Find Steam executable: " + gamePath, exception);
+        }
+
+        return null;
+    }
+
+    private static bool IsUnder(string path, string root, bool windows)
+    {
+        var fullPath = Path.GetFullPath(path).TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullRoot = Path.GetFullPath(root).TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = windows
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return fullPath.Equals(fullRoot, comparison) ||
+            fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, comparison);
+    }
+
+    private static HashSet<int> GetRunningGameProcessIds()
+    {
+        var ids = new HashSet<int>();
+        foreach (var name in GameProcessNames)
+        {
+            try
+            {
+                foreach (var process in Process.GetProcessesByName(name))
+                {
+                    ids.Add(process.Id);
+                    process.Dispose();
+                }
+            }
+            catch (Exception exception) { AppLog.Error("Snapshot game process: " + name, exception); }
+        }
+        return ids;
+    }
+
+    private static async Task ObserveSteamLaunchAsync(Process steamProcess, HashSet<int> existingIds,
+        string gamePath, ManagedInstance instance, string saveDataFolder, DateTime startedAt,
+        CancellationToken cancellationToken)
+    {
+        steamProcess.Dispose();
+        try
+        {
+            Process? gameProcess = null;
+            var deadline = DateTime.UtcNow + SteamLaunchTimeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                gameProcess = FindNewGameProcess(existingIds);
+                if (gameProcess != null) break;
+                await Task.Delay(SteamPollInterval, cancellationToken);
+            }
+
+            if (gameProcess == null)
+            {
+                AppLog.Error("Steam launch timed out waiting for RimWorld",
+                    new TimeoutException("RimWorld did not start within " +
+                        SteamLaunchTimeout.TotalSeconds + " seconds."));
+                return;
+            }
+
+            await ObserveExitAsync(gameProcess, gamePath, instance, saveDataFolder, startedAt);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Observe Steam launch", exception);
+        }
+    }
+
+    private static Process? FindNewGameProcess(HashSet<int> existingIds)
+    {
+        foreach (var name in GameProcessNames)
+        {
+            try
+            {
+                foreach (var process in Process.GetProcessesByName(name))
+                {
+                    if (!existingIds.Contains(process.Id)) return process;
+                    process.Dispose();
+                }
+            }
+            catch (Exception exception) { AppLog.Error("Find game process: " + name, exception); }
+        }
+        return null;
     }
 
     private static async Task ObserveExitAsync(Process process, string gamePath,

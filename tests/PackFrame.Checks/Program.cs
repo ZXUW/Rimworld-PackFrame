@@ -193,6 +193,19 @@ try
     var launch = GameLaunchService.BuildStartInfo("game executable", root, saveFolder, false);
     Check(launch.ArgumentList.SequenceEqual(new[] { "-logfile", Path.Combine(saveFolder, "player.log"), "-savedatafolder=" + saveFolder }) &&
         !launch.UseShellExecute, "launch arguments preserve spaces and Unicode");
+    var steamLaunch = GameLaunchService.BuildSteamStartInfo("steam.exe", saveFolder);
+    Check(steamLaunch.ArgumentList.SequenceEqual(new[] { "-applaunch", "294100", "-logfile", Path.Combine(saveFolder, "player.log"), "-savedatafolder=" + saveFolder }),
+        "steam launch arguments");
+    var steamRoot = Path.Combine(root, "SteamTest");
+    var steamApps = Path.Combine(steamRoot, "steamapps");
+    var steamGame = Path.Combine(steamApps, "common", "RimWorld");
+    Directory.CreateDirectory(steamGame);
+    File.WriteAllText(Path.Combine(steamRoot, "steam.exe"), string.Empty);
+    Check(GameLaunchService.FindSteamExecutable(steamGame, true) is null,
+        "Steam locator requires the RimWorld app manifest");
+    File.WriteAllText(Path.Combine(steamApps, "appmanifest_294100.acf"), string.Empty);
+    Check(GameLaunchService.FindSteamExecutable(steamGame, true) ==
+        Path.Combine(steamRoot, "steam.exe"), "Steam locator validates game library layout");
     var macLaunch = GameLaunchService.BuildStartInfo("/Applications/RimWorld.app", root, saveFolder, true);
     Check(macLaunch.FileName == "open" && macLaunch.ArgumentList.Take(5)
         .SequenceEqual(new[] { "-W", "-n", "-a", "/Applications/RimWorld.app", "--args" }), "macOS waits for new application instance");

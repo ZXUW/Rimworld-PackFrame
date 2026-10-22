@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -3908,6 +3909,7 @@ public partial class MainWindow : Window
 
     private bool _pendingChangesPromptOpen;
     private bool _closeApproved;
+    private CancellationTokenSource? _launchCancellation;
 
     private async Task<bool> ResolvePendingChangesAsync()
     {
@@ -4121,12 +4123,20 @@ public partial class MainWindow : Window
             }
         }
 
+        _launchCancellation?.Cancel();
+        _launchCancellation?.Dispose();
+        var launchCancellation = new CancellationTokenSource();
+        _launchCancellation = launchCancellation;
         try
         {
-            GameLaunchService.Start(_gameInstallation!, instance, saveDataFolder);
+            _ = GameLaunchService.Start(_gameInstallation!, instance, saveDataFolder,
+                launchCancellation.Token);
         }
         catch (Exception exception)
         {
+            launchCancellation.Cancel();
+            launchCancellation.Dispose();
+            _launchCancellation = null;
             AppLog.Error("Launch game: " + executable, exception);
             ShowHistoryFailure(Localization.LaunchFailed(_config.Language));
         }
@@ -6176,6 +6186,9 @@ public partial class MainWindow : Window
             }
             return;
         }
+        _launchCancellation?.Cancel();
+        _launchCancellation?.Dispose();
+        _launchCancellation = null;
         _problemTooltipTimer.Stop();
         foreach (var timer in _searchTimers.Values) timer.Stop();
         _windowClosed = true;
