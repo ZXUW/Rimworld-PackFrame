@@ -252,11 +252,6 @@
                                 BorderThickness="0,1,0,0"
                                 Padding="4,4,4,2">
                             <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock x:Name="InactiveProblemS"
-                                           Foreground="#EAF1F8"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnInactiveProblemSClick" />
                                 <TextBlock x:Name="InactiveProblemV"
                                            Foreground="#EAF1F8"
                                            TextWrapping="NoWrap"
@@ -363,6 +358,10 @@
                                            TextWrapping="NoWrap"
                                            Cursor="Hand"
                                            PointerPressed="OnActiveProblemS1Click" />
+                                <Button x:Name="ApplySort1"
+                                        Classes="footerlink"
+                                        IsVisible="False"
+                                        Click="OnApplySort1Click" />
                                 <TextBlock x:Name="ActiveProblemV1"
                                            Foreground="#EAF1F8"
                                            TextWrapping="NoWrap"
@@ -473,6 +472,10 @@
                                            TextWrapping="NoWrap"
                                            Cursor="Hand"
                                            PointerPressed="OnActiveProblemS2Click" />
+                                <Button x:Name="ApplySort2"
+                                        Classes="footerlink"
+                                        IsVisible="False"
+                                        Click="OnApplySort2Click" />
                                 <TextBlock x:Name="ActiveProblemV2"
                                            Foreground="#EAF1F8"
                                            TextWrapping="NoWrap"

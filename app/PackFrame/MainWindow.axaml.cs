@@ -84,7 +84,6 @@ public partial class MainWindow : Window
     private readonly TextBlock _inactiveHeader;
     private readonly TextBlock _activeHeader1;
     private readonly TextBlock _activeHeader2;
-    private readonly TextBlock _inactiveProblemS;
     private readonly TextBlock _inactiveProblemV;
     private readonly TextBlock _inactiveProblemR;
     private readonly TextBlock _activeProblemS1;
@@ -93,6 +92,9 @@ public partial class MainWindow : Window
     private readonly TextBlock _activeProblemS2;
     private readonly TextBlock _activeProblemV2;
     private readonly TextBlock _activeProblemR2;
+    private readonly Button _applySort1;
+    private readonly Button _applySort2;
+    private readonly Dictionary<TextBlock, Button> _sortApplyButtons = new();
     private readonly Button _activeMissing1;
     private readonly Button _activeMissing2;
     private readonly ComboBox _instanceCombo1;
@@ -243,7 +245,6 @@ public partial class MainWindow : Window
         _inactiveHeader = Find<TextBlock>("InactiveHeader");
         _activeHeader1 = Find<TextBlock>("ActiveHeader1");
         _activeHeader2 = Find<TextBlock>("ActiveHeader2");
-        _inactiveProblemS = Find<TextBlock>("InactiveProblemS");
         _inactiveProblemV = Find<TextBlock>("InactiveProblemV");
         _inactiveProblemR = Find<TextBlock>("InactiveProblemR");
         _activeProblemS1 = Find<TextBlock>("ActiveProblemS1");
@@ -252,6 +253,10 @@ public partial class MainWindow : Window
         _activeProblemS2 = Find<TextBlock>("ActiveProblemS2");
         _activeProblemV2 = Find<TextBlock>("ActiveProblemV2");
         _activeProblemR2 = Find<TextBlock>("ActiveProblemR2");
+        _applySort1 = Find<Button>("ApplySort1");
+        _applySort2 = Find<Button>("ApplySort2");
+        _sortApplyButtons[_activeProblemS1] = _applySort1;
+        _sortApplyButtons[_activeProblemS2] = _applySort2;
         _activeMissing1 = Find<Button>("ActiveMissing1");
         _activeMissing2 = Find<Button>("ActiveMissing2");
         _instanceCombo1 = Find<ComboBox>("InstanceCombo1");
@@ -336,7 +341,6 @@ public partial class MainWindow : Window
         };
         foreach (var label in new[]
                  {
-                     _inactiveProblemS,
                      _inactiveProblemV,
                      _inactiveProblemR,
                      _activeProblemS1,
@@ -539,6 +543,8 @@ public partial class MainWindow : Window
         UpdatePaintButtonVisual();
         _undoButton.Content = Localization.Undo(language);
         _redoButton.Content = Localization.Redo(language);
+        _applySort1.Content = Localization.ApplyButton(language);
+        _applySort2.Content = Localization.ApplyButton(language);
         _launchButton.Content = Localization.LaunchGame(language);
         _refreshButton.Content = Localization.Refresh(language);
         _syncConfigButton.Content = Localization.SyncConfig(language);
@@ -1105,7 +1111,7 @@ public partial class MainWindow : Window
         Dictionary<string, string?>? ColorAfter = null
     );
     private void UpdateProblemSummary(
-        TextBlock sortText,
+        TextBlock? sortText,
         TextBlock versionText,
         TextBlock duplicateText,
         IReadOnlyList<ModInfo> mods
@@ -1114,16 +1120,23 @@ public partial class MainWindow : Window
         var sortMods = mods.Where(mod => mod.SortError).ToList();
         var versionMods = mods.Where(mod => mod.VersionMismatch).ToList();
         var duplicateMods = mods.Where(mod => mod.IsDuplicate).ToList();
+        var language = _config.Language;
 
-        sortText.Text = $"S: {sortMods.Count}";
+        if (sortText is not null)
+        {
+            sortText.Text = $"S: {sortMods.Count}";
+            SetSortProblemTooltip(
+                sortText,
+                Localization.ProblemSortTitle(language),
+                sortMods
+            );
+            if (_sortApplyButtons.TryGetValue(sortText, out var applySort))
+            {
+                applySort.IsVisible = sortMods.Any(mod => mod.SortOrderAfterIds.Count > 0);
+            }
+        }
         versionText.Text = $"V: {versionMods.Count}";
         duplicateText.Text = $"R: {duplicateMods.Count}";
-        var language = _config.Language;
-        SetSortProblemTooltip(
-            sortText,
-            Localization.ProblemSortTitle(language),
-            sortMods
-        );
         SetProblemTooltip(
             versionText,
             Localization.ProblemVersionTitle(language),
@@ -1540,6 +1553,56 @@ public partial class MainWindow : Window
             indices.Max() + 1
         );
     }
+
+    private void OnApplySort1Click(object? sender, RoutedEventArgs e) =>
+        ApplySortSuggestions(1);
+
+    private void OnApplySort2Click(object? sender, RoutedEventArgs e) =>
+        ApplySortSuggestions(2);
+
+    private void ApplySortSuggestions(int column)
+    {
+        var instance = GetInstanceForColumn(column);
+        if (instance is null || instance.IsDamaged)
+        {
+            return;
+        }
+
+        var index = column == 1 ? 0 : 1;
+        var active = ApplyOrderFlags(
+            ApplySteamCmdFilter(ResolveActive(index), instance),
+            column
+        );
+        var order = ModListOperations.ApplySortSuggestions(
+            instance.ActivePackageIds,
+            active
+        );
+        if (ActiveIdsEqual(instance.ActivePackageIds, order))
+        {
+            return;
+        }
+
+        var ids = active
+            .Where(mod => mod.SortOrderAfterIds.Count > 0)
+            .Select(mod => mod.PackageId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var snapshots = new List<InstanceSnapshot>
+        {
+            new(instance.FolderName, instance.ActivePackageIds.ToList())
+        };
+        try
+        {
+            InstanceStore.StageActiveMods(instance, order);
+            PushUndo(snapshots, ids, column, column);
+            RefreshManager(false);
+            Dispatcher.UIThread.Post(() => SelectMovedMods(column, ids));
+        }
+        catch
+        {
+        }
+    }
+
     private void OnProblemLabelPointerExited(object? sender, PointerEventArgs e)
     {
         if (ReferenceEquals(sender, _problemTooltipTarget))
@@ -1720,7 +1783,6 @@ public partial class MainWindow : Window
 
     private void UpdateProblemFilterVisuals()
     {
-        _inactiveProblemS.TextDecorations = ProblemDecoration(_inactiveFilter.Sort);
         _inactiveProblemV.TextDecorations = ProblemDecoration(_inactiveFilter.Version);
         _inactiveProblemR.TextDecorations = ProblemDecoration(_inactiveFilter.Duplicate);
         _activeProblemS1.TextDecorations = ProblemDecoration(_activeFilter1.Sort);
@@ -1844,11 +1906,6 @@ public partial class MainWindow : Window
         };
     }
 
-    private void OnInactiveProblemSClick(object? sender, PointerPressedEventArgs e)
-    {
-        _inactiveFilter.Sort = CycleProblemFilter(_inactiveFilter.Sort);
-        RefreshManager(false);
-    }
 
     private void OnInactiveProblemVClick(object? sender, PointerPressedEventArgs e)
     {
@@ -2294,7 +2351,7 @@ public partial class MainWindow : Window
         UpdateLaunchButton();
         UpdateSaveState();
         var empty = new List<ModInfo>();
-        UpdateProblemSummary(_inactiveProblemS, _inactiveProblemV, _inactiveProblemR, empty);
+        UpdateProblemSummary(null, _inactiveProblemV, _inactiveProblemR, empty);
         UpdateProblemSummary(_activeProblemS1, _activeProblemV1, _activeProblemR1, empty);
         UpdateProblemSummary(_activeProblemS2, _activeProblemV2, _activeProblemR2, empty);
     }
@@ -2396,7 +2453,7 @@ public partial class MainWindow : Window
         UpdateLaunchButton();
         UpdateSaveState();
         UpdateProblemSummary(
-            _inactiveProblemS,
+            null,
             _inactiveProblemV,
             _inactiveProblemR,
             inactiveForSummary
@@ -2523,7 +2580,7 @@ public partial class MainWindow : Window
         else _active2Count = visible.Count;
         UpdateHeaders();
         UpdateProblemSummary(
-            inactive ? _inactiveProblemS : firstColumn ? _activeProblemS1 : _activeProblemS2,
+            inactive ? null : firstColumn ? _activeProblemS1 : _activeProblemS2,
             inactive ? _inactiveProblemV : firstColumn ? _activeProblemV1 : _activeProblemV2,
             inactive ? _inactiveProblemR : firstColumn ? _activeProblemR1 : _activeProblemR2, matches);
         ShowDetails(first);
@@ -3373,7 +3430,7 @@ public partial class MainWindow : Window
         UpdateLaunchButton();
         UpdateSaveState();
         UpdateProblemSummary(
-            _inactiveProblemS,
+            null,
             _inactiveProblemV,
             _inactiveProblemR,
             inactiveForSummary

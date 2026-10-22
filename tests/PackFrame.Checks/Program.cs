@@ -165,6 +165,17 @@ try
     Check(ModListOperations.InsertSelection(Array.Empty<string>(), new[] { "a" }, 99)
         .SequenceEqual(new[] { "a" }), "insertion handles empty target and out-of-range index");
     Check(originalOrder.SequenceEqual(new[] { "a", "b", "c", "d", "e" }), "reordering does not mutate original snapshot");
+    var sortA = new ModInfo("A", "", "", "a", "", null, ModSource.Local, "", DateTime.MinValue)
+    {
+        SortOrderAfterIds = new() { "b" }
+    };
+    var sortB = new ModInfo("B", "", "", "b", "", null, ModSource.Local, "", DateTime.MinValue);
+    var sortResult = ModListOperations.ApplySortSuggestions(
+        new[] { "a", "b", "c" },
+        new[] { sortA, sortB }
+    );
+    Check(sortResult.SequenceEqual(new[] { "b", "a", "c" }) && sortResult.Count == 3,
+        "sort suggestions reorder only and keep active membership");
 
     InstanceStore.StageActiveMods(loaded, new[] { "a", "b" });
     InstanceStore.StageActiveMods(copied, new[] { "c" });
