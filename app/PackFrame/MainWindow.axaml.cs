@@ -92,9 +92,6 @@ public partial class MainWindow : Window
     private readonly TextBlock _activeProblemS2;
     private readonly TextBlock _activeProblemV2;
     private readonly TextBlock _activeProblemR2;
-    private readonly Button _applySort1;
-    private readonly Button _applySort2;
-    private readonly Dictionary<TextBlock, Button> _sortApplyButtons = new();
     private readonly Button _activeMissing1;
     private readonly Button _activeMissing2;
     private readonly ComboBox _instanceCombo1;
@@ -253,10 +250,6 @@ public partial class MainWindow : Window
         _activeProblemS2 = Find<TextBlock>("ActiveProblemS2");
         _activeProblemV2 = Find<TextBlock>("ActiveProblemV2");
         _activeProblemR2 = Find<TextBlock>("ActiveProblemR2");
-        _applySort1 = Find<Button>("ApplySort1");
-        _applySort2 = Find<Button>("ApplySort2");
-        _sortApplyButtons[_activeProblemS1] = _applySort1;
-        _sortApplyButtons[_activeProblemS2] = _applySort2;
         _activeMissing1 = Find<Button>("ActiveMissing1");
         _activeMissing2 = Find<Button>("ActiveMissing2");
         _instanceCombo1 = Find<ComboBox>("InstanceCombo1");
@@ -543,8 +536,6 @@ public partial class MainWindow : Window
         UpdatePaintButtonVisual();
         _undoButton.Content = Localization.Undo(language);
         _redoButton.Content = Localization.Redo(language);
-        _applySort1.Content = Localization.ApplyButton(language);
-        _applySort2.Content = Localization.ApplyButton(language);
         _launchButton.Content = Localization.LaunchGame(language);
         _refreshButton.Content = Localization.Refresh(language);
         _syncConfigButton.Content = Localization.SyncConfig(language);
@@ -1125,15 +1116,13 @@ public partial class MainWindow : Window
         if (sortText is not null)
         {
             sortText.Text = $"S: {sortMods.Count}";
+            var applyColumn = ReferenceEquals(sortText, _activeProblemS1) ? 1 : 2;
             SetSortProblemTooltip(
                 sortText,
                 Localization.ProblemSortTitle(language),
-                sortMods
+                sortMods,
+                applyColumn
             );
-            if (_sortApplyButtons.TryGetValue(sortText, out var applySort))
-            {
-                applySort.IsVisible = sortMods.Any(mod => mod.SortOrderAfterIds.Count > 0);
-            }
         }
         versionText.Text = $"V: {versionMods.Count}";
         duplicateText.Text = $"R: {duplicateMods.Count}";
@@ -1176,7 +1165,8 @@ public partial class MainWindow : Window
     private void SetSortProblemTooltip(
         TextBlock target,
         string title,
-        IReadOnlyList<ModInfo> mods
+        IReadOnlyList<ModInfo> mods,
+        int column
     )
     {
         var content = CreateProblemTooltipFrame(title);
@@ -1232,6 +1222,32 @@ public partial class MainWindow : Window
             {
                 Text = names.Count == 0 ? "0" : string.Join(Environment.NewLine, names)
             });
+        }
+
+        if (column > 0 && mods.Any(mod => mod.SortOrderAfterIds.Count > 0))
+        {
+            content.Children.Add(new Border
+            {
+                Height = 1,
+                Background = SecondaryBorderBrush,
+                Margin = new Thickness(0, 8, 0, 6)
+            });
+            var apply = new Button
+            {
+                Content = Localization.ApplyButton(_config.Language),
+                Background = SecondaryBorderBrush,
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(12, 3),
+                MinHeight = 26,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left
+            };
+            apply.Click += (_, _) =>
+            {
+                ApplySortSuggestions(column);
+                CloseProblemTooltip();
+            };
+            content.Children.Add(apply);
         }
 
         SetProblemTooltipContent(target, content);
@@ -1553,12 +1569,6 @@ public partial class MainWindow : Window
             indices.Max() + 1
         );
     }
-
-    private void OnApplySort1Click(object? sender, RoutedEventArgs e) =>
-        ApplySortSuggestions(1);
-
-    private void OnApplySort2Click(object? sender, RoutedEventArgs e) =>
-        ApplySortSuggestions(2);
 
     private void ApplySortSuggestions(int column)
     {
