@@ -1467,6 +1467,17 @@ public static class Localization
         };
     }
 
+    public static string ModpackOpenWorkshop(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "打开合集",
+            TraditionalChinese => "開啟合集",
+            Japanese => "コレクションを開く",
+            _ => "Open collection"
+        };
+    }
+
     public static string ModpackSubscribeLink(string? language)
     {
         return language switch

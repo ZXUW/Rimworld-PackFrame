@@ -172,15 +172,25 @@
                                 <TextBlock x:Name="LinkLabel"
                                            Foreground="#C3D4E4"
                                            FontWeight="SemiBold" />
-                                <Border Classes="field"
-                                        MinHeight="32"
-                                        CornerRadius="0">
-                                    <TextBox x:Name="LinkBox"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             CornerRadius="0"
-                                             VerticalContentAlignment="Center" />
-                                </Border>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Border Classes="field"
+                                            MinHeight="32"
+                                            CornerRadius="0">
+                                        <TextBox x:Name="LinkBox"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 CornerRadius="0"
+                                                 VerticalContentAlignment="Center" />
+                                    </Border>
+                                    <Button x:Name="OpenWorkshopButton"
+                                            Grid.Column="1"
+                                            Theme="{StaticResource FlatButton}"
+                                            MinHeight="32"
+                                            MinWidth="120"
+                                            Padding="18,4"
+                                            Margin="8,0,0,0"
+                                            Click="OnOpenWorkshopClick" />
+                                </Grid>
 
                             </StackPanel>
                         </Border>

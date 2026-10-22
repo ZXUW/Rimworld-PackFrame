@@ -111,6 +111,8 @@ public partial class ModpackWindow : Window
         Find<TextBlock>("LinkLabel").Text = Localization.ModpackLinkLabel(_language);
         Find<TextBox>("LinkBox").PlaceholderText =
             Localization.ModpackLinkPlaceholder(_language);
+        Find<Button>("OpenWorkshopButton").Content =
+            Localization.ModpackOpenWorkshop(_language);
 
         SetButtonText(Find<Button>("InstallButton"), Localization.ModpackInstall(_language));
         SetButtonText(
@@ -590,6 +592,34 @@ public partial class ModpackWindow : Window
     private async void OnWorkshopOnlyInstallClick(object? sender, RoutedEventArgs e)
     {
         await InstallFromLinkAsync(false, skipModsDownload: true);
+    }
+
+    private void OnOpenWorkshopClick(object? sender, RoutedEventArgs e)
+    {
+        var url = Find<TextBox>("LinkBox").Text?.Trim();
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            url = _workshopUrl;
+        }
+
+        if (string.IsNullOrWhiteSpace(url) ||
+            !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+        }
     }
 
     private async Task InstallFromLinkAsync(bool useSteamCmd, bool skipModsDownload = false)
