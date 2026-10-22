@@ -30,9 +30,9 @@ public sealed class ModpackListItem
 
 public sealed class ModpackModRow
 {
-    public required string Source { get; init; }
     public required string Name { get; init; }
     public required string Detail { get; init; }
+    public required string GameVersion { get; init; }
 }
 
 public partial class ModpackWindow : Window
@@ -392,7 +392,6 @@ public partial class ModpackWindow : Window
         foreach (var mod in (pack.Mods ?? new List<ModpackMod>())
                      .Where(item => item is not null))
         {
-            var source = NormalizeSource(mod);
             var name = mod.Name;
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -431,51 +430,35 @@ public partial class ModpackWindow : Window
 
             rows.Add(new ModpackModRow
             {
-                Source = SourceLabel(source),
                 Name = name,
-                Detail = detail
+                Detail = detail,
+                GameVersion = GameVersionLabel(pack.GameVersion)
             });
         }
 
         return rows;
     }
 
-    private string SourceLabel(string source)
+    private static string GameVersionLabel(string? version)
     {
-        return source switch
+        var text = (version ?? string.Empty).Trim();
+        if (text.Length == 0)
         {
-            "workshop" => Localization.ModpackSourceWorkshop(_language),
-            "github" => Localization.ModpackSourceGithub(_language),
-            "local" => Localization.ModpackSourceLocal(_language),
-            "official" => Localization.ModpackSourceOfficial(_language),
-            _ => Localization.ModpackSourcePackage(_language)
-        };
-    }
-
-    private static string NormalizeSource(ModpackMod mod)
-    {
-        var source = (mod.Source ?? string.Empty).Trim().ToLowerInvariant();
-        if (source.Length > 0)
-        {
-            return source;
+            return string.Empty;
         }
 
-        if (!string.IsNullOrWhiteSpace(mod.WorkshopId) ||
-            !string.IsNullOrWhiteSpace(mod.WorkshopUrl))
+        var first = text.IndexOf('.');
+        if (first <= 0)
         {
-            return "workshop";
-        }
-        if (!string.IsNullOrWhiteSpace(mod.Repo) ||
-            !string.IsNullOrWhiteSpace(mod.DownloadUrl))
-        {
-            return "github";
-        }
-        if (!string.IsNullOrWhiteSpace(mod.Path))
-        {
-            return "local";
+            return text;
         }
 
-        return "package";
+        var second = text.IndexOf('.', first + 1);
+        var minor = second > first + 1
+            ? text[(first + 1)..second]
+            : text[(first + 1)..];
+        minor = new string(minor.TakeWhile(char.IsDigit).ToArray());
+        return minor.Length == 0 ? text : $"{text[..first]}.{minor}";
     }
 
     private async Task LoadCoverAsync(string? image, int version)

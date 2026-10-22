@@ -142,20 +142,21 @@
                                             <Border BorderBrush="#455364"
                                                     BorderThickness="0,0,0,1"
                                                     Padding="0,6">
-                                                <Grid ColumnDefinitions="120,*,Auto">
-                                                    <TextBlock Text="{Binding Source}"
-                                                               Foreground="#C3D4E4"
+                                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               Foreground="#EAF1F8"
                                                                TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Grid.Column="1"
-                                                               Text="{Binding Name}"
-                                                               Foreground="#EAF1F8"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               Margin="8,0" />
-                                                    <TextBlock Grid.Column="2"
                                                                Text="{Binding Detail}"
                                                                Foreground="#9AA7B8"
                                                                TextTrimming="CharacterEllipsis"
-                                                               MaxWidth="280" />
+                                                               MaxWidth="280"
+                                                               Margin="8,0" />
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding GameVersion}"
+                                                               Foreground="#C3D4E4"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Margin="8,0,0,0" />
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>

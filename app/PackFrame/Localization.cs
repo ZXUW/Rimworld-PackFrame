@@ -1,4 +1,4 @@
-﻿namespace PackFrame;
+namespace PackFrame;
 
 public static class Localization
 {
@@ -1371,10 +1371,10 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "模组",
-            TraditionalChinese => "模組",
-            Japanese => "MOD",
-            _ => "Mods"
+            SimplifiedChinese => "本地模组",
+            TraditionalChinese => "本地模組",
+            Japanese => "ローカルMOD",
+            _ => "Local mods"
         };
     }
 
