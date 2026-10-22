@@ -177,7 +177,9 @@ public static class GitHubIndexPublisher
         IReadOnlyList<string> packageIds,
         string collectionUrl,
         Action<string>? status,
-        CancellationToken cancellationToken = default, string? language = null
+        CancellationToken cancellationToken = default, string? language = null,
+        string? giteeFile = null,
+        string? githubFile = null
     )
     {
         if (string.IsNullOrWhiteSpace(token))
@@ -256,10 +258,19 @@ public static class GitHubIndexPublisher
             ["repo"] = repoFullName,
             ["ref"] = "main",
             ["manifest"] = "pack.json",
-            ["file"] =
-                $"https://raw.githubusercontent.com/{repoFullName}/main/pack.json",
             ["modCount"] = packageIds.Count
         };
+        var resolvedGithubFile = string.IsNullOrWhiteSpace(githubFile)
+            ? $"https://raw.githubusercontent.com/{repoFullName}/main/pack.json"
+            : githubFile.Trim();
+        if (!string.IsNullOrWhiteSpace(githubFile))
+        {
+            entry["file"] = resolvedGithubFile;
+        }
+        if (!string.IsNullOrWhiteSpace(giteeFile))
+        {
+            entry["giteeFile"] = giteeFile.Trim();
+        }
         var updated = entry.ToJsonString(new JsonSerializerOptions
         {
             WriteIndented = true,

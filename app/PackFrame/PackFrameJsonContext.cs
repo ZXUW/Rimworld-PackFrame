@@ -7,6 +7,7 @@ namespace PackFrame;
     WriteIndented = true
 )]
 [JsonSerializable(typeof(AppConfig))]
+[JsonSerializable(typeof(System.Collections.Generic.Dictionary<string, bool>))]
 [JsonSerializable(typeof(InstanceMetadata))]
 [JsonSerializable(typeof(ModColorData))]
 [JsonSerializable(typeof(ModFullNameDocument))]

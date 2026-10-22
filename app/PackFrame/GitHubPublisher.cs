@@ -64,6 +64,7 @@ public static class GitHubPublisher
 
         var branch = await GetDefaultBranchAsync(client, owner, name, cancellationToken);
         ModpackRepoExporter.SetRepoInfo(repoPath, owner, name, branch);
+        ModpackRepoExporter.OptimizeCoverForUpload(repoPath);
         var files = Directory.EnumerateFiles(repoPath, "*", SearchOption.AllDirectories)
             .Where(file => !IsIgnored(repoPath, file))
             .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)

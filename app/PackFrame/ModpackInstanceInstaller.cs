@@ -20,6 +20,7 @@ internal static class ModpackInstanceInstaller
             InstanceStore.SetPackBinding(created, result.Id, result.ConfigBaseUrl, result.ConfigFiles, result.SteamCmd);
             CopyTree(result.ModsSourcePath, Path.Combine(created.DirectoryPath, "Mods"));
             CopyTree(result.ConfigSourcePath, created.ConfigDirectoryPath);
+            PackUpdateService.RecordInstallation(created, result);
             var validated = InstanceStore.LoadInstance(created.DirectoryPath);
             var destination = Path.Combine(instances, $"profile{InstanceStore.GetNextIndex(packRoot)}");
             Directory.Move(created.DirectoryPath, destination);
@@ -64,7 +65,7 @@ internal static class ModpackInstanceInstaller
             throw new IOException("Install staging must not contain directory links: " + path);
     }
 
-    private static void CopyTree(string? source, string destination)
+    internal static void CopyTree(string? source, string destination)
     {
         if (source is null) return;
         if (!Directory.Exists(source)) throw new DirectoryNotFoundException(source);

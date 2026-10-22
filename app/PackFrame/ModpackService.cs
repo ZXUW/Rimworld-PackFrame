@@ -27,11 +27,16 @@ public sealed class ModpackEntry
     public string? Summary { get; set; }
     public string? Image { get; set; }
     public string? File { get; set; }
+    public string? GiteeFile { get; set; }
     public int ModCount { get; set; }
 }
 
 public sealed class ModpackDefinition
 {
+    public long? Revision { get; set; }
+    public string? Version { get; set; }
+    public string? Changelog { get; set; }
+    public string? PackSource { get; set; }
     public string? Id { get; set; }
     public string? Name { get; set; }
     public string? Author { get; set; }
@@ -75,11 +80,19 @@ public sealed record ModpackInstallResult(
     string? Id,
     string? ConfigBaseUrl,
     IReadOnlyList<string> ConfigFiles,
-    bool SteamCmd
+    bool SteamCmd,
+    string? PackSource = null,
+    long? Revision = null,
+    string? Version = null
 );
 
 public static class ModpackService
 {
+    public const string GiteeIndexUrl =
+        "https://gitee.com/zxuw/PackFrame-Modpacks/raw/main/index.json";
+    public const string GitHubIndexUrl =
+        "https://raw.githubusercontent.com/ZXUW/PackFrame-Modpacks/main/index.json";
+
     private const long MaxDownloadBytes = 512L * 1024 * 1024;
 
     private static readonly HttpClient Http = CreateHttpClient();
@@ -134,24 +147,39 @@ public static class ModpackService
         return text.TrimEnd('/') + "/index.json";
     }
 
+    private static bool IsKnownIndex(string url)
+    {
+        return url.Equals(GiteeIndexUrl, StringComparison.OrdinalIgnoreCase) ||
+            url.Equals(GitHubIndexUrl, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static async Task<ModpackIndex> LoadIndexAsync(
         string? url,
         CancellationToken cancellationToken = default
     )
     {
         var normalized = NormalizeIndexUrl(url);
-        var candidates = new List<string> { normalized };
-        if (normalized.Contains(
-                "raw.githubusercontent.com/",
-                StringComparison.OrdinalIgnoreCase
-            ) &&
-            normalized.Contains("/main/index.json", StringComparison.OrdinalIgnoreCase))
+        var candidates = new List<string>();
+        if (IsKnownIndex(normalized))
         {
-            candidates.Add(normalized.Replace(
-                "/main/index.json",
-                "/master/index.json",
-                StringComparison.OrdinalIgnoreCase
-            ));
+            candidates.Add(GiteeIndexUrl);
+            candidates.Add(GitHubIndexUrl);
+        }
+        else
+        {
+            candidates.Add(normalized);
+            if (normalized.Contains(
+                    "raw.githubusercontent.com/",
+                    StringComparison.OrdinalIgnoreCase
+                ) &&
+                normalized.Contains("/main/index.json", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add(normalized.Replace(
+                    "/main/index.json",
+                    "/master/index.json",
+                    StringComparison.OrdinalIgnoreCase
+                ));
+            }
         }
 
         Exception? lastError = null;
@@ -190,36 +218,77 @@ public static class ModpackService
         CancellationToken cancellationToken = default
     )
     {
-        var file = entry.File;
-        if (string.IsNullOrWhiteSpace(file))
+        var files = new List<string>();
+        if (!string.IsNullOrWhiteSpace(entry.GiteeFile))
+        {
+            files.Add(entry.GiteeFile);
+        }
+        if (!string.IsNullOrWhiteSpace(entry.File))
+        {
+            files.Add(entry.File);
+        }
+        if (files.Count == 0)
         {
             if (string.IsNullOrWhiteSpace(entry.Id))
             {
                 throw new InvalidOperationException("Modpack entry has no id or file.");
             }
 
-            file = $"packs/{entry.Id}.json";
+            files.Add($"packs/{entry.Id}.json");
         }
 
-        var packUri = new Uri(indexUri, file);
-        var json = await Http.GetStringAsync(packUri, cancellationToken);
-        var pack = JsonSerializer.Deserialize(
-            json,
-            PackFrameJsonContext.Default.ModpackDefinition
-        ) ?? throw new InvalidOperationException("Modpack file is empty.");
+        Exception? lastError = null;
+        foreach (var file in files)
+        {
+            try
+            {
+                var packUri = new Uri(indexUri, file);
+                using var request = new HttpRequestMessage(HttpMethod.Get, packUri);
+                request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
+                using var response = await Http.SendAsync(request, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                var pack = JsonSerializer.Deserialize(
+                    json,
+                    PackFrameJsonContext.Default.ModpackDefinition
+                ) ?? throw new InvalidOperationException("Modpack file is empty.");
 
-        pack.Mods ??= new List<ModpackMod>();
-        pack.PackageIds ??= new List<string>();
-        pack.ConfigFiles ??= new List<string>();
-        pack.Id ??= entry.Id;
-        pack.Name = string.IsNullOrWhiteSpace(pack.Name) ? entry.Name : pack.Name;
-        pack.Description = string.IsNullOrWhiteSpace(pack.Description)
-            ? entry.Summary
-            : pack.Description;
-        pack.Image = !string.IsNullOrWhiteSpace(pack.Image)
-            ? ResolveImage(packUri, pack.Image)
-            : ResolveImage(indexUri, entry.Image);
-        return pack;
+                pack.Mods ??= new List<ModpackMod>();
+                pack.PackageIds ??= new List<string>();
+                pack.ConfigFiles ??= new List<string>();
+                pack.Id ??= entry.Id;
+                pack.PackSource = indexUri.AbsoluteUri;
+                pack.Name = string.IsNullOrWhiteSpace(pack.Name) ? entry.Name : pack.Name;
+                pack.Description = string.IsNullOrWhiteSpace(pack.Description)
+                    ? entry.Summary
+                    : pack.Description;
+                pack.Image = !string.IsNullOrWhiteSpace(pack.Image)
+                    ? ResolveImage(packUri, pack.Image)
+                    : ResolveImage(indexUri, entry.Image);
+                if (!string.IsNullOrWhiteSpace(pack.ModsArchive) &&
+                    !Uri.TryCreate(pack.ModsArchive, UriKind.Absolute, out _))
+                {
+                    pack.ModsArchive = new Uri(packUri, pack.ModsArchive).AbsoluteUri;
+                }
+                if (!string.IsNullOrWhiteSpace(pack.ConfigBaseUrl) &&
+                    !Uri.TryCreate(pack.ConfigBaseUrl, UriKind.Absolute, out _))
+                {
+                    pack.ConfigBaseUrl = new Uri(packUri, pack.ConfigBaseUrl).AbsoluteUri;
+                }
+                else if (string.IsNullOrWhiteSpace(pack.ConfigBaseUrl) &&
+                    pack.ConfigFiles.Count > 0)
+                {
+                    pack.ConfigBaseUrl = new Uri(packUri, "config/").AbsoluteUri;
+                }
+                return pack;
+            }
+            catch (Exception exception)
+            {
+                lastError = exception;
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException("Modpack file could not be loaded.");
     }
 
     internal static string? ResolveImage(Uri baseUri, string? image)
@@ -526,7 +595,7 @@ public static class ModpackService
             pack.Id,
             pack.ConfigBaseUrl,
             pack.ConfigFiles,
-            useSteamCmd
+            useSteamCmd, pack.PackSource, pack.Revision, pack.Version
         );
     }
 
@@ -1202,8 +1271,6 @@ public static class ModpackService
         return client;
     }
 }
-
-
 
 
 

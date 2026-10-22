@@ -58,6 +58,9 @@ public partial class ModpackWindow : Window
     private bool _closed;
     private CancellationTokenSource? _operationCancellation;
     private int _detailVersion;
+    private CancellationTokenSource? _coverCancellation;
+    private readonly Dictionary<string, byte[]> _coverCache = new();
+    private long _coverCacheBytes;
 
     public ModpackWindow()
     {
@@ -83,17 +86,19 @@ public partial class ModpackWindow : Window
 
         ApplyLocalization();
         var indexUrl = string.IsNullOrWhiteSpace(config.ModpackIndexUrl)
-            ? GitHubIndexPublisher.DefaultIndexUrl
+            ? ModpackService.GiteeIndexUrl
             : config.ModpackIndexUrl;
         RepoBox.Text = indexUrl;
         config.ModpackIndexUrl = indexUrl;
         config.Save();
         Opened += async (_, _) => await LoadIndexAsync();
         KeyDown += OnWindowKeyDown;
-        Closing += (_, _) =>
+        Closing += (_, e) =>
         {
+            if (_committingUpdate) { e.Cancel = true; return; }
             _closed = true;
             _operationCancellation?.Cancel();
+            _coverCancellation?.Cancel();
             DisposeCover();
         };
     }
@@ -250,7 +255,8 @@ public partial class ModpackWindow : Window
 
         if (_items.Count > 0)
         {
-            Find<ListBox>("PackList").SelectedIndex = 0;
+            var matching = _items.FindIndex(item => item.Entry.Id == _currentInstance?.Metadata?.PackId);
+            Find<ListBox>("PackList").SelectedIndex = matching >= 0 ? matching : 0;
         }
     }
 
@@ -465,8 +471,12 @@ public partial class ModpackWindow : Window
 
     private async Task LoadCoverAsync(string? image, int version)
     {
+        _coverCancellation?.Cancel();
+        using var cancellation = new CancellationTokenSource();
+        _coverCancellation = cancellation;
         if (string.IsNullOrWhiteSpace(image) || _indexUri is null)
         {
+            _coverCancellation = null;
             SetCover(null);
             return;
         }
@@ -474,22 +484,43 @@ public partial class ModpackWindow : Window
         try
         {
             var uri = new Uri(_indexUri, image);
-            var bytes = await ImageHttp.GetByteArrayAsync(uri);
-            if (version != _detailVersion)
+            if (!_coverCache.TryGetValue(uri.AbsoluteUri, out var bytes))
+            {
+                bytes = await ImageHttp.GetByteArrayAsync(uri, cancellation.Token);
+                if (bytes.Length <= 4 * 1024 * 1024)
+                {
+                    if (_coverCacheBytes + bytes.Length > 16 * 1024 * 1024)
+                    { _coverCache.Clear(); _coverCacheBytes = 0; }
+                    _coverCache[uri.AbsoluteUri] = bytes;
+                    _coverCacheBytes += bytes.Length;
+                }
+            }
+            if (_closed || version != _detailVersion || cancellation.IsCancellationRequested)
             {
                 return;
             }
 
-            var stream = new MemoryStream(bytes);
-            var bitmap = new Bitmap(stream);
-            SetCover(bitmap, stream);
+            var bitmap = await Task.Run(() =>
+            {
+                using var stream = new MemoryStream(bytes);
+                return Bitmap.DecodeToHeight(stream, 480);
+            }, cancellation.Token);
+            if (_closed || version != _detailVersion || cancellation.IsCancellationRequested)
+            { bitmap.Dispose(); return; }
+            SetCover(bitmap);
         }
-        catch
+        catch (OperationCanceledException) { }
+        catch (Exception exception)
         {
-            if (version == _detailVersion)
+            AppLog.Error("Load pack cover: " + image, exception);
+            if (!_closed && version == _detailVersion)
             {
                 SetCover(null);
             }
+        }
+        finally
+        {
+            if (ReferenceEquals(_coverCancellation, cancellation)) _coverCancellation = null;
         }
     }
 
@@ -505,6 +536,7 @@ public partial class ModpackWindow : Window
 
     private void ClearDetail(string status)
     {
+        _coverCancellation?.Cancel();
         _canInstall = false;
         _canApplyConfig = false;
         _workshopUrl = null;
@@ -524,6 +556,7 @@ public partial class ModpackWindow : Window
 
     private void SetControls(bool enabled)
     {
+        RefreshUpdateControls();
         var ready = enabled && !_busy;
         Find<Button>("RefreshButton").IsEnabled = ready;
         Find<Button>("WorkshopOnlyButton").IsEnabled = ready;
@@ -567,6 +600,8 @@ public partial class ModpackWindow : Window
 
     private async void OnRefreshClick(object? sender, RoutedEventArgs e)
     {
+        _coverCache.Clear();
+        _coverCacheBytes = 0;
         await LoadIndexAsync();
     }
 
@@ -875,10 +910,6 @@ public partial class ModpackWindow : Window
         return client;
     }
 }
-
-
-
-
 
 
 

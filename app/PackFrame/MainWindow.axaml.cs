@@ -6038,7 +6038,8 @@ public partial class MainWindow : Window
                 export,
                 _gameInstallation?.GamePath,
                 _config.Language,
-                _config.ModpackIndexUrl
+                _config.ModpackIndexUrl,
+                instance
             );
             await window.ShowDialog(this);
         }
@@ -6306,5 +6307,3 @@ public partial class MainWindow : Window
         _config.Save();
     }
 }
-
-

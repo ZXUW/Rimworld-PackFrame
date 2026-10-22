@@ -62,6 +62,13 @@ public sealed class ManagedInstance
 
 public sealed class InstanceMetadata
 {
+    public string? WorkshopCollectionId { get; set; }
+    public string? PackSource { get; set; }
+    public long? InstalledRevision { get; set; }
+    public string? InstalledVersion { get; set; }
+    public Dictionary<string, string> ManagedFiles { get; set; } = new();
+    public List<string> ManagedModFolders { get; set; } = new();
+    public List<string> InstalledOrder { get; set; } = new();
     public string? Name { get; set; }
     public string? Source { get; set; }
     public string? PackId { get; set; }
@@ -308,6 +315,14 @@ public static class InstanceStore
             source ?? string.Empty
         );
         instance.Metadata = ReadMetadata(instance.DirectoryPath);
+    }
+
+    internal static void SaveMetadata(ManagedInstance instance, InstanceMetadata metadata)
+    {
+        instance.EnsureHealthy();
+        FileTransactions.WriteAtomic(Path.Combine(instance.DirectoryPath, MetadataFileName), path =>
+            File.WriteAllText(path, JsonSerializer.Serialize(metadata, PackFrameJsonContext.Default.InstanceMetadata)));
+        instance.Metadata = metadata;
     }
 
     private sealed record PendingActiveMods(

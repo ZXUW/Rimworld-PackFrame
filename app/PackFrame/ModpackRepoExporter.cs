@@ -13,6 +13,9 @@ public sealed record ModpackRepoWorkshopMod(ulong Id, string Name);
 
 public sealed class ModpackRepoManifest
 {
+    public long? Revision { get; set; }
+    public string? Version { get; set; }
+    public string? Changelog { get; set; }
     public int SchemaVersion { get; set; } = 1;
     public string? Id { get; set; }
     public string? Name { get; set; }
@@ -174,8 +177,14 @@ public static class ModpackRepoExporter
             : instance.Metadata.PackId.Trim();
         var manifest = new ModpackRepoManifest
         {
+            Revision = Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), checked((instance.Metadata?.InstalledRevision ?? 0) + 1)),
+            Version = DateTime.UtcNow.ToString("yyyy.MM.dd.HHmmss"),
+            Changelog = string.Empty,
             ModsArchive = modsArchive,
             Id = id,
+            WorkshopCollectionId = instance.Metadata?.WorkshopCollectionId,
+            WorkshopUrl = instance.Metadata?.WorkshopCollectionId is { Length: > 0 } collectionId
+                ? "https://steamcommunity.com/sharedfiles/filedetails/?id=" + collectionId : null,
             Name = displayName,
             Author = string.Empty,
             Description = displayName,
@@ -211,6 +220,13 @@ public static class ModpackRepoExporter
             + "```\n"
         );
         File.WriteAllText(Path.Combine(imagesPath, ".gitkeep"), string.Empty);
+        PackLicenses.Ensure(
+            repoPath,
+            localMods
+                .Select(mod => mod.Name ?? mod.PackageId ?? string.Empty)
+                .Where(name => name.Length > 0)
+                .ToList()
+        );
 
         return new ModpackRepoExportResult(
             repoPath,
@@ -287,7 +303,8 @@ public static class ModpackRepoExporter
             )
         );
     }
-    public static void SetPackInfo(string repoPath, string name, string description)
+    public static void SetPackInfo(string repoPath, string name, string description,
+        string? version = null, string? changelog = null)
     {
         var path = Path.Combine(repoPath, "pack.json");
         if (!File.Exists(path))
@@ -309,13 +326,15 @@ public static class ModpackRepoExporter
             manifest.Name = name.Trim();
         }
         manifest.Description = description.Trim();
-        File.WriteAllText(
-            path,
+        if (!string.IsNullOrWhiteSpace(version)) manifest.Version = version.Trim();
+        if (changelog is not null) manifest.Changelog = changelog.Trim();
+        FileTransactions.WriteAtomic(path, temporary => File.WriteAllText(
+            temporary,
             JsonSerializer.Serialize(
                 manifest,
                 PackFrameJsonContext.Default.ModpackRepoManifest
             )
-        );
+        ));
     }
     public static void SetName(string repoPath, string name)
     {
@@ -374,24 +393,27 @@ public static class ModpackRepoExporter
             )
         );
     }
+    internal static void OptimizeCoverForUpload(string repoPath)
+    {
+        var manifestPath = Path.Combine(repoPath, "pack.json");
+        if (!File.Exists(manifestPath)) return;
+        var manifest = JsonSerializer.Deserialize(File.ReadAllText(manifestPath), PackFrameJsonContext.Default.ModpackRepoManifest);
+        if (string.IsNullOrWhiteSpace(manifest?.Image) || Uri.TryCreate(manifest.Image, UriKind.Absolute, out _)) return;
+        var source = Path.GetFullPath(Path.Combine(repoPath, manifest.Image));
+        var prefix = Path.GetFullPath(repoPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!source.StartsWith(prefix, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            throw new IOException("Cover image is outside the exported repository.");
+        if (File.Exists(source)) SetCoverImage(repoPath, source);
+    }
+
     public static string? SetCoverImage(string repoPath, string sourcePath)
     {
         var imagesPath = Path.Combine(repoPath, "images");
         Directory.CreateDirectory(imagesPath);
-        var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
-        if (extension.Length == 0)
-        {
-            extension = ".png";
-        }
-
-        foreach (var old in Directory.EnumerateFiles(imagesPath, "cover.*"))
-        {
-            File.Delete(old);
-        }
-
-        var name = "cover" + extension;
+        var encoded = CoverImageEncoder.Encode(sourcePath);
+        var name = "cover.jpg";
         var target = Path.Combine(imagesPath, name);
-        File.Copy(sourcePath, target, true);
+        FileTransactions.WriteAtomic(target, temporary => File.WriteAllBytes(temporary, encoded));
 
         var path = Path.Combine(repoPath, "pack.json");
         if (File.Exists(path))
@@ -414,6 +436,9 @@ public static class ModpackRepoExporter
         }
 
         UpdateReadmeCover(repoPath);
+        foreach (var old in Directory.EnumerateFiles(imagesPath, "cover.*"))
+            if (!Path.GetFullPath(old).Equals(Path.GetFullPath(target), OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) File.Delete(old);
         return target;
     }
 

@@ -90,6 +90,18 @@
                         </Border>
                     </Grid>
 
+                    <StackPanel Spacing="4" Margin="0,8,0,0">
+                        <TextBlock x:Name="PackVersionLabel" Foreground="#C3D4E4" FontWeight="SemiBold" />
+                        <Border Classes="field" MinHeight="34">
+                            <TextBox x:Name="PackVersionBox" Background="Transparent" BorderThickness="0" CornerRadius="0" />
+                        </Border>
+                        <SelectableTextBlock x:Name="PackRevisionText" Foreground="#C3D4E4" TextWrapping="Wrap" />
+                        <TextBlock x:Name="PackChangelogLabel" Foreground="#C3D4E4" FontWeight="SemiBold" />
+                        <Border Classes="field" MinHeight="70">
+                            <TextBox x:Name="PackChangelogBox" Background="Transparent" BorderThickness="0" CornerRadius="0"
+                                     AcceptsReturn="True" TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
                     <Grid ColumnDefinitions="*,*" Margin="0,8,0,0">
                         <StackPanel Grid.Column="0" Margin="0,0,6,0">
                             <TextBlock x:Name="LocalHeader"
@@ -307,6 +319,89 @@
                 </StackPanel>
             </ScrollViewer>
 
+            <ScrollViewer x:Name="GiteePage"
+                          IsVisible="False"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="GiteeIntro"
+                               Foreground="#EAF1F8"
+                               TextWrapping="Wrap" />
+                    <TextBlock x:Name="GiteePathLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold" />
+                    <SelectableTextBlock x:Name="GiteePath"
+                                         Foreground="#EAF1F8"
+                                         TextWrapping="Wrap" />
+
+                    <TextBlock x:Name="GiteeTokenLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Border Classes="field" MinHeight="36">
+                            <TextBox x:Name="GiteeTokenBox"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     CornerRadius="0"
+                                     PasswordChar="*"
+                                     VerticalContentAlignment="Center" />
+                        </Border>
+                        <Button x:Name="GetGiteeTokenButton"
+                                Grid.Column="1"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="36"
+                                Padding="18,6"
+                                Margin="8,0,0,0"
+                                Click="OnGetGiteeTokenClick" />
+                    </Grid>
+                    <TextBlock x:Name="GiteeTokenHint"
+                               Foreground="#9AA7B8"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock x:Name="GiteeRepoNameLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Border Classes="field" MinHeight="36">
+                        <TextBox x:Name="GiteeRepoNameBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 VerticalContentAlignment="Center"
+                                 TextChanged="OnGiteeRepoNameChanged" />
+                    </Border>
+                    <TextBlock x:Name="GiteeRepoNormalizedLabel"
+                               Foreground="#9AA7B8"
+                               TextWrapping="Wrap" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                        <Button x:Name="UploadGiteeButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="24,8"
+                                Click="OnUploadGiteeClick" />
+                        <Button x:Name="OpenGiteeRepoButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="18,8"
+                                IsVisible="False"
+                                Click="OnOpenGiteeRepoClick" />
+                    </StackPanel>
+                    <TextBlock x:Name="GiteeStatus"
+                               Foreground="#C3D4E4"
+                               TextWrapping="Wrap" />
+
+                    <Border Height="1" Background="#455364" Margin="0,10,0,0" />
+                    <Button x:Name="OpenRepoGiteeButton"
+                            Theme="{StaticResource FlatButton}"
+                            MinHeight="38"
+                            Padding="20,8"
+                            HorizontalAlignment="Left"
+                            Click="OnOpenRepoClick" />
+                </StackPanel>
+            </ScrollViewer>
+
             <ScrollViewer x:Name="IndexPage"
                           IsVisible="False"
                           VerticalScrollBarVisibility="Auto"
@@ -321,6 +416,17 @@
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="36">
                         <TextBox x:Name="IndexRepoUrlBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 VerticalContentAlignment="Center" />
+                    </Border>
+                    <TextBlock x:Name="IndexGiteeRepoLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Border Classes="field" MinHeight="36">
+                        <TextBox x:Name="IndexGiteeRepoUrlBox"
                                  Background="Transparent"
                                  BorderThickness="0"
                                  CornerRadius="0"

@@ -219,6 +219,12 @@
                                     Padding="24,8"
                                     Click="OnApplyConfigClick" />
                         </StackPanel>
+                        <TextBlock x:Name="UpdateVersionText" Foreground="#EAF1F8" TextWrapping="Wrap" />
+                        <WrapPanel>
+                            <Button x:Name="CheckUpdateButton" Theme="{StaticResource FlatButton}" Margin="0,4,8,0" Click="OnCheckUpdateClick" />
+                            <Button x:Name="BindPackButton" Theme="{StaticResource FlatButton}" Margin="0,4,8,0" Click="OnBindPackClick" />
+                            <Button x:Name="RestoreUpdateButton" Theme="{StaticResource FlatButton}" Margin="0,4,8,0" Click="OnRestoreUpdateClick" />
+                        </WrapPanel>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\PackFrame.ico" />
+    <EmbeddedResource Include="Assets\CC-BY-4.0.txt" />
     <InternalsVisibleTo Include="PackFrame.Checks" />
     <PackageReference Include="Avalonia" Version="12.1.4" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />

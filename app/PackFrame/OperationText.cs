@@ -22,6 +22,11 @@ internal static class OperationText
     public static string GithubAsset(string? language) => Choose(language, "Uploading large mods archive as a Release asset...", "正在将大型模组压缩包上传到 Release...", "正在將大型模組壓縮包上傳至 Release...", "大容量 MOD アーカイブを Release にアップロード中...");
     public static string GithubFiles(string? language) => Choose(language, "Uploading files", "正在上传文件", "正在上傳檔案", "ファイルをアップロード中");
     public static string GithubDone(string? language) => Choose(language, "GitHub upload complete.", "GitHub 上传完成。", "GitHub 上傳完成。", "GitHub アップロード完了。");
+    public static string GiteeLogin(string? language) => Choose(language, "Verifying Gitee login...", "正在验证 Gitee 登录...", "正在驗證 Gitee 登入...", "Gitee ログインを確認中...");
+    public static string GiteeRepo(string? language) => Choose(language, "Preparing Gitee repository...", "正在准备 Gitee 仓库...", "正在準備 Gitee 儲存庫...", "Gitee リポジトリを準備中...");
+    public static string GiteeFiles(string? language) => Choose(language, "Uploading files", "正在上传文件", "正在上傳檔案", "ファイルをアップロード中");
+    public static string GiteeCommit(string? language) => Choose(language, "Creating Gitee commit...", "正在创建 Gitee 提交...", "正在建立 Gitee 提交...", "Gitee コミットを作成中...");
+    public static string GiteeDone(string? language) => Choose(language, "Gitee upload complete.", "Gitee 上传完成。", "Gitee 上傳完成。", "Gitee アップロード完了。");
     public static string IndexPrepare(string? language) => Choose(language, "Preparing index submission...", "正在准备整合包列表审核...", "正在準備整合包列表審核...", "一覧への掲載申請を準備中...");
     public static string IndexFork(string? language) => Choose(language, "Forking index repository...", "正在创建整合包索引仓库分支...", "正在建立整合包索引儲存庫分支...", "インデックスリポジトリをフォーク中...");
     public static string IndexWrite(string? language) => Choose(language, "Writing modpack files...", "正在写入整合包文件...", "正在寫入整合包檔案...", "MOD パックのファイルを書き込み中...");

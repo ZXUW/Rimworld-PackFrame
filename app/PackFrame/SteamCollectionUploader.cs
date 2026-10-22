@@ -12,7 +12,7 @@ namespace PackFrame;
 public sealed record SteamCollectionFailure(ulong Id, string Name, int Result);
 public sealed record SteamCollectionCreateResult(ulong CollectionId, IReadOnlyList<SteamCollectionFailure> Failed);
 
-internal sealed class SteamCollectionClient
+internal sealed partial class SteamCollectionClient
 {
     private const uint RimWorldAppId = 294100;
     private const int CollectionFileType = 2;
@@ -140,7 +140,9 @@ internal sealed class SteamCollectionClient
         IReadOnlyList<ulong> workshopIds,
         string? previewPath = null,
         IReadOnlyDictionary<ulong, string>? workshopNames = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        ulong? boundCollectionId = null,
+        Func<IReadOnlyList<OwnedCollection>, ulong?>? selectCollection = null
     )
     {
         var libraryPath = Path.Combine(gamePath, "steam_api64.dll");
@@ -230,6 +232,17 @@ internal sealed class SteamCollectionClient
 
         try
         {
+            var owned = client.QueryOwnedCollections(cancellationToken);
+            var candidates = SelectCandidates(owned, title, boundCollectionId);
+            var chosen = candidates.Count > 0
+                ? selectCollection?.Invoke(candidates) ?? throw new OperationCanceledException(cancellationToken)
+                : 0UL;
+            cancellationToken.ThrowIfCancellationRequested();
+            var previous = owned.FirstOrDefault(item => item.Id == chosen);
+            if (chosen != 0 && previous is null) throw new InvalidOperationException("Selected collection is not owned by the signed-in account.");
+            ulong collectionId;
+            if (chosen == 0)
+            {
             var createCall = createItem(ugc, RimWorldAppId, CollectionFileType);
             if (createCall == 0)
             {
@@ -248,7 +261,9 @@ internal sealed class SteamCollectionClient
                 );
             }
 
-            var collectionId = created.PublishedFileId;
+            collectionId = created.PublishedFileId;
+            }
+            else collectionId = chosen;
 
             var update = startItemUpdate(ugc, RimWorldAppId, collectionId);
             if (update == 0)
@@ -258,7 +273,7 @@ internal sealed class SteamCollectionClient
 
             SetText(setTitle, ugc, update, title);
             SetText(setDescription, ugc, update, description);
-            if (!setVisibility(ugc, update, PrivateVisibility))
+            if (previous is null && !setVisibility(ugc, update, PrivateVisibility))
             {
                 throw new InvalidOperationException("SetItemVisibility(Private) failed.");
             }
@@ -291,9 +306,10 @@ internal sealed class SteamCollectionClient
 
 
             var failures = new List<SteamCollectionFailure>();
-            for (var index = 0; index < workshopIds.Count; index++)
+            var delta = CollectionDelta(previous?.Children ?? Array.Empty<ulong>(), workshopIds);
+            for (var index = 0; index < delta.Add.Count; index++)
             {
-                var child = workshopIds[index];
+                var child = delta.Add[index];
                 var childName = workshopNames is not null &&
                                 workshopNames.TryGetValue(child, out var resolvedName)
                     ? resolvedName
@@ -323,7 +339,7 @@ internal sealed class SteamCollectionClient
                 }
             }
 
-            var changeNote = ToUtf8("Initial collection from PackFrame");
+            var changeNote = ToUtf8(previous is null ? "Initial collection from PackFrame" : "Update collection from PackFrame");
             ulong submitCall;
             try
             {
@@ -352,6 +368,19 @@ internal sealed class SteamCollectionClient
                         ? "SubmitItemUpdate failed with EResult 25: preview image is larger than 1 MB or Steam Cloud quota is full."
                         : $"SubmitItemUpdate failed with EResult {submitted.Result}."
                 );
+            }
+
+            // Remove obsolete members only after additions and metadata succeeded.
+            if (failures.Count == 0 && delta.Remove.Count > 0)
+            {
+                var remove = GetDelegate<AddDependency>(library, "SteamAPI_ISteamUGC_RemoveDependency");
+                foreach (var child in delta.Remove)
+                {
+                    var call = remove(ugc, collectionId, child);
+                    var removed = call == 0 ? default : client.Wait<AddDependencyResult>(call, 3413, cancellationToken);
+                    if (removed.Result != ResultOk)
+                        failures.Add(new SteamCollectionFailure(child, "Remove", removed.Result));
+                }
             }
 
             if (temporaryPreview is not null)
@@ -562,5 +591,4 @@ internal sealed class SteamCollectionClient
         }
     }
 }
-
 
