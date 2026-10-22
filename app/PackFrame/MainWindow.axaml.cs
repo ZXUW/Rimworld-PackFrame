@@ -4637,8 +4637,7 @@ public partial class MainWindow : Window
 
     private void OnDiscordLinkClick(object? sender, RoutedEventArgs e)
     {
-        const string url = "";
-        if (!string.IsNullOrWhiteSpace(url)) OpenUrl(url);
+        OpenUrl("https://discord.gg/24Qmy5KHdc");
     }
 
     private static void OpenUrl(string? url)
