@@ -488,24 +488,40 @@
             </Grid>
         </Grid>
 
-        <StackPanel Grid.Row="3"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Center"
-                    Spacing="8"
-                    Margin="0,8,0,0">
-            <Button x:Name="SaveButton"
-                    Theme="{StaticResource FlatButton}"
-                    MinHeight="36"
-                    Padding="24,8"
-                    Click="OnSaveClick" />
-            <Button x:Name="LaunchButton"
-                    Theme="{StaticResource FlatButton}"
-                    MinHeight="36"
-                    Padding="24,8"
-                    IsEnabled="False"
-                    Click="OnLaunchClick" />
-        </StackPanel>
+        <Grid Grid.Row="3"
+              ColumnDefinitions="*,Auto"
+              Margin="0,8,0,0">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Spacing="14">
+                <Button x:Name="GithubLinkButton"
+                        Classes="footerlink"
+                        Click="OnGithubLinkClick" />
+                <Button x:Name="DiscordLinkButton"
+                        Classes="footerlink"
+                        Click="OnDiscordLinkClick" />
+                <SelectableTextBlock x:Name="QqGroupText"
+                                     Foreground="#C3D4E4"
+                                     VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Spacing="8">
+                <Button x:Name="SaveButton"
+                        Theme="{StaticResource FlatButton}"
+                        MinHeight="36"
+                        Padding="24,8"
+                        Click="OnSaveClick" />
+                <Button x:Name="LaunchButton"
+                        Theme="{StaticResource FlatButton}"
+                        MinHeight="36"
+                        Padding="24,8"
+                        IsEnabled="False"
+                        Click="OnLaunchClick" />
+            </StackPanel>
+        </Grid>
 
         <Canvas x:Name="DragOverlay"
                 Grid.RowSpan="3"

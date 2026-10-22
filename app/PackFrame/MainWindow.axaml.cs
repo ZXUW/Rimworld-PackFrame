@@ -68,6 +68,9 @@ public partial class MainWindow : Window
     private readonly Button _saveButton;
     private readonly Button _refreshButton;
     private readonly Button _syncConfigButton;
+    private readonly Button _githubLinkButton;
+    private readonly Button _discordLinkButton;
+    private readonly SelectableTextBlock _qqGroupText;
     private readonly TextBox _inactiveSearchBox;
     private readonly TextBox _activeSearchBox1;
     private readonly TextBox _activeSearchBox2;
@@ -226,6 +229,9 @@ public partial class MainWindow : Window
         _saveButton = Find<Button>("SaveButton");
         _refreshButton = Find<Button>("RefreshButton");
         _syncConfigButton = Find<Button>("SyncConfigButton");
+        _githubLinkButton = Find<Button>("GithubLinkButton");
+        _discordLinkButton = Find<Button>("DiscordLinkButton");
+        _qqGroupText = Find<SelectableTextBlock>("QqGroupText");
         _inactiveSearchBox = Find<TextBox>("InactiveSearchBox");
         _activeSearchBox1 = Find<TextBox>("ActiveSearchBox1");
         _activeSearchBox2 = Find<TextBox>("ActiveSearchBox2");
@@ -537,6 +543,15 @@ public partial class MainWindow : Window
         _undoButton.Content = Localization.Undo(language);
         _redoButton.Content = Localization.Redo(language);
         _launchButton.Content = Localization.LaunchGame(language);
+        _githubLinkButton.Content = "GitHub";
+        _discordLinkButton.Content = "Discord";
+        _qqGroupText.Text = OperationText.Choose(
+            language,
+            "QQ group: 960717872",
+            "交流QQ群：960717872",
+            "交流QQ群：960717872",
+            "交流QQグループ：960717872"
+        );
         _refreshButton.Content = Localization.Refresh(language);
         _syncConfigButton.Content = Localization.SyncConfig(language);
         _modpackButton1.Content = Localization.ModpacksButton(language);
@@ -4613,6 +4628,17 @@ public partial class MainWindow : Window
                 uri.Host.EndsWith(".steamcommunity.com", StringComparison.OrdinalIgnoreCase) ||
                 uri.Host.Equals("steampowered.com", StringComparison.OrdinalIgnoreCase) ||
                 uri.Host.EndsWith(".steampowered.com", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void OnGithubLinkClick(object? sender, RoutedEventArgs e)
+    {
+        OpenUrl("https://github.com/ZXUW/Rimworld-PackFrame");
+    }
+
+    private void OnDiscordLinkClick(object? sender, RoutedEventArgs e)
+    {
+        const string url = "";
+        if (!string.IsNullOrWhiteSpace(url)) OpenUrl(url);
     }
 
     private static void OpenUrl(string? url)
