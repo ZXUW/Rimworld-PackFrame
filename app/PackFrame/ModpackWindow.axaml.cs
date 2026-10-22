@@ -580,7 +580,7 @@ public partial class ModpackWindow : Window
         };
         defaultItem.Click += async (_, _) =>
         {
-            RepoBox.Text = GitHubIndexPublisher.DefaultIndexUrl;
+            RepoBox.Text = ModpackService.GiteeIndexUrl;
             await LoadIndexAsync();
         };
         flyout.Items.Add(defaultItem);
