@@ -1178,6 +1178,33 @@ public partial class MainWindow : Window
             .ToList();
         var hasSection = false;
 
+        if (column > 0 && mods.Any(mod => mod.SortOrderAfterIds.Count > 0))
+        {
+            content.Children.Add(new Border
+            {
+                Height = 1,
+                Background = SecondaryBorderBrush,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+            var apply = new Button
+            {
+                Content = Localization.ApplyButton(_config.Language),
+                Background = SecondaryBorderBrush,
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(12, 3),
+                MinHeight = 26,
+                Margin = new Thickness(0, 0, 0, 8),
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left
+            };
+            apply.Click += (_, _) =>
+            {
+                ApplySortSuggestions(column);
+                CloseProblemTooltip();
+            };
+            content.Children.Add(apply);
+        }
+
         if (orderMods.Count > 0)
         {
             AddSortSection(
@@ -1224,33 +1251,7 @@ public partial class MainWindow : Window
             });
         }
 
-        if (column > 0 && mods.Any(mod => mod.SortOrderAfterIds.Count > 0))
-        {
-            content.Children.Add(new Border
-            {
-                Height = 1,
-                Background = SecondaryBorderBrush,
-                Margin = new Thickness(0, 8, 0, 6)
-            });
-            var apply = new Button
-            {
-                Content = Localization.ApplyButton(_config.Language),
-                Background = SecondaryBorderBrush,
-                Foreground = Brushes.White,
-                BorderThickness = new Thickness(0),
-                Padding = new Thickness(12, 3),
-                MinHeight = 26,
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left
-            };
-            apply.Click += (_, _) =>
-            {
-                ApplySortSuggestions(column);
-                CloseProblemTooltip();
-            };
-            content.Children.Add(apply);
-        }
-
-        SetProblemTooltipContent(target, content);
+        SetSortProblemTooltipContent(target, content);
     }
 
     private void AddSortSection(
@@ -1396,9 +1397,35 @@ public partial class MainWindow : Window
         ToolTip.SetTip(target, content);
     }
 
+    private void SetSortProblemTooltipContent(TextBlock target, StackPanel content)
+    {
+        var popupContent = new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#20354A")),
+            BorderBrush = SecondaryBorderBrush,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 8),
+            Child = new ScrollViewer
+            {
+                Content = content,
+                MaxHeight = 520
+            }
+        };
+        AttachProblemTooltipHover(target, popupContent);
+        target.Tag = popupContent;
+    }
+
     private void OnProblemLabelPointerEntered(object? sender, PointerEventArgs e)
     {
-        if (sender is not TextBlock target || ToolTip.GetTip(target) is null)
+        if (sender is not TextBlock target)
+        {
+            return;
+        }
+
+        var tip = ReferenceEquals(target, _activeProblemS1) || ReferenceEquals(target, _activeProblemS2)
+            ? target.Tag as Control
+            : ToolTip.GetTip(target) as Control;
+        if (tip is null)
         {
             return;
         }
@@ -1413,7 +1440,17 @@ public partial class MainWindow : Window
 
         _problemTooltipTarget = target;
         _problemTooltipContentHovered = false;
-        ToolTip.SetIsOpen(target, true);
+        if (ReferenceEquals(target, _activeProblemS1) || ReferenceEquals(target, _activeProblemS2))
+        {
+            _modBadgePopup.Child = null;
+            _modBadgePopup.Child = tip;
+            _modBadgePopup.PlacementTarget = target;
+            _modBadgePopup.IsOpen = true;
+        }
+        else
+        {
+            ToolTip.SetIsOpen(target, true);
+        }
     }
 
     private void OnModBadgePointerEntered(object? sender, PointerEventArgs e)
@@ -1578,9 +1615,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        var index = column == 1 ? 0 : 1;
         var active = ApplyOrderFlags(
-            ApplySteamCmdFilter(ResolveActive(index), instance),
+            ApplySteamCmdFilter(ResolveActive(instance), instance),
             column
         );
         var order = ModListOperations.ApplySortSuggestions(
@@ -1608,8 +1644,9 @@ public partial class MainWindow : Window
             RefreshManager(false);
             Dispatcher.UIThread.Post(() => SelectMovedMods(column, ids));
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("apply sort suggestions", exception);
         }
     }
 
@@ -2386,11 +2423,11 @@ public partial class MainWindow : Window
         var instance1 = GetInstanceAt(index1);
         var instance2 = GetInstanceAt(index2);
         var active1 = ApplyOrderFlags(
-            ApplySteamCmdFilter(ResolveActive(index1), instance1),
+            ApplySteamCmdFilter(ResolveActive(instance1), instance1),
             1
         );
         var active2 = ApplyOrderFlags(
-            ApplySteamCmdFilter(ResolveActive(index2), instance2),
+            ApplySteamCmdFilter(ResolveActive(instance2), instance2),
             2
         );
         _missingMods1 = BuildMissingMods(index1);
@@ -3499,14 +3536,13 @@ public partial class MainWindow : Window
         return scoped;
     }
 
-    private List<ModInfo> ResolveActive(int instanceIndex)
+    private List<ModInfo> ResolveActive(ManagedInstance? instance)
     {
-        if (instanceIndex < 0 || instanceIndex >= _instances.Count)
+        if (instance is null)
         {
             return new List<ModInfo>();
         }
 
-        var instance = _instances[instanceIndex];
         var active = new List<ModInfo>();
         foreach (var id in instance.ActivePackageIds)
         {
