@@ -251,9 +251,7 @@ public static class ModCatalog
             roots.Add((game.WorkshopPath, ModSource.Workshop, false, null));
         }
 
-        var mods = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
-        var allMods = new List<ModInfo>();
-
+        var entries = new List<(string Directory, ModSource Source, bool IsProfileMods, string? ProfileFolder)>();
         foreach (var (root, source, isProfileMods, profileFolder) in roots)
         {
             if (!Directory.Exists(root))
@@ -273,40 +271,60 @@ public static class ModCatalog
                     continue;
                 }
 
-                var mod = ReadMod(directory, source);
-                if (mod is null)
-                {
-                    continue;
-                }
-
-                mod = mod with { IsProfileMods = isProfileMods, ProfileFolder = profileFolder };
-                mod.VersionMismatch = IsVersionMismatch(mod.GameVersions, game.Version);
-                if (mods.TryGetValue(mod.PackageId, out var existing))
-                {
-                    allMods.Add(mod);
-                    if (isProfileMods && existing.IsProfileMods)
-                    {
-                        continue;
-                    }
-
-                    if (existing.IsProfileMods && mod.Source == ModSource.Workshop)
-                    {
-                        continue;
-                    }
-
-                    existing.IsDuplicate = true;
-                    if (mod.Source == ModSource.Local &&
-                        existing.Source != ModSource.Local)
-                    {
-                        mod.IsDuplicate = true;
-                        mods[mod.PackageId] = mod;
-                    }
-                    continue;
-                }
-
-                mods[mod.PackageId] = mod;
-                allMods.Add(mod);
+                entries.Add((directory, source, isProfileMods, profileFolder));
             }
+        }
+
+        var loaded = new ModInfo?[entries.Count];
+        Parallel.For(0, entries.Count, index =>
+        {
+            var entry = entries[index];
+            loaded[index] = ReadMod(entry.Directory, entry.Source);
+        });
+
+        var mods = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
+        var allMods = new List<ModInfo>();
+
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
+            var mod = loaded[index];
+            if (mod is null)
+            {
+                continue;
+            }
+
+            mod = mod with
+            {
+                IsProfileMods = entry.IsProfileMods,
+                ProfileFolder = entry.ProfileFolder
+            };
+            mod.VersionMismatch = IsVersionMismatch(mod.GameVersions, game.Version);
+            if (mods.TryGetValue(mod.PackageId, out var existing))
+            {
+                allMods.Add(mod);
+                if (entry.IsProfileMods && existing.IsProfileMods)
+                {
+                    continue;
+                }
+
+                if (existing.IsProfileMods && mod.Source == ModSource.Workshop)
+                {
+                    continue;
+                }
+
+                existing.IsDuplicate = true;
+                if (mod.Source == ModSource.Local &&
+                    existing.Source != ModSource.Local)
+                {
+                    mod.IsDuplicate = true;
+                    mods[mod.PackageId] = mod;
+                }
+                continue;
+            }
+
+            mods[mod.PackageId] = mod;
+            allMods.Add(mod);
         }
 
         return allMods
