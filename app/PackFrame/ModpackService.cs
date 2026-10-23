@@ -195,7 +195,11 @@ public static class ModpackService
         {
             try
             {
-                var json = await Http.GetStringAsync(candidate, cancellationToken);
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken
+                );
+                timeout.CancelAfter(TimeSpan.FromSeconds(12));
+                var json = await Http.GetStringAsync(candidate, timeout.Token);
                 var index = JsonSerializer.Deserialize(
                     json,
                     PackFrameJsonContext.Default.ModpackIndex
@@ -208,10 +212,11 @@ public static class ModpackService
                 index.Packs ??= new List<ModpackEntry>();
                 return index;
             }
-            catch (HttpRequestException exception) when (
-                exception.StatusCode == HttpStatusCode.NotFound &&
-                candidate != candidates[^1]
-            )
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
             {
                 lastError = exception;
             }
@@ -257,12 +262,16 @@ public static class ModpackService
         {
             try
             {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken
+                );
+                timeout.CancelAfter(TimeSpan.FromSeconds(20));
                 var packUri = new Uri(indexUri, file);
                 using var request = new HttpRequestMessage(HttpMethod.Get, packUri);
                 request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
-                using var response = await Http.SendAsync(request, cancellationToken);
+                using var response = await Http.SendAsync(request, timeout.Token);
                 response.EnsureSuccessStatusCode();
-                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                var json = await response.Content.ReadAsStringAsync(timeout.Token);
                 var pack = JsonSerializer.Deserialize(
                     json,
                     PackFrameJsonContext.Default.ModpackDefinition
