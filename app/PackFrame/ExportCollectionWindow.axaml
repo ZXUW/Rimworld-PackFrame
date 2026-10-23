@@ -444,6 +444,18 @@
                                  PasswordChar="*"
                                  VerticalContentAlignment="Center" />
                     </Border>
+                    <TextBlock x:Name="IndexGiteeTokenLabel"
+                               Foreground="#C3D4E4"
+                               FontWeight="SemiBold"
+                               Margin="0,6,0,0" />
+                    <Border Classes="field" MinHeight="36">
+                        <TextBox x:Name="IndexGiteeTokenBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CornerRadius="0"
+                                 PasswordChar="*"
+                                 VerticalContentAlignment="Center" />
+                    </Border>
                     <TextBlock x:Name="IndexHint"
                                Foreground="#9AA7B8"
                                TextWrapping="Wrap" />
@@ -459,6 +471,12 @@
                                 Padding="18,8"
                                 IsVisible="False"
                                 Click="OnOpenIndexPrClick" />
+                        <Button x:Name="OpenGiteeIndexPrButton"
+                                Theme="{StaticResource FlatButton}"
+                                MinHeight="38"
+                                Padding="18,8"
+                                IsVisible="False"
+                                Click="OnOpenGiteeIndexPrClick" />
                     </StackPanel>
                     <TextBlock x:Name="IndexStatus"
                                Foreground="#C3D4E4"

@@ -85,7 +85,12 @@ public partial class ModpackWindow : Window
         _language = config.Language ?? Localization.English;
 
         ApplyLocalization();
-        var indexUrl = string.IsNullOrWhiteSpace(config.ModpackIndexUrl)
+        var indexUrl = string.IsNullOrWhiteSpace(config.ModpackIndexUrl) ||
+            string.Equals(
+                config.ModpackIndexUrl,
+                ModpackService.GitHubIndexUrl,
+                StringComparison.OrdinalIgnoreCase
+            )
             ? ModpackService.GiteeIndexUrl
             : config.ModpackIndexUrl;
         RepoBox.Text = indexUrl;
@@ -574,27 +579,27 @@ public partial class ModpackWindow : Window
     private void OnRepoMenuClick(object? sender, RoutedEventArgs e)
     {
         var flyout = new MenuFlyout();
-        var defaultItem = new MenuItem
+        var githubItem = new MenuItem
         {
-            Header = Localization.ModpackRepoDefault(_language)
+            Header = "github-ZX"
         };
-        defaultItem.Click += async (_, _) =>
+        githubItem.Click += async (_, _) =>
+        {
+            RepoBox.Text = ModpackService.GitHubIndexUrl;
+            await LoadIndexAsync();
+        };
+        flyout.Items.Add(githubItem);
+
+        var giteeItem = new MenuItem
+        {
+            Header = "gitee-ZX"
+        };
+        giteeItem.Click += async (_, _) =>
         {
             RepoBox.Text = ModpackService.GiteeIndexUrl;
             await LoadIndexAsync();
         };
-        flyout.Items.Add(defaultItem);
-
-        var customItem = new MenuItem
-        {
-            Header = Localization.ModpackRepoCustom(_language)
-        };
-        customItem.Click += (_, _) =>
-        {
-            RepoBox.Focus();
-            RepoBox.SelectAll();
-        };
-        flyout.Items.Add(customItem);
+        flyout.Items.Add(giteeItem);
         flyout.ShowAt((Control)sender!);
     }
 

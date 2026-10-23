@@ -162,8 +162,16 @@ public static class ModpackService
         var candidates = new List<string>();
         if (IsKnownIndex(normalized))
         {
-            candidates.Add(GiteeIndexUrl);
-            candidates.Add(GitHubIndexUrl);
+            if (normalized.Contains("gitee.com", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add(GiteeIndexUrl);
+                candidates.Add(GitHubIndexUrl);
+            }
+            else
+            {
+                candidates.Add(GitHubIndexUrl);
+                candidates.Add(GiteeIndexUrl);
+            }
         }
         else
         {
@@ -219,13 +227,20 @@ public static class ModpackService
     )
     {
         var files = new List<string>();
-        if (!string.IsNullOrWhiteSpace(entry.GiteeFile))
+        var giteeFirst = indexUri.Host.Contains("gitee.com", StringComparison.OrdinalIgnoreCase);
+        void AddFile(string? value)
         {
-            files.Add(entry.GiteeFile);
+            if (!string.IsNullOrWhiteSpace(value)) files.Add(value);
         }
-        if (!string.IsNullOrWhiteSpace(entry.File))
+        if (giteeFirst)
         {
-            files.Add(entry.File);
+            AddFile(entry.GiteeFile);
+            AddFile(entry.File);
+        }
+        else
+        {
+            AddFile(entry.File);
+            AddFile(entry.GiteeFile);
         }
         if (files.Count == 0)
         {

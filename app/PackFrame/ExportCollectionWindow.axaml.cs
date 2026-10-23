@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -32,6 +33,7 @@ public partial class ExportCollectionWindow : Window
     private string _lastOriginalRepoNameDefault = string.Empty;
     private string _lastGiteeRepoNameDefault = string.Empty;
     private string? _indexPrUrl;
+    private string? _giteeIndexPrUrl;
     private bool _indexSubmitted;
     private bool _indexSubmitting;
     private CancellationTokenSource? _createCancellation;
@@ -193,6 +195,20 @@ public partial class ExportCollectionWindow : Window
             "GitHub Token（用於提交索引 PR）",
             "GitHub トークン（Index PR の作成用）"
         );
+        IndexGiteeTokenLabel.Text = OperationText.Choose(
+            _language,
+            "Gitee token (used to submit the Gitee index PR)",
+            "Gitee Token（用于提交 Gitee 索引 PR）",
+            "Gitee Token（用於提交 Gitee 索引 PR）",
+            "Gitee トークン（Gitee Index PR の作成用）"
+        );
+        OpenGiteeIndexPrButton.Content = OperationText.Choose(
+            _language,
+            "Open Gitee PR",
+            "打开 Gitee PR",
+            "開啟 Gitee PR",
+            "Gitee PR を開く"
+        );
         IndexHint.Text = string.Empty;
         SubmitIndexButton.Content =
             Localization.ExportCollectionSubmitIndex(_language);
@@ -317,6 +333,10 @@ public partial class ExportCollectionWindow : Window
                 string.IsNullOrWhiteSpace(IndexGiteeRepoUrlBox.Text))
             {
                 IndexGiteeRepoUrlBox.Text = _giteeUrl;
+            }
+            if (string.IsNullOrWhiteSpace(IndexGiteeTokenBox.Text))
+            {
+                IndexGiteeTokenBox.Text = GiteeTokenBox.Text;
             }
         }
         if (page == 4)
@@ -651,6 +671,7 @@ public partial class ExportCollectionWindow : Window
         }
 
         var token = IndexTokenBox.Text?.Trim();
+        var giteeToken = IndexGiteeTokenBox.Text?.Trim();
         var githubUrl = IndexRepoUrlBox.Text?.Trim();
         var giteeUrl = IndexGiteeRepoUrlBox.Text?.Trim();
         if (string.IsNullOrWhiteSpace(token) ||
@@ -666,6 +687,8 @@ public partial class ExportCollectionWindow : Window
         _indexSubmitting = true;
         SubmitIndexButton.IsEnabled = false;
         IndexStatus.Text = Localization.ExportCollectionIndexSubmitting(_language);
+        var successes = new List<string>();
+        var failures = new List<string>();
         try
         {
             GitHubPackInfo info;
@@ -687,29 +710,82 @@ public partial class ExportCollectionWindow : Window
                 info = await GiteePublisher.ResolvePackAsync(giteeUrl!);
             }
 
-            var result = await GitHubIndexPublisher.PublishAsync(
-                token,
-                _indexUrl,
-                info.Owner,
-                info.Repository,
-                info.Id,
-                info.Name,
-                info.Summary,
-                info.PackageIds,
-                GithubCollectionUrlBox.Text?.Trim() ?? string.Empty,
-                text => Dispatcher.UIThread.Post(() => IndexStatus.Text = text),
-                language: _language,
-                giteeFile: giteeFile,
-                githubFile: githubFile
+            var repoFullName = $"{info.Owner}/{info.Repository}";
+            try
+            {
+                var result = await GitHubIndexPublisher.PublishAsync(
+                    token,
+                    _indexUrl,
+                    info.Owner,
+                    info.Repository,
+                    info.Id,
+                    info.Name,
+                    info.Summary,
+                    info.PackageIds,
+                    GithubCollectionUrlBox.Text?.Trim() ?? string.Empty,
+                    text => Dispatcher.UIThread.Post(() => IndexStatus.Text = text),
+                    language: _language,
+                    giteeFile: giteeFile,
+                    githubFile: githubFile
+                );
+                _indexPrUrl = result.PullRequestUrl;
+                successes.Add("GitHub: " + _indexPrUrl);
+                OpenIndexPrButton.IsVisible = true;
+            }
+            catch (Exception exception)
+            {
+                failures.Add("GitHub: " + exception.Message);
+            }
+
+            if (!string.IsNullOrWhiteSpace(giteeFile))
+            {
+                if (string.IsNullOrWhiteSpace(giteeToken))
+                {
+                    failures.Add(OperationText.Choose(
+                        _language,
+                        "Gitee: token is empty.",
+                        "Gitee：Token 为空。",
+                        "Gitee：Token 為空。",
+                        "Gitee: トークンが空です。"
+                    ));
+                }
+                else
+                {
+                    try
+                    {
+                        var result = await GiteeIndexPublisher.PublishAsync(
+                            giteeToken,
+                            ModpackService.GiteeIndexUrl,
+                            info.Id,
+                            info.Name,
+                            info.Summary,
+                            githubFile,
+                            giteeFile,
+                            repoFullName,
+                            info.PackageIds.Count,
+                            text => Dispatcher.UIThread.Post(() => IndexStatus.Text = text),
+                            language: _language
+                        );
+                        _giteeIndexPrUrl = result.PullRequestUrl;
+                        successes.Add("Gitee: " + _giteeIndexPrUrl);
+                        OpenGiteeIndexPrButton.IsVisible = true;
+                    }
+                    catch (Exception exception)
+                    {
+                        failures.Add("Gitee: " + exception.Message);
+                    }
+                }
+            }
+
+            IndexStatus.Text = string.Join(
+                Environment.NewLine,
+                successes.Concat(failures.Select(message => "FAILED " + message))
             );
-            _indexPrUrl = result.PullRequestUrl;
-            _indexSubmitted = true;
-            IndexStatus.Text = Localization.ExportCollectionIndexSuccess(
-                _language,
-                _indexPrUrl
-            );
-            OpenIndexPrButton.IsVisible = true;
-            NextButton.Content = Localization.CloseButton(_language);
+            _indexSubmitted = successes.Count > 0;
+            if (_indexSubmitted)
+            {
+                NextButton.Content = Localization.CloseButton(_language);
+            }
         }
         catch (Exception exception)
         {
@@ -724,7 +800,6 @@ public partial class ExportCollectionWindow : Window
             SubmitIndexButton.IsEnabled = true;
         }
     }
-
     private void OnOpenIndexPrClick(object? sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(_indexPrUrl))
@@ -738,6 +813,20 @@ public partial class ExportCollectionWindow : Window
             UseShellExecute = true
         });
     }
+    private void OnOpenGiteeIndexPrClick(object? sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_giteeIndexPrUrl))
+        {
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = _giteeIndexPrUrl,
+            UseShellExecute = true
+        });
+    }
+
     private void OnGetTokenClick(object? sender, RoutedEventArgs e)
     {
         Process.Start(new ProcessStartInfo

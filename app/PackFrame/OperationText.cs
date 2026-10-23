@@ -32,4 +32,7 @@ internal static class OperationText
     public static string IndexWrite(string? language) => Choose(language, "Writing modpack files...", "正在写入整合包文件...", "正在寫入整合包檔案...", "MOD パックのファイルを書き込み中...");
     public static string IndexPr(string? language) => Choose(language, "Creating review pull request...", "正在创建审核 PR...", "正在建立審核 PR...", "レビュー用 PR を作成中...");
     public static string IndexDone(string? language) => Choose(language, "Review pull request created.", "审核 PR 已创建。", "審核 PR 已建立。", "レビュー用 PR を作成しました。");
+    public static string IndexGiteePrepare(string? language) => Choose(language, "Preparing Gitee index commit...", "正在准备 Gitee 索引提交...", "正在準備 Gitee 索引提交...", "Gitee 索引コミットを準備中...");
+    public static string IndexGiteePr(string? language) => Choose(language, "Creating Gitee review pull request...", "正在创建 Gitee 审核 PR...", "正在建立 Gitee 審核 PR...", "Gitee レビュー PR を作成中...");
+    public static string IndexGiteeDone(string? language) => Choose(language, "Gitee review pull request created.", "Gitee 审核 PR 已创建。", "Gitee 審核 PR 已建立。", "Gitee レビュー PR が作成されました。");
 }
