@@ -14,7 +14,7 @@ internal sealed class CollectionTargetWindow : Window
         Title = "PackFrame — Steam Workshop"; Width = 650; Height = 360;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         RequestedThemeVariant = ThemeVariant.Dark;
-        Background = new SolidColorBrush(Color.Parse("#20354A"));
+        Background = ThemeService.BackgroundBrush;
         var panel = new StackPanel { Margin = new Thickness(16), Spacing = 12 };
         panel.Children.Add(new TextBlock { Text = OperationText.Choose(language,
             "Select your collection to update, or create a new one.", "选择要更新的本人合集，或另建新合集。",

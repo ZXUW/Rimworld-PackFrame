@@ -6,7 +6,7 @@
         Height="180"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Background="#20354A"
+        Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
     <Grid Margin="16" RowDefinitions="*,Auto">
         <TextBlock x:Name="MessageText"

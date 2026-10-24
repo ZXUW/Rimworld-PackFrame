@@ -3,6 +3,7 @@
              x:Class="PackFrame.App"
              RequestedThemeVariant="Dark">
     <Application.Resources>
+        <SolidColorBrush x:Key="AppBackgroundBrush" Color="#20354A" />
         <SolidColorBrush x:Key="SecondaryBrush" Color="#455364" />
         <ControlTheme x:Key="ModListItem" TargetType="ListBoxItem">
             <Setter Property="Background" Value="Transparent" />
@@ -70,7 +71,7 @@
             <Setter Property="Width" Value="14" />
             <Setter Property="Template">
                 <ControlTemplate>
-                    <Border Background="#20354A"
+                    <Border Background="{DynamicResource AppBackgroundBrush}"
                             BorderBrush="{StaticResource SecondaryBrush}"
                             BorderThickness="1">
                         <Track Name="PART_Track"
@@ -111,7 +112,7 @@
             <Setter Property="Background" Value="#EAF1F8" />
         </Style>        <Style Selector="ToolTip">
             <Setter Property="MaxWidth" Value="1400" />
-            <Setter Property="Background" Value="#20354A" />
+            <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
             <Setter Property="Foreground" Value="#EAF1F8" />
             <Setter Property="BorderBrush" Value="#455364" />
             <Setter Property="BorderThickness" Value="1" />

@@ -44,7 +44,7 @@ public partial class MainWindow
         _paintModeButton.Content = _paintMode && _paintEraser
             ? Localization.EraserTool(_config.Language) : Localization.PaintTool(_config.Language);
         _paintModeButton.Background = _paintMode ? TextBrush : SecondaryBorderBrush;
-        _paintModeButton.Foreground = _paintMode ? new SolidColorBrush(Color.Parse("#20354A")) : Brushes.White;
+        _paintModeButton.Foreground = _paintMode ? ThemeService.BackgroundBrush : Brushes.White;
         _paintModeButton.FontWeight = _paintMode ? FontWeight.SemiBold : FontWeight.Normal;
     }
 

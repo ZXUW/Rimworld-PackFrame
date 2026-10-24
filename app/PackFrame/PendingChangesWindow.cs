@@ -14,7 +14,7 @@ internal sealed class PendingChangesWindow : Window
     {
         Title = "Rimworld PackFrame";
         RequestedThemeVariant = ThemeVariant.Dark;
-        Background = new SolidColorBrush(Color.Parse("#20354A"));
+        Background = ThemeService.BackgroundBrush;
         Foreground = new SolidColorBrush(Color.Parse("#EAF1F8"));
         Width = 480;
         Height = 180;

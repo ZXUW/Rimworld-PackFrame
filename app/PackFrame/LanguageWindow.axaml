@@ -6,7 +6,7 @@
         Height="220"
         CanResize="False"
         WindowStartupLocation="CenterScreen"
-        Background="#20354A"
+        Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
     <Grid Margin="12" RowDefinitions="*,*" ColumnDefinitions="*,*">
         <Button Grid.Row="0"

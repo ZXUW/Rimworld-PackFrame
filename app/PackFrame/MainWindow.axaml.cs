@@ -70,6 +70,7 @@ public partial class MainWindow : Window
     private readonly Button _syncConfigButton;
     private readonly Button _githubLinkButton;
     private readonly Button _discordLinkButton;
+    private readonly Button _backgroundButton;
     private readonly SelectableTextBlock _qqGroupText;
     private readonly TextBox _inactiveSearchBox;
     private readonly TextBox _activeSearchBox1;
@@ -231,6 +232,7 @@ public partial class MainWindow : Window
         _syncConfigButton = Find<Button>("SyncConfigButton");
         _githubLinkButton = Find<Button>("GithubLinkButton");
         _discordLinkButton = Find<Button>("DiscordLinkButton");
+        _backgroundButton = Find<Button>("BackgroundButton");
         _qqGroupText = Find<SelectableTextBlock>("QqGroupText");
         _inactiveSearchBox = Find<TextBox>("InactiveSearchBox");
         _activeSearchBox1 = Find<TextBox>("ActiveSearchBox1");
@@ -545,6 +547,13 @@ public partial class MainWindow : Window
         _launchButton.Content = Localization.LaunchGame(language);
         _githubLinkButton.Content = "GitHub";
         _discordLinkButton.Content = "Discord";
+        _backgroundButton.Content = OperationText.Choose(
+            language,
+            "Background",
+            "背景",
+            "背景",
+            "背景"
+        );
         _qqGroupText.Text = OperationText.Choose(
             language,
             "QQ group: 960717872",
@@ -1416,7 +1425,7 @@ public partial class MainWindow : Window
     {
         var popupContent = new Border
         {
-            Background = new SolidColorBrush(Color.Parse("#20354A")),
+            Background = ThemeService.BackgroundBrush,
             BorderBrush = SecondaryBorderBrush,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(10, 8),
@@ -1578,7 +1587,7 @@ public partial class MainWindow : Window
 
         return new Border
         {
-            Background = new SolidColorBrush(Color.Parse("#20354A")),
+            Background = ThemeService.BackgroundBrush,
             BorderBrush = SecondaryBorderBrush,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(10, 8),
@@ -2169,6 +2178,7 @@ public partial class MainWindow : Window
 
     private async Task LoadModsAsync(RimWorldInstallation game)
     {
+
         var version = ++_loadVersion;
         _loadingMods = true;
         _lastLoadedGamePath = game.GamePath;
@@ -2214,6 +2224,7 @@ public partial class MainWindow : Window
                 _gameVersion = game.Version;
                 InitializeInstanceSelectors();
                 RefreshManager(true);
+
             });
         }
         catch (Exception exception)
@@ -4638,6 +4649,48 @@ public partial class MainWindow : Window
     private void OnDiscordLinkClick(object? sender, RoutedEventArgs e)
     {
         OpenUrl("https://discord.gg/24Qmy5KHdc");
+    }
+
+    private void OnBackgroundClick(object? sender, RoutedEventArgs e)
+    {
+        var flyout = new MenuFlyout();
+        foreach (var (key, hex) in ThemeService.BackgroundPresets)
+        {
+            var item = new MenuItem
+            {
+                Header = BackgroundName(key),
+                Icon = new Border
+                {
+                    Width = 14,
+                    Height = 14,
+                    Background = new SolidColorBrush(Color.Parse(hex)),
+                    BorderBrush = SecondaryBorderBrush,
+                    BorderThickness = new Thickness(1)
+                }
+            };
+            var selectedHex = hex;
+            item.Click += (_, _) =>
+            {
+                ThemeService.Apply(selectedHex);
+                _config.BackgroundColor = selectedHex;
+                _config.Save();
+            };
+            flyout.Items.Add(item);
+        }
+        flyout.ShowAt((Control)sender!);
+    }
+
+    private string BackgroundName(string key)
+    {
+        return key switch
+        {
+            "dark" => OperationText.Choose(_config.Language, "Deep blue", "深蓝", "深藍", "ディープブルー"),
+            "black" => OperationText.Choose(_config.Language, "Black", "黑色", "黑色", "ブラック"),
+            "purple" => OperationText.Choose(_config.Language, "Purple", "暗紫", "暗紫", "パープル"),
+            "green" => OperationText.Choose(_config.Language, "Green", "暗绿", "暗綠", "グリーン"),
+            "brown" => OperationText.Choose(_config.Language, "Brown", "暗棕", "暗棕", "ブラウン"),
+            _ => OperationText.Choose(_config.Language, "Default", "默认", "默認", "デフォルト")
+        };
     }
 
     private static void OpenUrl(string? url)

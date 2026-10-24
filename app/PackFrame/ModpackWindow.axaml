@@ -8,7 +8,7 @@
         MinWidth="1000"
         MinHeight="650"
         WindowStartupLocation="CenterOwner"
-        Background="#20354A"
+        Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
     <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto">
         <Grid ColumnDefinitions="*,Auto">

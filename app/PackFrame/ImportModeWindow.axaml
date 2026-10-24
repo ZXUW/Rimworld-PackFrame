@@ -6,7 +6,7 @@
         Height="100"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Background="#20354A"
+        Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
     <Grid Margin="12" ColumnDefinitions="*,12,*">
         <Button x:Name="OverwriteButton"

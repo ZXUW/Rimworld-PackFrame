@@ -7,7 +7,7 @@
         MinWidth="620"
         MinHeight="420"
         WindowStartupLocation="CenterOwner"
-        Background="#20354A"
+        Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
     <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto">
         <TextBlock x:Name="TitleText"

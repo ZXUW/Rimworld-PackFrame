@@ -8,7 +8,7 @@
         MinWidth="1100"
         MinHeight="700"
         WindowStartupLocation="CenterScreen"
-        Background="#20354A"
+        Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
     <Window.Resources>
         <DataTemplate x:Key="ModTemplate" x:DataType="local:ModInfo">
@@ -503,6 +503,9 @@
                 <SelectableTextBlock x:Name="QqGroupText"
                                      Foreground="#C3D4E4"
                                      VerticalAlignment="Center" />
+                <Button x:Name="BackgroundButton"
+                        Classes="footerlink"
+                        Click="OnBackgroundClick" />
             </StackPanel>
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"

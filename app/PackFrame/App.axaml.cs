@@ -16,6 +16,7 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var config = AppConfig.Load();
+            ThemeService.Apply(config.BackgroundColor);
 
             if (Localization.IsSupported(config.Language))
             {

@@ -14,6 +14,7 @@ public sealed class AppConfig
     public string? ProfileFolder2 { get; set; }
     public List<string> ProfileOrder { get; set; } = new();
     public string? ModpackIndexUrl { get; set; }
+    public string? BackgroundColor { get; set; }
 
     public static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "packframe.json");
 

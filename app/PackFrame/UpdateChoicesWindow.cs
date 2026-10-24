@@ -17,7 +17,7 @@ internal sealed class UpdateChoicesWindow : Window
         Width = 650; Height = 480;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         RequestedThemeVariant = ThemeVariant.Dark;
-        Background = new SolidColorBrush(Color.Parse("#20354A"));
+        Background = ThemeService.BackgroundBrush;
         var panel = new StackPanel { Spacing = 10, Margin = new Thickness(16) };
         panel.Children.Add(new TextBlock { Text = OperationText.Choose(language,
             "Checked = keep my content. Unchecked = use the new pack version.",
