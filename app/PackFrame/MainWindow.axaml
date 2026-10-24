@@ -506,6 +506,9 @@
                 <Button x:Name="BackgroundButton"
                         Classes="footerlink"
                         Click="OnBackgroundClick" />
+                <Button x:Name="CheckUpdateButton"
+                        Classes="footerlink"
+                        Click="OnCheckUpdateClick" />
             </StackPanel>
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"

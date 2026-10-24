@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -9,6 +9,7 @@
     <AssemblyTitle>Rimworld PackFrame</AssemblyTitle>
     <Product>Rimworld PackFrame</Product>
     <Description>Rimworld PackFrame modpack launcher.</Description>
+    <Version>1.0.2</Version>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationIcon>Assets\PackFrame.ico</ApplicationIcon>
   </PropertyGroup>

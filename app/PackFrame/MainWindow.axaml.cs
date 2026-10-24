@@ -71,6 +71,8 @@ public partial class MainWindow : Window
     private readonly Button _githubLinkButton;
     private readonly Button _discordLinkButton;
     private readonly Button _backgroundButton;
+    private readonly Button _checkUpdateButton;
+    private bool _checkingUpdate;
     private readonly SelectableTextBlock _qqGroupText;
     private readonly TextBox _inactiveSearchBox;
     private readonly TextBox _activeSearchBox1;
@@ -233,6 +235,7 @@ public partial class MainWindow : Window
         _githubLinkButton = Find<Button>("GithubLinkButton");
         _discordLinkButton = Find<Button>("DiscordLinkButton");
         _backgroundButton = Find<Button>("BackgroundButton");
+        _checkUpdateButton = Find<Button>("CheckUpdateButton");
         _qqGroupText = Find<SelectableTextBlock>("QqGroupText");
         _inactiveSearchBox = Find<TextBox>("InactiveSearchBox");
         _activeSearchBox1 = Find<TextBox>("ActiveSearchBox1");
@@ -553,6 +556,13 @@ public partial class MainWindow : Window
             "背景",
             "背景",
             "背景"
+        );
+        _checkUpdateButton.Content = OperationText.Choose(
+            language,
+            "Check updates",
+            "检查更新",
+            "檢查更新",
+            "更新を確認"
         );
         _qqGroupText.Text = OperationText.Choose(
             language,
@@ -4691,6 +4701,72 @@ public partial class MainWindow : Window
             "brown" => OperationText.Choose(_config.Language, "Brown", "暗棕", "暗棕", "ブラウン"),
             _ => OperationText.Choose(_config.Language, "Default", "默认", "默認", "デフォルト")
         };
+    }
+
+    private async void OnCheckUpdateClick(object? sender, RoutedEventArgs e)
+    {
+        if (_checkingUpdate)
+        {
+            return;
+        }
+
+        _checkingUpdate = true;
+        _checkUpdateButton.IsEnabled = false;
+        ShowToast(OperationText.Choose(
+            _config.Language,
+            "Checking for updates...",
+            "正在检查更新...",
+            "正在檢查更新...",
+            "更新を確認中..."
+        ));
+        try
+        {
+            var update = await UpdateService.CheckAsync();
+            if (update is null || !UpdateService.IsNewer(update.Tag))
+            {
+                ShowToast(OperationText.Choose(
+                    _config.Language,
+                    "You are using the latest version.",
+                    "当前已是最新版本。",
+                    "目前已是最新版本。",
+                    "最新バージョンです。"
+                ));
+                return;
+            }
+
+            var message = OperationText.Choose(
+                _config.Language,
+                "A new version is available: " + update.Tag + "\nOpen the download page?",
+                "发现新版本：" + update.Tag + "\n是否打开下载页面？",
+                "發現新版本：" + update.Tag + "\n是否開啟下載頁面？",
+                "新しいバージョンがあります：" + update.Tag + "\nダウンロードページを開きますか？"
+            );
+            var confirm = new ConfirmWindow(
+                message,
+                OperationText.Choose(_config.Language, "Download", "打开下载", "開啟下載", "ダウンロードを開く"),
+                Localization.CancelButton(_config.Language)
+            );
+            if (await confirm.ShowDialog<bool>(this))
+            {
+                OpenUrl(update.Url);
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Check for updates", exception);
+            ShowToast(OperationText.Choose(
+                _config.Language,
+                "Update check failed: " + exception.Message,
+                "检查更新失败：" + exception.Message,
+                "檢查更新失敗：" + exception.Message,
+                "更新確認に失敗しました：" + exception.Message
+            ));
+        }
+        finally
+        {
+            _checkingUpdate = false;
+            _checkUpdateButton.IsEnabled = true;
+        }
     }
 
     private static void OpenUrl(string? url)
