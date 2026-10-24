@@ -33,6 +33,12 @@ internal static class ThemeService
     public static SolidColorBrush MutedTextBrush { get; } =
         new(Color.Parse("#9AA7B8"));
 
+    public static SolidColorBrush HoverBrush { get; } =
+        new(Color.Parse("#4D6378"));
+
+    public static SolidColorBrush SelectedBrush { get; } =
+        new(Color.Parse("#5C6E82"));
+
     public static void Apply(string? hex)
     {
         var value = Normalize(hex);
@@ -43,6 +49,8 @@ internal static class ThemeService
         PrimaryTextBrush.Color = Mix(background, textBase, 0.90);
         SecondaryTextBrush.Color = Mix(background, textBase, 0.75);
         MutedTextBrush.Color = Mix(background, textBase, 0.55);
+        HoverBrush.Color = Mix(background, textBase, 0.20);
+        SelectedBrush.Color = Mix(background, textBase, 0.27);
         if (Application.Current is { } application)
         {
             application.Resources["AppBackgroundBrush"] = BackgroundBrush;
@@ -50,6 +58,8 @@ internal static class ThemeService
             UpdateResource(application, "PrimaryTextBrush", PrimaryTextBrush);
             UpdateResource(application, "SecondaryTextBrush", SecondaryTextBrush);
             UpdateResource(application, "MutedTextBrush", MutedTextBrush);
+            UpdateResource(application, "ItemHoverBrush", HoverBrush);
+            UpdateResource(application, "ItemSelectedBrush", SelectedBrush);
         }
     }
 

@@ -1525,8 +1525,8 @@ public partial class MainWindow : Window
             Foreground = TextBrush,
             TextWrapping = TextWrapping.Wrap,
             Focusable = true,
-            SelectionBrush = new SolidColorBrush(Color.Parse("#5C6E82")),
-            SelectionForegroundBrush = Brushes.White
+            SelectionBrush = ThemeService.SelectedBrush,
+            SelectionForegroundBrush = ThemeService.PrimaryTextBrush
         };
         body.PointerPressed += (_, _) => body.Focus();
         body.KeyDown += (_, keyEvent) =>
