@@ -47,7 +47,7 @@
                 BorderBrush="{StaticResource SecondaryBrush}"
                 BorderThickness="1">
             <Grid RowDefinitions="Auto,*">
-                <Border Background="#455364" Padding="12,9">
+                <Border Background="{DynamicResource SecondaryBrush}" Padding="12,9">
                     <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*">
                         <TextBlock x:Name="LabelHeader"
                                    Foreground="#EAF1F8"
@@ -74,7 +74,7 @@
                     <ItemsControl x:Name="Rows">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="local:MissingModRow">
-                                <Border BorderBrush="#455364"
+                                <Border BorderBrush="{DynamicResource SecondaryBrush}"
                                         BorderThickness="0,0,0,1"
                                         Padding="12,9">
                                     <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*">

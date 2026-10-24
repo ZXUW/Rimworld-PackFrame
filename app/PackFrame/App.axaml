@@ -114,7 +114,7 @@
             <Setter Property="MaxWidth" Value="1400" />
             <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
             <Setter Property="Foreground" Value="#EAF1F8" />
-            <Setter Property="BorderBrush" Value="#455364" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="CornerRadius" Value="0" />

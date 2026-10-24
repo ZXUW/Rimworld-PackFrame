@@ -22,7 +22,7 @@ namespace PackFrame;
 public partial class MainWindow : Window
 {
     private static readonly SolidColorBrush TextBrush = new(Color.Parse("#EAF1F8"));
-    private static readonly SolidColorBrush SecondaryBorderBrush = new(Color.Parse("#455364"));
+    private static readonly SolidColorBrush SecondaryBorderBrush = ThemeService.SecondaryBrush;
     private static readonly TextDecorationCollection StrikethroughDecorations = new()
     {
         new TextDecoration { Location = TextDecorationLocation.Strikethrough }

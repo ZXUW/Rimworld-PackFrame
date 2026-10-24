@@ -61,7 +61,7 @@
                     BorderBrush="{StaticResource SecondaryBrush}"
                     BorderThickness="1">
                 <Grid RowDefinitions="Auto,*">
-                    <Border Background="#455364" Padding="10,8">
+                    <Border Background="{DynamicResource SecondaryBrush}" Padding="10,8">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock x:Name="ListHeader"
                                        Foreground="#EAF1F8"
@@ -139,7 +139,7 @@
                                 <ItemsControl x:Name="ModList">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="local:ModpackModRow">
-                                            <Border BorderBrush="#455364"
+                                            <Border BorderBrush="{DynamicResource SecondaryBrush}"
                                                     BorderThickness="0,0,0,1"
                                                     Padding="0,6">
                                                 <Grid ColumnDefinitions="*,Auto,Auto">

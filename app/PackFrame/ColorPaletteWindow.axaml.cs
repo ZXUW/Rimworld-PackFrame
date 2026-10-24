@@ -87,7 +87,7 @@ public partial class ColorPaletteWindow : Window
                 Background = new SolidColorBrush(color),
                 BorderBrush = isCurrent
                     ? new SolidColorBrush(Colors.White)
-                    : new SolidColorBrush(Color.Parse("#455364")),
+                    : ThemeService.SecondaryBrush,
                 BorderThickness = new Thickness(isCurrent ? 2 : 1),
                 CornerRadius = new CornerRadius(0)
             };
@@ -102,7 +102,7 @@ public partial class ColorPaletteWindow : Window
                 Height = 26,
                 Margin = new Thickness(0, 4, 0, 0),
                 Padding = new Thickness(6, 2),
-                Background = new SolidColorBrush(Color.Parse("#455364")),
+                Background = ThemeService.SecondaryBrush,
                 BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(0),
                 FontSize = 13,
