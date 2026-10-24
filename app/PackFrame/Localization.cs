@@ -1250,8 +1250,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "整合包",
-            TraditionalChinese => "整合包",
+            SimplifiedChinese => "合集",
+            TraditionalChinese => "合集",
             Japanese => "MODパック",
             _ => "Modpacks"
         };
@@ -1261,8 +1261,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "整合包",
-            TraditionalChinese => "整合包",
+            SimplifiedChinese => "合集",
+            TraditionalChinese => "合集",
             Japanese => "MODパック",
             _ => "Modpacks"
         };
@@ -1316,8 +1316,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "请先填写整合包仓库地址",
-            TraditionalChinese => "請先填寫整合包倉庫位址",
+            SimplifiedChinese => "请先填写合集仓库地址",
+            TraditionalChinese => "請先填寫合集倉庫位址",
             Japanese => "MODパックのリポジトリURLを入力してください",
             _ => "Enter a modpack repository URL first"
         };
@@ -1327,8 +1327,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => $"加载整合包失败：{details}",
-            TraditionalChinese => $"載入整合包失敗：{details}",
+            SimplifiedChinese => $"加载合集失败：{details}",
+            TraditionalChinese => $"載入合集失敗：{details}",
             Japanese => $"MODパックの読み込みに失敗しました：{details}",
             _ => $"Failed to load modpacks: {details}"
         };
@@ -1338,8 +1338,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "仓库里没有整合包。",
-            TraditionalChinese => "倉庫裡沒有整合包。",
+            SimplifiedChinese => "仓库里没有合集。",
+            TraditionalChinese => "倉庫裡沒有合集。",
             Japanese => "リポジトリにMODパックがありません。",
             _ => "The repository has no modpacks."
         };
@@ -1349,8 +1349,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "选择左侧整合包查看订阅方式。",
-            TraditionalChinese => "選擇左側整合包查看訂閱方式。",
+            SimplifiedChinese => "选择左侧合集查看订阅方式。",
+            TraditionalChinese => "選擇左側合集查看訂閱方式。",
             Japanese => "左のMODパックを選択して導入方法を表示します。",
             _ => "Select a modpack on the left to see subscription options."
         };
@@ -1586,8 +1586,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "创建整合包实例失败",
-            TraditionalChinese => "建立整合包實例失敗",
+            SimplifiedChinese => "创建合集实例失败",
+            TraditionalChinese => "建立合集實例失敗",
             Japanese => "MODパックのインスタンス作成に失敗しました",
             _ => "Failed to create the modpack instance"
         };
@@ -1597,8 +1597,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => $"整合包安装失败：{details}",
-            TraditionalChinese => $"整合包安裝失敗：{details}",
+            SimplifiedChinese => $"合集安装失败：{details}",
+            TraditionalChinese => $"合集安裝失敗：{details}",
             Japanese => $"MODパックの導入に失敗しました：{details}",
             _ => $"Modpack install failed: {details}"
         };
@@ -1630,8 +1630,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "当前实例没有绑定整合包配置",
-            TraditionalChinese => "目前實例沒有綁定整合包設定",
+            SimplifiedChinese => "当前实例没有绑定合集配置",
+            TraditionalChinese => "目前實例沒有綁定合集設定",
             Japanese => "このインスタンスにはMODパック設定がありません",
             _ => "This instance has no modpack config source"
         };
@@ -1745,8 +1745,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "正在读取整合包...",
-            TraditionalChinese => "正在讀取整合包...",
+            SimplifiedChinese => "正在读取合集...",
+            TraditionalChinese => "正在讀取合集...",
             Japanese => "MODパックを読み込み中...",
             _ => "Reading modpacks..."
         };
@@ -1767,8 +1767,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "该整合包没有列出模组。",
-            TraditionalChinese => "該整合包沒有列出模組。",
+            SimplifiedChinese => "该合集没有列出模组。",
+            TraditionalChinese => "該合集沒有列出模組。",
             Japanese => "このMODパックにはMODが登録されていません。",
             _ => "This modpack does not list any mods."
         };
@@ -1879,9 +1879,9 @@ public static class Localization
         return language switch
         {
             SimplifiedChinese =>
-                $"合集为整合包框架自动上传\n使用[url={url}]Rimworld PackFrame[/url]来一键安装排序和平衡补丁",
+                $"合集为框架自动上传\n使用[url={url}]Rimworld PackFrame[/url]来一键安装排序和平衡补丁",
             TraditionalChinese =>
-                $"合集為整合包框架自動上傳\n使用[url={url}]Rimworld PackFrame[/url]來一鍵安裝排序和平衡補丁",
+                $"合集為框架自動上傳\n使用[url={url}]Rimworld PackFrame[/url]來一鍵安裝排序和平衡補丁",
             Japanese =>
                 $"コレクションはMODパックフレームワークによって自動アップロードされます\n[url={url}]Rimworld PackFrame[/url]でワンクリックでインストール・並べ替え・バランス調整ができます",
             _ =>
@@ -2002,8 +2002,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "导出整合包",
-            TraditionalChinese => "匯出整合包",
+            SimplifiedChinese => "导出合集",
+            TraditionalChinese => "匯出合集",
             Japanese => "MOD パックを出力",
             _ => "Export modpack"
         };
@@ -2035,8 +2035,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "整合包名称",
-            TraditionalChinese => "整合包名稱",
+            SimplifiedChinese => "合集名称",
+            TraditionalChinese => "合集名稱",
             Japanese => "MOD パック名",
             _ => "Modpack name"
         };
@@ -2045,8 +2045,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "整合包简介",
-            TraditionalChinese => "整合包簡介",
+            SimplifiedChinese => "合集简介",
+            TraditionalChinese => "合集簡介",
             Japanese => "MOD パックの説明",
             _ => "Modpack description"
         };
@@ -2314,8 +2314,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "提交到整合包列表",
-            TraditionalChinese => "提交到整合包列表",
+            SimplifiedChinese => "提交到合集列表",
+            TraditionalChinese => "提交到合集列表",
             Japanese => "MOD パック一覧へ送信",
             _ => "Submit to modpack index"
         };
@@ -2325,8 +2325,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "正在提交到整合包列表审核...",
-            TraditionalChinese => "正在提交到整合包列表審核...",
+            SimplifiedChinese => "正在提交到合集列表审核...",
+            TraditionalChinese => "正在提交到合集列表審核...",
             Japanese => "MOD パック一覧のレビューへ送信中...",
             _ => "Submitting to the modpack index for review..."
         };
@@ -2347,8 +2347,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => $"提交整合包列表失败：{error}",
-            TraditionalChinese => $"提交整合包列表失敗：{error}",
+            SimplifiedChinese => $"提交合集列表失败：{error}",
+            TraditionalChinese => $"提交合集列表失敗：{error}",
             Japanese => $"MOD パック一覧への送信に失敗しました：{error}",
             _ => $"Failed to submit to the modpack index: {error}"
         };
@@ -2379,8 +2379,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "提交到整合包列表",
-            TraditionalChinese => "提交到整合包列表",
+            SimplifiedChinese => "提交到合集列表",
+            TraditionalChinese => "提交到合集列表",
             Japanese => "MOD パック一覧へ送信",
             _ => "Submit to modpack index"
         };
@@ -2390,8 +2390,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "填写已创建的 GitHub 整合包仓库链接，提交后会向你的 Index 仓库创建审核 PR。审核合并后，整合包会出现在列表里。",
-            TraditionalChinese => "填寫已建立的 GitHub 整合包儲存庫連結，提交後會向你的 Index 儲存庫建立審核 PR。審核合併後，整合包會出現在列表裡。",
+            SimplifiedChinese => "填写已创建的 GitHub 合集仓库链接，提交后会向你的 Index 仓库创建审核 PR。审核合并后，合集会出现在列表里。",
+            TraditionalChinese => "填寫已建立的 GitHub 合集儲存庫連結，提交後會向你的 Index 儲存庫建立審核 PR。審核合併後，合集會出現在列表裡。",
             Japanese => "作成済みの GitHub MOD パックリポジトリのリンクを入力すると、Index リポジトリにレビュー PR を作成します。マージ後、一覧に表示されます。",
             _ => "Enter the GitHub modpack repository link. Submitting creates a review PR in your index repository; after it is merged, the pack appears in the list."
         };
@@ -2401,8 +2401,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "整合包仓库链接（发布链接）",
-            TraditionalChinese => "整合包儲存庫連結（發佈連結）",
+            SimplifiedChinese => "合集仓库链接（发布链接）",
+            TraditionalChinese => "合集儲存庫連結（發佈連結）",
             Japanese => "MOD パックのリポジトリリンク",
             _ => "Modpack repository link"
         };

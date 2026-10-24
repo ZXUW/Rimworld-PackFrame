@@ -108,7 +108,7 @@ public partial class ExportCollectionWindow : Window
         PackChangelogBox.Text = manifest?.Changelog ?? string.Empty;
         PackRevisionText.Text = $"ID: {manifest?.Id}  ·  revision: {manifest?.Revision}\n" +
             OperationText.Choose(_language, "Revision is generated automatically. Keep the pack ID when publishing updates.",
-                "revision 自动生成。发布更新时保持整合包 ID 不变。", "revision 自動產生。發布更新時保持整合包 ID 不變。",
+                "revision 自动生成。发布更新时保持合集 ID 不变。", "revision 自動產生。發布更新時保持合集 ID 不變。",
                 "revision は自動生成されます。更新時はパック ID を維持してください。");
         LocalModsHeader();
         BackButton.Content = Localization.CancelButton(_language);
@@ -170,22 +170,22 @@ public partial class ExportCollectionWindow : Window
         IndexIntro.Text = OperationText.Choose(
             _language,
             "Enter at least one modpack repository link. Submitting creates a review PR in the index repository; after it is merged, the pack appears in the list.",
-            "至少填写一个整合包仓库链接，提交后会向 Index 仓库创建审核 PR。审核合并后，整合包会出现在列表里。",
-            "至少填寫一個整合包倉庫連結，提交後會向 Index 儲存庫建立審核 PR。審核合併後，整合包會出現在列表裡。",
+            "至少填写一个合集仓库链接，提交后会向 Index 仓库创建审核 PR。审核合并后，合集会出现在列表里。",
+            "至少填寫一個合集倉庫連結，提交後會向 Index 儲存庫建立審核 PR。審核合併後，合集會出現在列表裡。",
             "少なくとも 1 つの MOD パックリポジトリリンクを入力してください。Index リポジトリにレビュー PR を作成し、マージ後に一覧へ表示されます。"
         );
         IndexRepoLabel.Text = OperationText.Choose(
             _language,
             "GitHub modpack repository link (optional)",
-            "GitHub 整合包仓库链接（可选）",
-            "GitHub 整合包倉庫連結（可選）",
+            "GitHub 合集仓库链接（可选）",
+            "GitHub 合集倉庫連結（可選）",
             "GitHub MOD パックリポジトリリンク（任意）"
         );
         IndexGiteeRepoLabel.Text = OperationText.Choose(
             _language,
             "Gitee modpack repository link (preferred)",
-            "Gitee 整合包仓库链接（优先）",
-            "Gitee 整合包倉庫連結（優先）",
+            "Gitee 合集仓库链接（优先）",
+            "Gitee 合集倉庫連結（優先）",
             "Gitee MOD パックリポジトリリンク（優先）"
         );
         IndexTokenLabel.Text = OperationText.Choose(
@@ -242,8 +242,8 @@ public partial class ExportCollectionWindow : Window
         GiteeIntro.Text = OperationText.Choose(
             _language,
             "Upload the same exported repository to Gitee. Chinese users read the Gitee copy first.",
-            "将同一份整合包仓库上传到 Gitee。国内用户会优先读取 Gitee 镜像。",
-            "將同一份整合包倉庫上傳到 Gitee。國內使用者會優先讀取 Gitee 鏡像。",
+            "将同一份合集仓库上传到 Gitee。国内用户会优先读取 Gitee 镜像。",
+            "將同一份合集倉庫上傳到 Gitee。國內使用者會優先讀取 Gitee 鏡像。",
             "同じ出力リポジトリを Gitee にもアップロードします。中国国内では Gitee が優先されます。"
         );
         GiteePathLabel.Text = Localization.ExportCollectionRepo(_language);

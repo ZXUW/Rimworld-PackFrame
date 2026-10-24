@@ -21,7 +21,7 @@ public partial class ModpackWindow
         check.Content = T("Check updates", "检查更新", "檢查更新", "更新を確認");
         check.IsVisible = match; check.IsEnabled = !_busy;
         var bind = Find<Button>("BindPackButton");
-        bind.Content = T("Link this pack", "关联此整合包", "關聯此整合包", "このパックに関連付け");
+        bind.Content = T("Link this pack", "关联此合集", "關聯此合集", "このパックに関連付け");
         bind.IsVisible = valid && !match && _selectedPack?.Id is not null;
         bind.IsEnabled = !_busy && string.IsNullOrWhiteSpace(_currentInstance?.Metadata?.PackSource);
         var restore = Find<Button>("RestoreUpdateButton");
@@ -49,7 +49,7 @@ public partial class ModpackWindow
     {
         if (!CanChangeInstance() || _selectedPack is null) return;
         var confirm = new ConfirmWindow(T("Link this instance? Existing files remain unowned; conflicts will require a choice.",
-            "关联当前实例？现有文件不会自动归属整合包，更新时有冲突会询问。", "關聯目前實例？現有檔案不會自動歸屬整合包，衝突時會詢問。",
+            "关联当前实例？现有文件不会自动归属合集，更新时有冲突会询问。", "關聯目前實例？現有檔案不會自動歸屬合集，衝突時會詢問。",
             "このインスタンスを関連付けますか？既存ファイルの競合は確認されます。"),
             T("Link", "关联", "關聯", "関連付け"), Localization.CancelButton(_language));
         if (!await confirm.ShowDialog<bool>(this)) return;
@@ -71,7 +71,7 @@ public partial class ModpackWindow
             var pack = await ModpackService.LoadPackAsync(_selectedItem.Entry, _indexUri, cancellation.Token);
             if (!PackUpdateService.Matches(_currentInstance!, pack)) throw new IOException("Pack identity changed.");
             if (pack.Revision is null || pack.Revision <= 0)
-            { Find<TextBlock>("StatusText").Text = T("No update version provided.", "此整合包尚未提供更新版本。", "此整合包尚未提供更新版本。", "更新バージョンがありません。"); return; }
+            { Find<TextBlock>("StatusText").Text = T("No update version provided.", "此合集尚未提供更新版本。", "此合集尚未提供更新版本。", "更新バージョンがありません。"); return; }
             if (pack.Revision <= _currentInstance!.Metadata!.InstalledRevision)
             { Find<TextBlock>("StatusText").Text = T("Up to date, or local revision is newer.", "已是最新版本，或本地版本较新。", "已是最新版本，或本機版本較新。", "最新、またはローカル版の方が新しいです。"); return; }
             var prompt = $"{pack.Name}: {pack.Version ?? pack.Revision.ToString()}\n{pack.Changelog}\n" +

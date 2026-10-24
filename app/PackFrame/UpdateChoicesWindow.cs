@@ -21,7 +21,7 @@ internal sealed class UpdateChoicesWindow : Window
         var panel = new StackPanel { Spacing = 10, Margin = new Thickness(16) };
         panel.Children.Add(new TextBlock { Text = OperationText.Choose(language,
             "Checked = keep my content. Unchecked = use the new pack version.",
-            "勾选：保留我的内容；不勾选：使用整合包新版。", "勾選：保留我的內容；不勾選：使用整合包新版。",
+            "勾选：保留我的内容；不勾选：使用合集新版。", "勾選：保留我的內容；不勾選：使用合集新版。",
             "チェック: 自分の内容を保持。未チェック: 新版に置換。"), TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(new TextBlock { Text = $"+{plan.Added.Count} / -{plan.Removed.Count}\n" +
             string.Join("\n", plan.Added.ConvertAll(id => "+ " + id)) + "\n" + string.Join("\n", plan.Removed.ConvertAll(id => "- " + id)), TextWrapping = TextWrapping.Wrap });

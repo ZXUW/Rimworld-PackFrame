@@ -27,9 +27,9 @@ internal static class OperationText
     public static string GiteeFiles(string? language) => Choose(language, "Uploading files", "正在上传文件", "正在上傳檔案", "ファイルをアップロード中");
     public static string GiteeCommit(string? language) => Choose(language, "Creating Gitee commit...", "正在创建 Gitee 提交...", "正在建立 Gitee 提交...", "Gitee コミットを作成中...");
     public static string GiteeDone(string? language) => Choose(language, "Gitee upload complete.", "Gitee 上传完成。", "Gitee 上傳完成。", "Gitee アップロード完了。");
-    public static string IndexPrepare(string? language) => Choose(language, "Preparing index submission...", "正在准备整合包列表审核...", "正在準備整合包列表審核...", "一覧への掲載申請を準備中...");
-    public static string IndexFork(string? language) => Choose(language, "Forking index repository...", "正在创建整合包索引仓库分支...", "正在建立整合包索引儲存庫分支...", "インデックスリポジトリをフォーク中...");
-    public static string IndexWrite(string? language) => Choose(language, "Writing modpack files...", "正在写入整合包文件...", "正在寫入整合包檔案...", "MOD パックのファイルを書き込み中...");
+    public static string IndexPrepare(string? language) => Choose(language, "Preparing index submission...", "正在准备合集列表审核...", "正在準備合集列表審核...", "一覧への掲載申請を準備中...");
+    public static string IndexFork(string? language) => Choose(language, "Forking index repository...", "正在创建合集索引仓库分支...", "正在建立合集索引儲存庫分支...", "インデックスリポジトリをフォーク中...");
+    public static string IndexWrite(string? language) => Choose(language, "Writing modpack files...", "正在写入合集文件...", "正在寫入合集檔案...", "MOD パックのファイルを書き込み中...");
     public static string IndexPr(string? language) => Choose(language, "Creating review pull request...", "正在创建审核 PR...", "正在建立審核 PR...", "レビュー用 PR を作成中...");
     public static string IndexDone(string? language) => Choose(language, "Review pull request created.", "审核 PR 已创建。", "審核 PR 已建立。", "レビュー用 PR を作成しました。");
     public static string IndexGiteePrepare(string? language) => Choose(language, "Preparing Gitee index commit...", "正在准备 Gitee 索引提交...", "正在準備 Gitee 索引提交...", "Gitee 索引コミットを準備中...");
