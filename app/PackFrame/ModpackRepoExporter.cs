@@ -56,10 +56,141 @@ public sealed record ModpackRepoExportResult(
 
 public static class ModpackRepoExporter
 {
-    public static ModpackRepoExportResult Export(
+    public static ModpackRepoExportResult Prepare(
         string packRoot,
         ManagedInstance instance,
         Func<string, ModInfo?> resolveMod
+    )
+    {
+        return Export(packRoot, instance, resolveMod, includeLocalMods: false);
+    }
+
+    public static void MaterializeLocalMods(
+        string repoPath,
+        ManagedInstance instance,
+        Func<string, ModInfo?> resolveMod,
+        Action<string>? progress = null,
+        string? language = null
+    )
+    {
+        var manifestPath = Path.Combine(repoPath, "pack.json");
+        var manifest = JsonSerializer.Deserialize(
+            File.ReadAllText(manifestPath),
+            PackFrameJsonContext.Default.ModpackRepoManifest
+        ) ?? throw new InvalidDataException("pack.json is empty: " + manifestPath);
+
+        var modsPath = Path.Combine(repoPath, "mods");
+        if (Directory.Exists(modsPath))
+        {
+            Directory.Delete(modsPath, true);
+        }
+
+        Directory.CreateDirectory(modsPath);
+        progress?.Invoke(OperationText.Choose(
+            language,
+            "Scanning local mods...",
+            "正在扫描本地模组...",
+            "正在掃描本地模組...",
+            "ローカル MOD をスキャンしています..."
+        ));
+        var localMods = CopyLocalMods(instance, modsPath, progress, language);
+        var localIds = new HashSet<string>(
+            localMods
+                .Select(mod => mod.PackageId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!),
+            StringComparer.OrdinalIgnoreCase
+        );
+
+        foreach (var packageId in manifest.PackageIds ?? new List<string>())
+        {
+            if (localIds.Contains(packageId) ||
+                packageId.StartsWith("ludeon.", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var mod = resolveMod(packageId);
+            if (mod is not { Source: ModSource.Local } || !Directory.Exists(mod.Path))
+            {
+                continue;
+            }
+
+            var local = CopyLocalMod(mod, modsPath, progress, language);
+            if (local is not null)
+            {
+                localMods.Add(local);
+                localIds.Add(packageId);
+            }
+        }
+
+        var archivePath = Path.Combine(repoPath, "mods.zip");
+        if (localMods.Count > 0)
+        {
+            progress?.Invoke(OperationText.Choose(
+                language,
+                "Compressing local mods...",
+                "正在压缩本地模组...",
+                "正在壓縮本地模組...",
+                "ローカル MOD を圧縮しています..."
+            ));
+            if (File.Exists(archivePath))
+            {
+                File.Delete(archivePath);
+            }
+
+            ZipFile.CreateFromDirectory(
+                modsPath,
+                archivePath,
+                CompressionLevel.Optimal,
+                includeBaseDirectory: false
+            );
+            manifest.ModsArchive = "mods.zip";
+        }
+        else
+        {
+            if (File.Exists(archivePath))
+            {
+                File.Delete(archivePath);
+            }
+
+            manifest.ModsArchive = null;
+        }
+
+        Directory.Delete(modsPath, true);
+        manifest.Mods = localMods;
+        manifest.Revision = Math.Max(
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            checked((manifest.Revision ?? 0) + 1)
+        );
+        File.WriteAllText(
+            manifestPath,
+            JsonSerializer.Serialize(
+                manifest,
+                PackFrameJsonContext.Default.ModpackRepoManifest
+            )
+        );
+        PackLicenses.Ensure(
+            repoPath,
+            localMods
+                .Select(mod => mod.Name ?? mod.PackageId ?? string.Empty)
+                .Where(name => name.Length > 0)
+                .ToList()
+        );
+        progress?.Invoke(OperationText.Choose(
+            language,
+            "Local mods packed.",
+            "本地模组打包完成。",
+            "本地模組打包完成。",
+            "ローカル MOD のパッケージが完了しました。"
+        ));
+    }
+
+    private static ModpackRepoExportResult Export(
+        string packRoot,
+        ManagedInstance instance,
+        Func<string, ModInfo?> resolveMod,
+        bool includeLocalMods
     )
     {
         var displayName = string.IsNullOrWhiteSpace(instance.Metadata?.Name)
@@ -88,11 +219,19 @@ public static class ModpackRepoExporter
         var modsPath = Path.Combine(repoPath, "mods");
         var imagesPath = Path.Combine(repoPath, "images");
         Directory.CreateDirectory(configPath);
-        Directory.CreateDirectory(modsPath);
+        if (includeLocalMods)
+        {
+            Directory.CreateDirectory(modsPath);
+        }
         Directory.CreateDirectory(imagesPath);
 
         var configFiles = CopyConfig(instance.ConfigDirectoryPath, configPath);
-        var localMods = CopyLocalMods(instance, modsPath);
+        var localMods = CopyLocalMods(
+            instance,
+            includeLocalMods ? modsPath : null,
+            progress: null,
+            language: null
+        );
         var localIds = new HashSet<string>(
             localMods
                 .Select(mod => mod.PackageId)
@@ -131,7 +270,12 @@ public static class ModpackRepoExporter
                 Directory.Exists(mod.Path) &&
                 !localIds.Contains(packageId))
             {
-                var local = CopyLocalMod(mod, modsPath);
+                var local = CopyLocalMod(
+                    mod,
+                    includeLocalMods ? modsPath : null,
+                    progress: null,
+                    language: null
+                );
                 if (local is not null)
                 {
                     localMods.Add(local);
@@ -150,7 +294,7 @@ public static class ModpackRepoExporter
         }
 
         string? modsArchive = null;
-        if (localMods.Count > 0 && Directory.Exists(modsPath))
+        if (includeLocalMods && localMods.Count > 0 && Directory.Exists(modsPath))
         {
             modsArchive = "mods.zip";
             var archivePath = Path.Combine(repoPath, modsArchive);
@@ -505,7 +649,9 @@ public static class ModpackRepoExporter
 
     private static List<ModpackRepoMod> CopyLocalMods(
         ManagedInstance instance,
-        string target
+        string? target,
+        Action<string>? progress = null,
+        string? language = null
     )
     {
         var result = new List<ModpackRepoMod>();
@@ -515,8 +661,10 @@ public static class ModpackRepoExporter
             return result;
         }
 
-        foreach (var directory in Directory.EnumerateDirectories(source))
+        var directories = Directory.EnumerateDirectories(source).ToList();
+        for (var index = 0; index < directories.Count; index++)
         {
+            var directory = directories[index];
             var name = Path.GetFileName(directory);
             if (name.StartsWith("PF_", StringComparison.OrdinalIgnoreCase) ||
                 IsWorkshopMod(directory))
@@ -530,8 +678,19 @@ public static class ModpackRepoExporter
                 continue;
             }
 
-            var targetDirectory = Path.Combine(target, name);
-            CopyDirectory(directory, targetDirectory);
+            if (target is not null)
+            {
+                progress?.Invoke(OperationText.Choose(
+                    language,
+                    "Copying local mods",
+                    "正在复制本地模组",
+                    "正在複製本地模組",
+                    "ローカル MOD をコピーしています"
+                ) + $" {index + 1}/{directories.Count}: {name}");
+                var targetDirectory = Path.Combine(target, name);
+                CopyDirectory(directory, targetDirectory);
+            }
+
             result.Add(new ModpackRepoMod
             {
                 Name = ReadModName(directory) ?? name,
@@ -543,7 +702,12 @@ public static class ModpackRepoExporter
         return result;
     }
 
-    private static ModpackRepoMod? CopyLocalMod(ModInfo mod, string target)
+    private static ModpackRepoMod? CopyLocalMod(
+        ModInfo mod,
+        string? target,
+        Action<string>? progress = null,
+        string? language = null
+    )
     {
         var name = Path.GetFileName(
             mod.Path.TrimEnd(
@@ -557,8 +721,19 @@ public static class ModpackRepoExporter
             return null;
         }
 
-        var targetDirectory = Path.Combine(target, name);
-        CopyDirectory(mod.Path, targetDirectory);
+        if (target is not null)
+        {
+            progress?.Invoke(OperationText.Choose(
+                language,
+                "Copying local mod: ",
+                "正在复制本地模组：",
+                "正在複製本地模組：",
+                "ローカル MOD をコピーしています: "
+            ) + name);
+            var targetDirectory = Path.Combine(target, name);
+            CopyDirectory(mod.Path, targetDirectory);
+        }
+
         return new ModpackRepoMod
         {
             Name = mod.Name,

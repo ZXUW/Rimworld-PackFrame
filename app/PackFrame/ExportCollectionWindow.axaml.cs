@@ -29,8 +29,6 @@ public partial class ExportCollectionWindow : Window
     private string? _githubUrl;
     private string? _giteeUrl;
     private string? _giteePackUrl;
-    private string _lastRepoNameDefault = string.Empty;
-    private string _lastOriginalRepoNameDefault = string.Empty;
     private string _lastGiteeRepoNameDefault = string.Empty;
     private string? _indexPrUrl;
     private string? _giteeIndexPrUrl;
@@ -38,6 +36,9 @@ public partial class ExportCollectionWindow : Window
     private bool _indexSubmitting;
     private CancellationTokenSource? _createCancellation;
     private readonly ManagedInstance? _sourceInstance;
+    private readonly Func<Action<string>, Task>? _packLocalMods;
+    private bool _localModsPacked;
+    private bool _packing;
     private ulong? _boundCollectionId;
 
     public ExportCollectionWindow()
@@ -62,12 +63,14 @@ public partial class ExportCollectionWindow : Window
         string? gamePath,
         string? language,
         string? indexUrl,
-        ManagedInstance? sourceInstance = null
+        ManagedInstance? sourceInstance = null,
+        Func<Action<string>, Task>? packLocalMods = null
     )
         : this()
     {
         _result = result;
         _sourceInstance = sourceInstance;
+        _packLocalMods = packLocalMods;
         _gamePath = gamePath;
         _language = string.IsNullOrWhiteSpace(language) ? "zh-Hans" : language;
         _indexUrl = string.IsNullOrWhiteSpace(indexUrl)
@@ -216,38 +219,44 @@ public partial class ExportCollectionWindow : Window
             Localization.ExportCollectionOpenIndexPr(_language);
         OpenRepoIndexButton.Content =
             Localization.ExportCollectionOpenLocalRepo(_language);
-        GithubPathLabel.Text = Localization.ExportCollectionRepo(_language);
-        GithubPath.Text = _result.RepoPath;
         GithubTokenLabel.Text = Localization.ExportCollectionGithubToken(_language);
         GetTokenButton.Content = Localization.ExportCollectionGetToken(_language);
         GithubTokenHint.Text = Localization.ExportCollectionTokenHint(_language);
-        GithubRepoNameLabel.Text = Localization.ExportCollectionRepoName(_language);
-        GithubRepoDescriptionLabel.Text =
-            Localization.ExportCollectionRepoDescription(_language);
+        GithubRepoDescriptionLabel.Text = OperationText.Choose(
+            _language,
+            "Gitee repository description",
+            "Gitee 仓库描述",
+            "Gitee 倉庫描述",
+            "Gitee リポジトリの説明"
+        );
         GithubCollectionUrlLabel.Text =
             Localization.ExportCollectionCollectionUrl(_language);
         UploadGithubButton.Content =
             Localization.ExportCollectionUploadGithub(_language);
         OpenGithubRepoButton.Content =
             Localization.ExportCollectionOpenGithubRepo(_language);
-        OpenRepoGithubButton.Content =
-            Localization.ExportCollectionOpenLocalRepo(_language);
         GithubCollectionUrlBox.Text = _collectionUrl ?? string.Empty;
         GithubRepoDescriptionBox.Text = _packDescription;
-        _lastOriginalRepoNameDefault = _packName + "-Rimworld-PackFrame";
-        _lastRepoNameDefault = GitHubPublisher.DefaultRepositoryName(_packName);
-        GithubRepoNameBox.Text = _lastOriginalRepoNameDefault;
-        UpdateRepoNamePreview();
 
         GiteeIntro.Text = OperationText.Choose(
             _language,
-            "Upload the same exported repository to Gitee. Chinese users read the Gitee copy first.",
-            "将同一份合集仓库上传到 Gitee。国内用户会优先读取 Gitee 镜像。",
-            "將同一份合集倉庫上傳到 Gitee。國內使用者會優先讀取 Gitee 鏡像。",
-            "同じ出力リポジトリを Gitee にもアップロードします。中国国内では Gitee が優先されます。"
+            "Pack local mods once, then upload the same repository to Gitee.",
+            "先打包本地模组，再把同一份合集仓库上传到 Gitee。",
+            "先打包本地模組，再把同一份合集倉庫上傳到 Gitee。",
+            "ローカル MOD を一度パッケージしてから、同じリポジトリを Gitee にアップロードします。"
         );
         GiteePathLabel.Text = Localization.ExportCollectionRepo(_language);
         GiteePath.Text = _result.RepoPath;
+        PackLocalModsButton.Content = OperationText.Choose(
+            _language, "Pack local mods", "打包本地模组", "打包本地模組", "ローカル MOD をパッケージ"
+        );
+        PackLocalModsStatus.Text = OperationText.Choose(
+            _language,
+            "Pack local mods before uploading.",
+            "请先打包本地模组，打包完成后才能上传。",
+            "請先打包本地模組，打包完成後才能上傳。",
+            "アップロードする前にローカル MOD をパッケージしてください。"
+        );
         GiteeTokenLabel.Text = OperationText.Choose(
             _language, "Gitee token", "Gitee Token", "Gitee Token", "Gitee トークン"
         );
@@ -270,9 +279,11 @@ public partial class ExportCollectionWindow : Window
         );
         OpenRepoGiteeButton.Content = Localization.ExportCollectionOpenLocalRepo(_language);
         GiteeStatus.Text = string.Empty;
-        _lastGiteeRepoNameDefault = _lastOriginalRepoNameDefault;
+        _lastGiteeRepoNameDefault = _packName + "-Rimworld-PackFrame";
         GiteeRepoNameBox.Text = _lastGiteeRepoNameDefault;
         UpdateGiteeRepoNamePreview();
+        UploadGiteeButton.IsEnabled = false;
+        UploadGithubButton.IsEnabled = false;
 
         LoadExistingCover();
         ShowPage(1);
@@ -295,15 +306,15 @@ public partial class ExportCollectionWindow : Window
         _page = page;
         RepoPage.IsVisible = page == 1;
         SteamPage.IsVisible = page == 2;
-        GithubPage.IsVisible = page == 3;
-        GiteePage.IsVisible = page == 4;
+        GiteePage.IsVisible = page == 3;
+        GithubPage.IsVisible = page == 4;
         IndexPage.IsVisible = page == 5;
 
         TitleText.Text = page switch
         {
             2 => Localization.ExportCollectionPageSteam(_language),
-            3 => Localization.ExportCollectionPageGithub(_language),
-            4 => OperationText.Choose(_language, "Upload to Gitee", "上传到 Gitee", "上傳到 Gitee", "Gitee へアップロード"),
+            3 => OperationText.Choose(_language, "Upload to Gitee", "上传到 Gitee", "上傳到 Gitee", "Gitee へアップロード"),
+            4 => Localization.ExportCollectionPageGithub(_language),
             5 => Localization.ExportCollectionPageIndex(_language),
             _ => Localization.ExportCollectionPageRepo(_language)
         };
@@ -339,7 +350,7 @@ public partial class ExportCollectionWindow : Window
                 IndexGiteeTokenBox.Text = GiteeTokenBox.Text;
             }
         }
-        if (page == 4)
+        if (page == 3)
         {
             var originalName = _packName + "-Rimworld-PackFrame";
             if (string.IsNullOrWhiteSpace(GiteeRepoNameBox.Text) ||
@@ -349,27 +360,6 @@ public partial class ExportCollectionWindow : Window
             }
             _lastGiteeRepoNameDefault = originalName;
             UpdateGiteeRepoNamePreview();
-        }
-        if (page == 3)
-        {
-            var originalName = _packName + "-Rimworld-PackFrame";
-            if (string.IsNullOrWhiteSpace(GithubRepoNameBox.Text) ||
-                string.Equals(
-                    GithubRepoNameBox.Text,
-                    _lastRepoNameDefault,
-                    StringComparison.Ordinal
-                ) ||
-                string.Equals(
-                    GithubRepoNameBox.Text,
-                    _lastOriginalRepoNameDefault,
-                    StringComparison.Ordinal
-                ))
-            {
-                GithubRepoNameBox.Text = originalName;
-            }
-            _lastOriginalRepoNameDefault = originalName;
-            _lastRepoNameDefault = GitHubPublisher.DefaultRepositoryName(_packName);
-            UpdateRepoNamePreview();
             if (!string.IsNullOrWhiteSpace(_collectionUrl))
             {
                 GithubCollectionUrlBox.Text = _collectionUrl;
@@ -650,19 +640,6 @@ public partial class ExportCollectionWindow : Window
         }
     }
 
-    private void OnRepoNameChanged(object? sender, TextChangedEventArgs e)
-    {
-        UpdateRepoNamePreview();
-    }
-
-    private void UpdateRepoNamePreview()
-    {
-        var input = GithubRepoNameBox.Text?.Trim() ?? string.Empty;
-        GithubRepoNormalizedLabel.Text = Localization.ExportCollectionRepoNormalized(
-            _language,
-            GitHubPublisher.NormalizeRepositoryName(input)
-        );
-    }
     private async void OnSubmitIndexClick(object? sender, RoutedEventArgs e)
     {
         if (_indexSubmitting || _indexSubmitted)
@@ -838,13 +815,25 @@ public partial class ExportCollectionWindow : Window
 
     private async void OnUploadGithubClick(object? sender, RoutedEventArgs e)
     {
-        if (_busy)
+        if (_busy || _packing)
         {
             return;
         }
 
+        if (!_localModsPacked)
+        {
+            GithubStatus.Text = OperationText.Choose(
+                _language,
+                "Pack local mods before uploading.",
+                "请先打包本地模组，打包完成后才能上传。",
+                "請先打包本地模組，打包完成後才能上傳。",
+                "アップロードする前にローカル MOD をパッケージしてください。"
+            );
+            return;
+        }
+
         var token = GithubTokenBox.Text?.Trim();
-        var repoName = GithubRepoNameBox.Text?.Trim();
+        var repoName = GiteeRepoNameBox.Text?.Trim();
         if (string.IsNullOrWhiteSpace(token) ||
             string.IsNullOrWhiteSpace(repoName))
         {
@@ -943,10 +932,95 @@ public partial class ExportCollectionWindow : Window
         });
     }
 
+    private async void OnPackLocalModsClick(object? sender, RoutedEventArgs e)
+    {
+        if (_packing || _localModsPacked)
+        {
+            return;
+        }
+
+        if (_packLocalMods is null)
+        {
+            PackLocalModsStatus.Text = OperationText.Choose(
+                _language,
+                "No local mod source is available.",
+                "没有可用的本地模组来源。",
+                "沒有可用的本地模組來源。",
+                "利用できるローカル MOD がありません。"
+            );
+            return;
+        }
+
+        _packing = true;
+        PackLocalModsButton.IsEnabled = false;
+        UploadGiteeButton.IsEnabled = false;
+        UploadGithubButton.IsEnabled = false;
+        PackLocalModsStatus.Text = OperationText.Choose(
+            _language,
+            "Preparing local mods...",
+            "正在准备本地模组...",
+            "正在準備本地模組...",
+            "ローカル MOD を準備しています..."
+        );
+        try
+        {
+            await _packLocalMods(text =>
+                Dispatcher.UIThread.Post(() => PackLocalModsStatus.Text = text)
+            );
+            _localModsPacked = true;
+            PackLocalModsStatus.Text = OperationText.Choose(
+                _language,
+                "Local mods packed. Upload is enabled.",
+                "本地模组已打包，可以上传。",
+                "本地模組已打包，可以上傳。",
+                "ローカル MOD のパッケージが完了しました。アップロードできます。"
+            );
+            PackLocalModsButton.Content = OperationText.Choose(
+                _language,
+                "Local mods packed",
+                "本地模组已打包",
+                "本地模組已打包",
+                "ローカル MOD パッケージ済み"
+            );
+            UploadGiteeButton.IsEnabled = true;
+            UploadGithubButton.IsEnabled = true;
+        }
+        catch (Exception exception)
+        {
+            PackLocalModsStatus.Text = OperationText.Choose(
+                _language,
+                "Packing local mods failed: ",
+                "打包本地模组失败：",
+                "打包本地模組失敗：",
+                "ローカル MOD のパッケージに失敗しました: "
+            ) + exception.Message;
+        }
+        finally
+        {
+            _packing = false;
+            if (!_localModsPacked)
+            {
+                PackLocalModsButton.IsEnabled = true;
+            }
+        }
+    }
+
     private async void OnUploadGiteeClick(object? sender, RoutedEventArgs e)
     {
-        if (_busy)
+        if (_busy || _packing)
         {
+            return;
+        }
+
+        if (!_localModsPacked)
+        {
+            GiteeStatus.Text = OperationText.Choose(
+                _language,
+                "Pack local mods before uploading.",
+                "请先打包本地模组，打包完成后才能上传。",
+                "請先打包本地模組，打包完成後才能上傳。",
+                "アップロードする前にローカル MOD をパッケージしてください。"
+            );
             return;
         }
 
@@ -965,6 +1039,15 @@ public partial class ExportCollectionWindow : Window
             return;
         }
 
+        SavePackInfo();
+        var description = GithubRepoDescriptionBox.Text?.Trim() ?? string.Empty;
+        var collectionUrl = GithubCollectionUrlBox.Text?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(collectionUrl))
+        {
+            ModpackRepoExporter.SetCollectionUrl(_result.RepoPath, collectionUrl);
+        }
+        ModpackRepoExporter.UpdateReadmeCover(_result.RepoPath);
+
         _busy = true;
         UploadGiteeButton.IsEnabled = false;
         _giteePackUrl = null;
@@ -975,7 +1058,7 @@ public partial class ExportCollectionWindow : Window
                 _result.RepoPath,
                 token,
                 repoName,
-                _packDescription,
+                description,
                 text => Dispatcher.UIThread.Post(() => GiteeStatus.Text = text),
                 language: _language
             ));

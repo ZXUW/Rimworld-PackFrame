@@ -158,6 +158,12 @@ public partial class MainWindow : Window
     private Bitmap? _previewBitmap;
     private ListBox? _selectionAnchorList;
     private int _selectionAnchorIndex = -1;
+    private ListBox? _pressedMultiList;
+    private List<ModInfo>? _pressedMultiMods;
+    private ListBox? _pressedSnapshotList;
+    private List<ModInfo> _pressedSnapshotMods = new();
+    private ListBox? _rangeSelectionList;
+    private List<ModInfo>? _rangeSelectionMods;
     private ListBox? _dragSourceList;
     private Point _dragStartPoint;
     private DragPayload? _dragPayload;
@@ -644,6 +650,15 @@ public partial class MainWindow : Window
 
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            var list = FindModListAt(e.Source);
+            _pressedSnapshotList = list;
+            _pressedSnapshotMods = list is null
+                ? new List<ModInfo>()
+                : GetSelectedMods(list);
+        }
+
         if (IsWithinSearchBox(e.Source))
         {
             return;
@@ -3813,6 +3828,22 @@ public partial class MainWindow : Window
         };
     }
 
+    private ListBox? FindModListAt(object? source)
+    {
+        for (var visual = source as Visual; visual is not null; visual = visual.GetVisualParent())
+        {
+            if (visual is ListBox list &&
+                (ReferenceEquals(list, _inactiveList) ||
+                 ReferenceEquals(list, _activeList1) ||
+                 ReferenceEquals(list, _activeList2)))
+            {
+                return list;
+            }
+        }
+
+        return null;
+    }
+
     private void SelectMovedMods(int targetColumn, IReadOnlyCollection<string> selectedIds)
     {
         var list = GetModListForColumn(targetColumn);
@@ -3895,6 +3926,34 @@ public partial class MainWindow : Window
     {
         var selected = new HashSet<ModInfo>(list.SelectedItems!.Cast<ModInfo>());
         return list.Items.Cast<ModInfo>().Where(selected.Contains).ToList();
+    }
+
+    private void RestorePressedMultiSelection(ListBox list)
+    {
+        if (!ReferenceEquals(_pressedMultiList, list) || _pressedMultiMods is null)
+        {
+            return;
+        }
+
+        var autoScroll = list.AutoScrollToSelectedItem;
+        list.AutoScrollToSelectedItem = false;
+        _refreshing = true;
+        try
+        {
+            list.SelectedItems!.Clear();
+            foreach (var mod in _pressedMultiMods)
+            {
+                if (list.Items.Contains(mod))
+                {
+                    list.SelectedItems!.Add(mod);
+                }
+            }
+        }
+        finally
+        {
+            _refreshing = false;
+            list.AutoScrollToSelectedItem = autoScroll;
+        }
     }
 
     private void OnActiveColumnPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -4320,6 +4379,7 @@ public partial class MainWindow : Window
             selection.BeginBatchUpdate();
             try
             {
+                list.SelectedItems!.Clear();
                 selection.SelectRange(start, end);
             }
             finally
@@ -4391,10 +4451,39 @@ public partial class MainWindow : Window
         }
 
         var index = list.IndexFromContainer(item);
+        var selectionBefore = GetSelectedMods(list);
+        var rangeMatch = ReferenceEquals(_rangeSelectionList, list) &&
+            _rangeSelectionMods is not null &&
+            _rangeSelectionMods.Any(selected =>
+                string.Equals(selected.PackageId, mod.PackageId, StringComparison.OrdinalIgnoreCase));
+        if (selectionBefore.Count <= 1 && rangeMatch)
+        {
+            selectionBefore = _rangeSelectionMods!.ToList();
+        }
+        else if (selectionBefore.Count <= 1 &&
+                 ReferenceEquals(_pressedSnapshotList, list) &&
+                 _pressedSnapshotMods.Count > 1)
+        {
+            selectionBefore = _pressedSnapshotMods.ToList();
+        }
+
+        if (!rangeMatch)
+        {
+            _rangeSelectionList = null;
+            _rangeSelectionMods = null;
+        }
+
+        var pressedWasMulti = selectionBefore.Count > 1 &&
+            selectionBefore.Any(selected =>
+                string.Equals(selected.PackageId, mod.PackageId, StringComparison.OrdinalIgnoreCase));
+        _pressedMultiList = pressedWasMulti ? list : null;
+        _pressedMultiMods = pressedWasMulti ? selectionBefore : null;
         var now = Environment.TickCount64;
         var isDoubleClick = ReferenceEquals(_lastPressList, list) &&
                             ReferenceEquals(_lastPressMod, mod) &&
-                            now - _lastPressTicks <= 350;
+                            now - _lastPressTicks <= 350 &&
+                            !(list.SelectedItems!.Count > 1 &&
+                              list.SelectedItems!.Contains(mod));
         _lastPressList = list;
         _lastPressMod = mod;
         _lastPressTicks = now;
@@ -4434,15 +4523,33 @@ public partial class MainWindow : Window
             var start = Math.Min(_selectionAnchorIndex, index);
             var end = Math.Max(_selectionAnchorIndex, index);
             var selection = list.Selection;
+            var autoScroll = list.AutoScrollToSelectedItem;
+            list.AutoScrollToSelectedItem = false;
             selection.BeginBatchUpdate();
             try
             {
-                selection.SelectRange(start, end);
+                if (!ctrl)
+                {
+                    list.SelectedItems!.Clear();
+                }
+
+                for (var rangeIndex = start; rangeIndex <= end; rangeIndex++)
+                {
+                    if (list.Items[rangeIndex] is ModInfo rangeMod &&
+                        !list.SelectedItems!.Contains(rangeMod))
+                    {
+                        list.SelectedItems!.Add(rangeMod);
+                    }
+                }
             }
             finally
             {
                 selection.EndBatchUpdate();
+                list.AutoScrollToSelectedItem = autoScroll;
             }
+
+            _rangeSelectionList = list;
+            _rangeSelectionMods = GetSelectedMods(list);
         }
         else if (ctrl)
         {
@@ -4460,8 +4567,8 @@ public partial class MainWindow : Window
         }
         else
         {
-            var isSelected = list.SelectedItems!.Contains(mod);
-            if (!shift && isSelected && list.SelectedItems!.Count > 1)
+            var isSelected = pressedWasMulti || list.SelectedItems!.Contains(mod);
+            if (isSelected && list.SelectedItems!.Count > 1)
             {
                 _pendingCollapseList = list;
                 _pendingCollapseMod = mod;
@@ -4475,6 +4582,12 @@ public partial class MainWindow : Window
 
             _selectionAnchorList = list;
             _selectionAnchorIndex = index;
+        }
+
+        if (pressedWasMulti && !shift && !ctrl)
+        {
+            RestorePressedMultiSelection(list);
+            Dispatcher.UIThread.Post(() => RestorePressedMultiSelection(list));
         }
 
         _refreshing = false;
@@ -5098,6 +5211,10 @@ public partial class MainWindow : Window
 
         var wasDragging = _customDragActive;
         var payload = _dragPayload;
+        _pressedMultiList = null;
+        _pressedMultiMods = null;
+        _rangeSelectionList = null;
+        _rangeSelectionMods = null;
         var target = wasDragging ? GetTargetListAt(e) : null;
         var targetIndex = target is null
             ? 0
@@ -5246,6 +5363,14 @@ public partial class MainWindow : Window
         }
 
         var mods = GetSelectedMods(list);
+        if (mods.Count <= 1 &&
+            ReferenceEquals(_pressedMultiList, list) &&
+            _pressedMultiMods is { Count: > 1 })
+        {
+            RestorePressedMultiSelection(list);
+            mods = _pressedMultiMods.ToList();
+        }
+
         if (mods.Count == 0)
         {
             return;
@@ -6182,7 +6307,7 @@ public partial class MainWindow : Window
         try
         {
             var export = await Task.Run(() =>
-                ModpackRepoExporter.Export(
+                ModpackRepoExporter.Prepare(
                     _packRoot,
                     instance,
                     packageId => SelectModForInstance(packageId, instance)
@@ -6193,12 +6318,25 @@ public partial class MainWindow : Window
                 _gameInstallation?.GamePath,
                 _config.Language,
                 _config.ModpackIndexUrl,
-                instance
+                instance,
+                progress => Task.Run(() =>
+                    ModpackRepoExporter.MaterializeLocalMods(
+                        export.RepoPath,
+                        instance,
+                        packageId => SelectModForInstance(packageId, instance),
+                        progress,
+                        _config.Language
+                    ))
             );
             await window.ShowDialog(this);
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Error("Export instance: " + instance.FolderName, exception);
+            ShowToast(Localization.ExportCollectionFailed(
+                _config.Language,
+                exception.Message
+            ));
         }
     }
 
