@@ -1,4 +1,4 @@
-﻿<Window xmlns="https://github.com/avaloniaui"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:PackFrame"
         x:Class="PackFrame.ModpackWindow"
@@ -106,7 +106,7 @@
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Spacing="10">
                         <Border Height="240"
-                                Background="#182938"
+                                Background="{DynamicResource AppBackgroundBrush}"
                                 HorizontalAlignment="Stretch">
                             <Image x:Name="CoverImage"
                                    Stretch="Uniform"
