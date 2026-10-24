@@ -5,9 +5,12 @@
     <Application.Resources>
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="#20354A" />
         <SolidColorBrush x:Key="SecondaryBrush" Color="#455364" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#EAF1F8" />
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#C3D4E4" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#9AA7B8" />
         <ControlTheme x:Key="ModListItem" TargetType="ListBoxItem">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="#EAF1F8" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="Padding" Value="6,3" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -106,14 +109,14 @@
             </Setter>
         </Style>
         <Style Selector="ScrollBar:vertical /template/ Thumb:pointerover /template/ Border">
-            <Setter Property="Background" Value="#EAF1F8" />
+            <Setter Property="Background" Value="{DynamicResource PrimaryTextBrush}" />
         </Style>
         <Style Selector="ScrollBar:vertical /template/ Thumb:pressed /template/ Border">
-            <Setter Property="Background" Value="#EAF1F8" />
+            <Setter Property="Background" Value="{DynamicResource PrimaryTextBrush}" />
         </Style>        <Style Selector="ToolTip">
             <Setter Property="MaxWidth" Value="1400" />
             <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
-            <Setter Property="Foreground" Value="#EAF1F8" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="10,6" />
@@ -164,10 +167,10 @@
         </Style>
         <Style Selector="TextBox">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="#EAF1F8" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="SelectionBrush" Value="#5C6E82" />
-            <Setter Property="SelectionForegroundBrush" Value="#EAF1F8" />
-            <Setter Property="CaretBrush" Value="#EAF1F8" />
+            <Setter Property="SelectionForegroundBrush" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="ClearSelectionOnLostFocus" Value="False" />
             <Setter Property="IsInactiveSelectionHighlightEnabled" Value="True" />
             <Setter Property="BorderThickness" Value="0" />
@@ -196,7 +199,7 @@
             <Setter Property="Padding" Value="6,3" />
             <Setter Property="Margin" Value="0" />
             <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="Foreground" Value="#EAF1F8" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="Normal" />
         </Style>
@@ -217,7 +220,7 @@
         </Style>
         <Style Selector="ComboBox">
             <Setter Property="Background" Value="{StaticResource SecondaryBrush}" />
-            <Setter Property="Foreground" Value="#EAF1F8" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="CornerRadius" Value="0" />
             <Setter Property="Padding" Value="8,4" />
@@ -227,7 +230,7 @@
         </Style>
         <Style Selector="Button.footerlink">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="#EAF1F8" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="2,0" />
             <Setter Property="MinWidth" Value="0" />

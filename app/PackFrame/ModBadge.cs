@@ -14,7 +14,7 @@ public sealed class ModBadge : Control
 
     private static readonly Typeface BadgeTypeface = new(FontFamily.Default);
     private static readonly IBrush BadgeBrush =
-        new SolidColorBrush(Color.Parse("#EAF1F8"));
+        ThemeService.PrimaryTextBrush;
     // Lazily populated on the UI render thread, after Avalonia's font services exist.
     private static readonly Dictionary<(string, double), FormattedText> TextCache = new();
 

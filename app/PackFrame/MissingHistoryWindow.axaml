@@ -15,7 +15,7 @@
             <TextBlock x:Name="TitleText"
                        FontSize="21"
                        FontWeight="SemiBold"
-                       Foreground="#EAF1F8"
+                       Foreground="{DynamicResource PrimaryTextBrush}"
                        VerticalAlignment="Center" />
             <Button x:Name="ClearButton"
                     Grid.Column="1"
@@ -27,7 +27,7 @@
         <TextBlock x:Name="SummaryText"
                    Grid.Row="1"
                    Margin="0,10,0,0"
-                   Foreground="#C3D4E4"
+                   Foreground="{DynamicResource SecondaryTextBrush}"
                    TextWrapping="Wrap" />
 
         <Border Grid.Row="2"
@@ -38,27 +38,27 @@
                 <Border Background="{DynamicResource SecondaryBrush}" Padding="12,9">
                     <Grid ColumnDefinitions="2*,1.1*,1.5*,2*,1.2*">
                         <TextBlock x:Name="LabelHeader"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,12,0" />
                         <TextBlock x:Name="AuthorHeader"
                                    Grid.Column="1"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,12,0" />
                         <TextBlock x:Name="PackageHeader"
                                    Grid.Column="2"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,12,0" />
                         <TextBlock x:Name="LinkHeader"
                                    Grid.Column="3"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,12,0" />
                         <TextBlock x:Name="LastMissingHeader"
                                    Grid.Column="4"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold" />
                     </Grid>
                 </Border>
@@ -73,27 +73,27 @@
                                             Padding="12,9">
                                         <Grid ColumnDefinitions="2*,1.1*,1.5*,2*,1.2*">
                                             <SelectableTextBlock Text="{Binding Label}"
-                                                                 Foreground="#EAF1F8"
+                                                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                                                  TextWrapping="Wrap"
                                                                  Margin="0,0,12,0" />
                                             <SelectableTextBlock Grid.Column="1"
                                                                  Text="{Binding Author}"
-                                                                 Foreground="#EAF1F8"
+                                                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                                                  TextWrapping="Wrap"
                                                                  Margin="0,0,12,0" />
                                             <SelectableTextBlock Grid.Column="2"
                                                                  Text="{Binding PackageId}"
-                                                                 Foreground="#EAF1F8"
+                                                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                                                  TextWrapping="Wrap"
                                                                  Margin="0,0,12,0" />
                                             <SelectableTextBlock Grid.Column="3"
                                                                  Text="{Binding Link}"
-                                                                 Foreground="#EAF1F8"
+                                                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                                                  TextWrapping="Wrap"
                                                                  Margin="0,0,12,0" />
                                             <SelectableTextBlock Grid.Column="4"
                                                                  Text="{Binding LastMissingAt}"
-                                                                 Foreground="#EAF1F8"
+                                                                 Foreground="{DynamicResource PrimaryTextBrush}"
                                                                  TextWrapping="Wrap" />
                                         </Grid>
                                     </Border>
@@ -102,7 +102,7 @@
                         </ItemsControl>
                     </ScrollViewer>
                     <TextBlock x:Name="EmptyText"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                IsVisible="False" />

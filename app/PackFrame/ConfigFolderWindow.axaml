@@ -10,7 +10,7 @@
         RequestedThemeVariant="Dark">
     <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*,Auto">
         <TextBlock x:Name="DescriptionText"
-                   Foreground="#C3D4E4"
+                   Foreground="{DynamicResource SecondaryTextBrush}"
                    TextWrapping="Wrap" />
         <Border x:Name="PathField"
                 Grid.Row="1"
@@ -44,7 +44,7 @@
                     Padding="12,4"
                     Click="OnAutoDetectClick" />
             <TextBlock x:Name="AutoDetectStatus"
-                       Foreground="#C3D4E4"
+                       Foreground="{DynamicResource SecondaryTextBrush}"
                        VerticalAlignment="Center"
                        TextWrapping="Wrap" />
         </StackPanel>

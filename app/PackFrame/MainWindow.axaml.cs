@@ -21,7 +21,7 @@ namespace PackFrame;
 
 public partial class MainWindow : Window
 {
-    private static readonly SolidColorBrush TextBrush = new(Color.Parse("#EAF1F8"));
+    private static readonly SolidColorBrush TextBrush = ThemeService.PrimaryTextBrush;
     private static readonly SolidColorBrush SecondaryBorderBrush = ThemeService.SecondaryBrush;
     private static readonly TextDecorationCollection StrikethroughDecorations = new()
     {

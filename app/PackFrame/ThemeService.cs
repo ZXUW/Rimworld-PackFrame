@@ -24,19 +24,47 @@ internal static class ThemeService
     public static SolidColorBrush SecondaryBrush { get; } =
         new(Color.Parse("#455364"));
 
+    public static SolidColorBrush PrimaryTextBrush { get; } =
+        new(Color.Parse("#EAF1F8"));
+
+    public static SolidColorBrush SecondaryTextBrush { get; } =
+        new(Color.Parse("#C3D4E4"));
+
+    public static SolidColorBrush MutedTextBrush { get; } =
+        new(Color.Parse("#9AA7B8"));
+
     public static void Apply(string? hex)
     {
         var value = Normalize(hex);
         var background = Color.Parse(value);
         BackgroundBrush = new SolidColorBrush(background);
         SecondaryBrush.Color = Mix(background, Colors.White, 0.16);
+        var textBase = Luminance(background) > 128 ? Colors.Black : Colors.White;
+        PrimaryTextBrush.Color = Mix(background, textBase, 0.90);
+        SecondaryTextBrush.Color = Mix(background, textBase, 0.75);
+        MutedTextBrush.Color = Mix(background, textBase, 0.55);
         if (Application.Current is { } application)
         {
             application.Resources["AppBackgroundBrush"] = BackgroundBrush;
-            if (application.Resources["SecondaryBrush"] is SolidColorBrush secondary)
-            {
-                secondary.Color = SecondaryBrush.Color;
-            }
+            UpdateResource(application, "SecondaryBrush", SecondaryBrush);
+            UpdateResource(application, "PrimaryTextBrush", PrimaryTextBrush);
+            UpdateResource(application, "SecondaryTextBrush", SecondaryTextBrush);
+            UpdateResource(application, "MutedTextBrush", MutedTextBrush);
+        }
+    }
+
+    private static double Luminance(Color color) =>
+        (color.R + color.G + color.B) / 3.0;
+
+    private static void UpdateResource(
+        Application application,
+        string key,
+        SolidColorBrush brush
+    )
+    {
+        if (application.Resources[key] is SolidColorBrush existing)
+        {
+            existing.Color = brush.Color;
         }
     }
 

@@ -13,7 +13,7 @@
         <TextBlock x:Name="TitleText"
                    FontSize="21"
                    FontWeight="SemiBold"
-                   Foreground="#EAF1F8" />
+                   Foreground="{DynamicResource PrimaryTextBrush}" />
 
         <Grid Grid.Row="1" Margin="0,12,0,0">
             <ScrollViewer x:Name="RepoPage"
@@ -22,7 +22,7 @@
                 <StackPanel Spacing="10">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock x:Name="RepoLabel"
-                                   Foreground="#C3D4E4"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontWeight="SemiBold"
                                    VerticalAlignment="Center" />
                         <Button x:Name="OpenRepoButton"
@@ -33,16 +33,16 @@
                                 Click="OnOpenRepoClick" />
                     </Grid>
                     <SelectableTextBlock x:Name="RepoPath"
-                                         Foreground="#EAF1F8"
+                                         Foreground="{DynamicResource PrimaryTextBrush}"
                                          TextWrapping="Wrap" />
                     <TextBlock x:Name="SummaryText"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                TextWrapping="Wrap" />
 
                     <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
                         <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,12,0">
                             <TextBlock x:Name="PackNameLabel"
-                                       Foreground="#C3D4E4"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontWeight="SemiBold" />
                             <Border Classes="field" MinHeight="34">
                                 <TextBox x:Name="PackNameBox"
@@ -52,7 +52,7 @@
                                          VerticalContentAlignment="Center" />
                             </Border>
                             <TextBlock x:Name="PackDescriptionLabel"
-                                       Foreground="#C3D4E4"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontWeight="SemiBold"
                                        Margin="0,2,0,0" />
                             <Border Classes="field" MinHeight="58">
@@ -83,7 +83,7 @@
                                 <TextBlock x:Name="CoverPlaceholder"
                                            Text="+"
                                            FontSize="28"
-                                           Foreground="#9AA7B8"
+                                           Foreground="{DynamicResource MutedTextBrush}"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center" />
                             </Panel>
@@ -91,12 +91,12 @@
                     </Grid>
 
                     <StackPanel Spacing="4" Margin="0,8,0,0">
-                        <TextBlock x:Name="PackVersionLabel" Foreground="#C3D4E4" FontWeight="SemiBold" />
+                        <TextBlock x:Name="PackVersionLabel" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold" />
                         <Border Classes="field" MinHeight="34">
                             <TextBox x:Name="PackVersionBox" Background="Transparent" BorderThickness="0" CornerRadius="0" />
                         </Border>
-                        <SelectableTextBlock x:Name="PackRevisionText" Foreground="#C3D4E4" TextWrapping="Wrap" />
-                        <TextBlock x:Name="PackChangelogLabel" Foreground="#C3D4E4" FontWeight="SemiBold" />
+                        <SelectableTextBlock x:Name="PackRevisionText" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="PackChangelogLabel" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold" />
                         <Border Classes="field" MinHeight="70">
                             <TextBox x:Name="PackChangelogBox" Background="Transparent" BorderThickness="0" CornerRadius="0"
                                      AcceptsReturn="True" TextWrapping="Wrap" />
@@ -105,7 +105,7 @@
                     <Grid ColumnDefinitions="*,*" Margin="0,8,0,0">
                         <StackPanel Grid.Column="0" Margin="0,0,6,0">
                             <TextBlock x:Name="LocalHeader"
-                                       Foreground="#C3D4E4"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontWeight="SemiBold" />
                             <ListBox x:Name="LocalList"
                                      Height="260"
@@ -115,7 +115,7 @@
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="6,0,0,0">
                             <TextBlock x:Name="WorkshopHeader1"
-                                       Foreground="#C3D4E4"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontWeight="SemiBold" />
                             <ListBox x:Name="WorkshopList1"
                                      Height="260"
@@ -126,7 +126,7 @@
                     </Grid>
 
                     <TextBlock x:Name="MissingHeader"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,8,0,0" />
                     <ListBox x:Name="MissingList"
@@ -140,7 +140,7 @@
                   IsVisible="False"
                   RowDefinitions="Auto,*,Auto,Auto,Auto">
                 <TextBlock x:Name="WorkshopHeader2"
-                           Foreground="#C3D4E4"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            FontWeight="SemiBold" />
                 <ListBox x:Name="WorkshopList2"
                          Grid.Row="1"
@@ -149,7 +149,7 @@
                          BorderThickness="1" />
                 <StackPanel Grid.Row="2" Spacing="4">
                     <TextBlock x:Name="CollectionNameLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold" />
                     <Border Classes="field" MinHeight="36">
                         <TextBox x:Name="CollectionNameBox"
@@ -160,7 +160,7 @@
                     </Border>
                     <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
                         <TextBlock x:Name="CollectionDescriptionLabel"
-                                   Foreground="#C3D4E4"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontWeight="SemiBold"
                                    VerticalAlignment="Center" />
                         <Button x:Name="InsertFrameworkLinkButton"
@@ -195,12 +195,12 @@
                                 Click="OnOpenCollectionClick" />
                     </StackPanel>
                     <TextBlock x:Name="PrivateNote"
-                               Foreground="#9AA7B8"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                TextWrapping="Wrap" />
                 </StackPanel>
                 <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
                     <TextBlock x:Name="StatusText"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                TextWrapping="Wrap"
                                VerticalAlignment="Center" />
                     <Button x:Name="CancelCreateButton"
@@ -219,14 +219,14 @@
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="GithubPathLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold" />
                     <SelectableTextBlock x:Name="GithubPath"
-                                         Foreground="#EAF1F8"
+                                         Foreground="{DynamicResource PrimaryTextBrush}"
                                          TextWrapping="Wrap" />
 
                     <TextBlock x:Name="GithubTokenLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Grid ColumnDefinitions="*,Auto">
@@ -247,11 +247,11 @@
                                 Click="OnGetTokenClick" />
                     </Grid>
                     <TextBlock x:Name="GithubTokenHint"
-                               Foreground="#9AA7B8"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                TextWrapping="Wrap" />
 
                     <TextBlock x:Name="GithubRepoNameLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="36">
@@ -263,11 +263,11 @@
                                  TextChanged="OnRepoNameChanged" />
                     </Border>
                     <TextBlock x:Name="GithubRepoNormalizedLabel"
-                               Foreground="#9AA7B8"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                TextWrapping="Wrap" />
 
                     <TextBlock x:Name="GithubRepoDescriptionLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="58">
@@ -281,7 +281,7 @@
                     </Border>
 
                     <TextBlock x:Name="GithubCollectionUrlLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="36">
@@ -306,7 +306,7 @@
                                 Click="OnOpenGithubRepoClick" />
                     </StackPanel>
                     <TextBlock x:Name="GithubStatus"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                TextWrapping="Wrap" />
 
                     <Border Height="1" Background="{DynamicResource SecondaryBrush}" Margin="0,10,0,0" />
@@ -325,17 +325,17 @@
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="GiteeIntro"
-                               Foreground="#EAF1F8"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
                                TextWrapping="Wrap" />
                     <TextBlock x:Name="GiteePathLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold" />
                     <SelectableTextBlock x:Name="GiteePath"
-                                         Foreground="#EAF1F8"
+                                         Foreground="{DynamicResource PrimaryTextBrush}"
                                          TextWrapping="Wrap" />
 
                     <TextBlock x:Name="GiteeTokenLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Grid ColumnDefinitions="*,Auto">
@@ -356,11 +356,11 @@
                                 Click="OnGetGiteeTokenClick" />
                     </Grid>
                     <TextBlock x:Name="GiteeTokenHint"
-                               Foreground="#9AA7B8"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                TextWrapping="Wrap" />
 
                     <TextBlock x:Name="GiteeRepoNameLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="36">
@@ -372,7 +372,7 @@
                                  TextChanged="OnGiteeRepoNameChanged" />
                     </Border>
                     <TextBlock x:Name="GiteeRepoNormalizedLabel"
-                               Foreground="#9AA7B8"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                TextWrapping="Wrap" />
 
                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
@@ -389,7 +389,7 @@
                                 Click="OnOpenGiteeRepoClick" />
                     </StackPanel>
                     <TextBlock x:Name="GiteeStatus"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                TextWrapping="Wrap" />
 
                     <Border Height="1" Background="{DynamicResource SecondaryBrush}" Margin="0,10,0,0" />
@@ -408,10 +408,10 @@
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="IndexIntro"
-                               Foreground="#EAF1F8"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
                                TextWrapping="Wrap" />
                     <TextBlock x:Name="IndexRepoLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="36">
@@ -422,7 +422,7 @@
                                  VerticalContentAlignment="Center" />
                     </Border>
                     <TextBlock x:Name="IndexGiteeRepoLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="36">
@@ -433,7 +433,7 @@
                                  VerticalContentAlignment="Center" />
                     </Border>
                     <TextBlock x:Name="IndexTokenLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="36">
@@ -445,7 +445,7 @@
                                  VerticalContentAlignment="Center" />
                     </Border>
                     <TextBlock x:Name="IndexGiteeTokenLabel"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"
                                Margin="0,6,0,0" />
                     <Border Classes="field" MinHeight="36">
@@ -457,7 +457,7 @@
                                  VerticalContentAlignment="Center" />
                     </Border>
                     <TextBlock x:Name="IndexHint"
-                               Foreground="#9AA7B8"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
                         <Button x:Name="SubmitIndexButton"
@@ -479,7 +479,7 @@
                                 Click="OnOpenGiteeIndexPrClick" />
                     </StackPanel>
                     <TextBlock x:Name="IndexStatus"
-                               Foreground="#C3D4E4"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                TextWrapping="Wrap" />
                     <Border Height="1" Background="{DynamicResource SecondaryBrush}" Margin="0,10,0,0" />
                     <Button x:Name="OpenRepoIndexButton"

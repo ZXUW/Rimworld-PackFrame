@@ -15,7 +15,7 @@
             <TextBlock x:Name="TitleText"
                        FontSize="21"
                        FontWeight="SemiBold"
-                       Foreground="#EAF1F8"
+                       Foreground="{DynamicResource PrimaryTextBrush}"
                        VerticalAlignment="Center" />
             <Button x:Name="RefreshButton"
                     Grid.Column="1"
@@ -29,7 +29,7 @@
               ColumnDefinitions="Auto,*,Auto"
               Margin="0,10,0,0">
             <TextBlock x:Name="RepoLabel"
-                       Foreground="#C3D4E4"
+                       Foreground="{DynamicResource SecondaryTextBrush}"
                        VerticalAlignment="Center"
                        Margin="0,0,8,0" />
             <Border Grid.Column="1"
@@ -64,11 +64,11 @@
                     <Border Background="{DynamicResource SecondaryBrush}" Padding="10,8">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock x:Name="ListHeader"
-                                       Foreground="#EAF1F8"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                        FontWeight="SemiBold" />
                             <TextBlock x:Name="ListCount"
                                        Grid.Column="1"
-                                       Foreground="#C3D4E4" />
+                                       Foreground="{DynamicResource SecondaryTextBrush}" />
                         </Grid>
                     </Border>
                     <ListBox x:Name="PackList"
@@ -79,17 +79,17 @@
                             <DataTemplate x:DataType="local:ModpackListItem">
                                 <StackPanel Margin="4,3">
                                     <TextBlock Text="{Binding Name}"
-                                               Foreground="#EAF1F8"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding Summary}"
-                                               Foreground="#C3D4E4"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                TextWrapping="Wrap"
                                                MaxLines="2"
                                                TextTrimming="CharacterEllipsis"
                                                Margin="0,3,0,0" />
                                     <TextBlock Text="{Binding CountText}"
-                                               Foreground="#9AA7B8"
+                                               Foreground="{DynamicResource MutedTextBrush}"
                                                Margin="0,3,0,0" />
                                 </StackPanel>
                             </DataTemplate>
@@ -116,24 +116,24 @@
                         <SelectableTextBlock x:Name="PackTitle"
                                              FontSize="21"
                                              FontWeight="SemiBold"
-                                             Foreground="#EAF1F8"
+                                             Foreground="{DynamicResource PrimaryTextBrush}"
                                              TextWrapping="Wrap" />
                         <SelectableTextBlock x:Name="PackMeta"
-                                             Foreground="#C3D4E4"
+                                             Foreground="{DynamicResource SecondaryTextBrush}"
                                              TextWrapping="Wrap" />
 
                         <SelectableTextBlock x:Name="PackDescription"
-                                             Foreground="#EAF1F8"
+                                             Foreground="{DynamicResource PrimaryTextBrush}"
                                              TextWrapping="Wrap" />
                         <Border BorderBrush="{StaticResource SecondaryBrush}"
                                 BorderThickness="0,1,0,0"
                                 Padding="0,10,0,0">
                             <StackPanel Spacing="6">
                                 <TextBlock x:Name="ModsHeader"
-                                           Foreground="#C3D4E4"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontWeight="SemiBold" />
                                 <TextBlock x:Name="EmptyModsText"
-                                           Foreground="#C3D4E4"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            TextWrapping="Wrap"
                                            IsVisible="False" />
                                 <ItemsControl x:Name="ModList">
@@ -144,17 +144,17 @@
                                                     Padding="0,6">
                                                 <Grid ColumnDefinitions="*,Auto,Auto">
                                                     <TextBlock Text="{Binding Name}"
-                                                               Foreground="#EAF1F8"
+                                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                                TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Grid.Column="1"
                                                                Text="{Binding Detail}"
-                                                               Foreground="#9AA7B8"
+                                                               Foreground="{DynamicResource MutedTextBrush}"
                                                                TextTrimming="CharacterEllipsis"
                                                                MaxWidth="280"
                                                                Margin="8,0" />
                                                     <TextBlock Grid.Column="2"
                                                                Text="{Binding GameVersion}"
-                                                               Foreground="#C3D4E4"
+                                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                                TextTrimming="CharacterEllipsis"
                                                                Margin="8,0,0,0" />
                                                 </Grid>
@@ -170,7 +170,7 @@
                                 Padding="0,10,0,0">
                             <StackPanel Spacing="6">
                                 <TextBlock x:Name="LinkLabel"
-                                           Foreground="#C3D4E4"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontWeight="SemiBold" />
                                 <Grid ColumnDefinitions="*,Auto">
                                     <Border Classes="field"
@@ -219,7 +219,7 @@
                                     Padding="24,8"
                                     Click="OnApplyConfigClick" />
                         </StackPanel>
-                        <TextBlock x:Name="UpdateVersionText" Foreground="#EAF1F8" TextWrapping="Wrap" />
+                        <TextBlock x:Name="UpdateVersionText" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
                         <WrapPanel>
                             <Button x:Name="CheckUpdateButton" Theme="{StaticResource FlatButton}" Margin="0,4,8,0" Click="OnCheckUpdateClick" />
                             <Button x:Name="BindPackButton" Theme="{StaticResource FlatButton}" Margin="0,4,8,0" Click="OnBindPackClick" />
@@ -235,7 +235,7 @@
               Margin="0,10,0,0">
             <StackPanel Spacing="4" VerticalAlignment="Center">
                 <TextBlock x:Name="StatusText"
-                           Foreground="#C3D4E4"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            TextWrapping="Wrap"
                            VerticalAlignment="Center" />
             </StackPanel>

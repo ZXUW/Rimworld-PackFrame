@@ -15,7 +15,7 @@
             <TextBlock x:Name="TitleText"
                        FontSize="21"
                        FontWeight="SemiBold"
-                       Foreground="#EAF1F8"
+                       Foreground="{DynamicResource PrimaryTextBrush}"
                        VerticalAlignment="Center" />
             <Button x:Name="HistoryButton"
                     Grid.Column="1"
@@ -26,18 +26,18 @@
 
         <StackPanel Grid.Row="1" Margin="0,10,0,0" Spacing="4">
             <TextBlock x:Name="SummaryText"
-                       Foreground="#EAF1F8"
+                       Foreground="{DynamicResource PrimaryTextBrush}"
                        TextWrapping="Wrap" />
             <TextBlock x:Name="SourceText"
-                       Foreground="#C3D4E4"
+                       Foreground="{DynamicResource SecondaryTextBrush}"
                        TextWrapping="Wrap" />
             <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
                 <TextBlock x:Name="MappingLabel"
-                           Foreground="#C3D4E4"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            Margin="0,0,8,0" />
                 <SelectableTextBlock x:Name="MappingPathText"
                                      Grid.Column="1"
-                                     Foreground="#EAF1F8"
+                                     Foreground="{DynamicResource PrimaryTextBrush}"
                                      TextTrimming="CharacterEllipsis" />
             </Grid>
         </StackPanel>
@@ -50,22 +50,22 @@
                 <Border Background="{DynamicResource SecondaryBrush}" Padding="12,9">
                     <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*">
                         <TextBlock x:Name="LabelHeader"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,12,0" />
                         <TextBlock x:Name="AuthorHeader"
                                    Grid.Column="1"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,12,0" />
                         <TextBlock x:Name="PackageHeader"
                                    Grid.Column="2"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,12,0" />
                         <TextBlock x:Name="LinkHeader"
                                    Grid.Column="3"
-                                   Foreground="#EAF1F8"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold" />
                     </Grid>
                 </Border>
@@ -79,22 +79,22 @@
                                         Padding="12,9">
                                     <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*">
                                         <SelectableTextBlock Text="{Binding Label}"
-                                                             Foreground="#EAF1F8"
+                                                             Foreground="{DynamicResource PrimaryTextBrush}"
                                                              TextWrapping="Wrap"
                                                              Margin="0,0,12,0" />
                                         <SelectableTextBlock Grid.Column="1"
                                                              Text="{Binding Author}"
-                                                             Foreground="#EAF1F8"
+                                                             Foreground="{DynamicResource PrimaryTextBrush}"
                                                              TextWrapping="Wrap"
                                                              Margin="0,0,12,0" />
                                         <SelectableTextBlock Grid.Column="2"
                                                              Text="{Binding PackageId}"
-                                                             Foreground="#EAF1F8"
+                                                             Foreground="{DynamicResource PrimaryTextBrush}"
                                                              TextWrapping="Wrap"
                                                              Margin="0,0,12,0" />
                                         <SelectableTextBlock Grid.Column="3"
                                                              Text="{Binding Link}"
-                                                             Foreground="#EAF1F8"
+                                                             Foreground="{DynamicResource PrimaryTextBrush}"
                                                              TextWrapping="Wrap" />
                                     </Grid>
                                 </Border>

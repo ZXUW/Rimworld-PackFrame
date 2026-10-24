@@ -10,7 +10,7 @@
         RequestedThemeVariant="Dark">
     <Grid Margin="16" RowDefinitions="*,Auto">
         <TextBlock x:Name="MessageText"
-                   Foreground="#EAF1F8"
+                   Foreground="{DynamicResource PrimaryTextBrush}"
                    TextWrapping="Wrap" />
         <StackPanel Grid.Row="1"
                     Orientation="Horizontal"
