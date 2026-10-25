@@ -1,0 +1,110 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PackFrame.OssSettingsWindow"
+        Title="OSS"
+        Width="580"
+        Height="570"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackgroundBrush}"
+        RequestedThemeVariant="Dark">
+    <Grid Margin="18" RowDefinitions="*,Auto">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="OssTitle"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryTextBrush}" />
+                <TextBlock x:Name="OssHint"
+                           Foreground="{DynamicResource MutedTextBrush}"
+                           TextWrapping="Wrap" />
+
+                <CheckBox x:Name="OssEnabledCheckBox"
+                          Foreground="{DynamicResource PrimaryTextBrush}"
+                          Margin="0,8,0,0" />
+
+                <TextBlock x:Name="EndpointLabel"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           FontWeight="SemiBold"
+                           Margin="0,8,0,0" />
+                <Border Classes="field" MinHeight="36">
+                    <TextBox x:Name="EndpointBox"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             CornerRadius="0"
+                             VerticalContentAlignment="Center" />
+                </Border>
+
+                <TextBlock x:Name="BucketLabel"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           FontWeight="SemiBold"
+                           Margin="0,6,0,0" />
+                <Border Classes="field" MinHeight="36">
+                    <TextBox x:Name="BucketBox"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             CornerRadius="0"
+                             VerticalContentAlignment="Center" />
+                </Border>
+
+                <TextBlock x:Name="PrefixLabel"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           FontWeight="SemiBold"
+                           Margin="0,6,0,0" />
+                <Border Classes="field" MinHeight="36">
+                    <TextBox x:Name="PrefixBox"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             CornerRadius="0"
+                             VerticalContentAlignment="Center" />
+                </Border>
+
+                <TextBlock x:Name="AccessKeyIdLabel"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           FontWeight="SemiBold"
+                           Margin="0,6,0,0" />
+                <Border Classes="field" MinHeight="36">
+                    <TextBox x:Name="AccessKeyIdBox"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             CornerRadius="0"
+                             VerticalContentAlignment="Center" />
+                </Border>
+
+                <TextBlock x:Name="AccessKeySecretLabel"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           FontWeight="SemiBold"
+                           Margin="0,6,0,0" />
+                <Border Classes="field" MinHeight="36">
+                    <TextBox x:Name="AccessKeySecretBox"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             CornerRadius="0"
+                             PasswordChar="*"
+                             VerticalContentAlignment="Center" />
+                </Border>
+
+                <TextBlock x:Name="NoteText"
+                           Foreground="{DynamicResource MutedTextBrush}"
+                           TextWrapping="Wrap" />
+                <TextBlock x:Name="StatusText"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,12,0,0">
+            <Button x:Name="CancelButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="34"
+                    Click="OnCancelClick" />
+            <Button x:Name="SaveButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="34"
+                    Click="OnSaveClick" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -20,6 +20,7 @@ public partial class ExportCollectionWindow : Window
     private readonly string? _gamePath;
     private readonly string _language;
     private readonly string _indexUrl;
+    private readonly AppConfig _appConfig;
     private int _page = 1;
     private bool _busy;
     private string? _collectionUrl;
@@ -56,6 +57,7 @@ public partial class ExportCollectionWindow : Window
         );
         _language = "zh-Hans";
         _indexUrl = GitHubIndexPublisher.DefaultIndexUrl;
+        _appConfig = new AppConfig();
     }
 
     public ExportCollectionWindow(
@@ -64,13 +66,15 @@ public partial class ExportCollectionWindow : Window
         string? language,
         string? indexUrl,
         ManagedInstance? sourceInstance = null,
-        Func<Action<string>, Task>? packLocalMods = null
+        Func<Action<string>, Task>? packLocalMods = null,
+        AppConfig? appConfig = null
     )
         : this()
     {
         _result = result;
         _sourceInstance = sourceInstance;
         _packLocalMods = packLocalMods;
+        _appConfig = appConfig ?? new AppConfig();
         _gamePath = gamePath;
         _language = string.IsNullOrWhiteSpace(language) ? "zh-Hans" : language;
         _indexUrl = string.IsNullOrWhiteSpace(indexUrl)
@@ -240,10 +244,10 @@ public partial class ExportCollectionWindow : Window
 
         GiteeIntro.Text = OperationText.Choose(
             _language,
-            "Pack local mods once, then upload the same repository to Gitee.",
-            "先打包本地模组，再把同一份合集仓库上传到 Gitee。",
-            "先打包本地模組，再把同一份合集倉庫上傳到 Gitee。",
-            "ローカル MOD を一度パッケージしてから、同じリポジトリを Gitee にアップロードします。"
+            "Upload the metadata directly. Pack local mods first only if you want the archive included.",
+            "可以直接上传合集信息；需要包含本地模组时再打包。",
+            "可以直接上傳合集資訊；需要包含本地模組時再打包。",
+            "メタデータはそのままアップロードできます。ローカル MOD を含める場合だけ先にパッケージしてください。"
         );
         GiteePathLabel.Text = Localization.ExportCollectionRepo(_language);
         GiteePath.Text = _result.RepoPath;
@@ -252,11 +256,15 @@ public partial class ExportCollectionWindow : Window
         );
         PackLocalModsStatus.Text = OperationText.Choose(
             _language,
-            "Pack local mods before uploading.",
-            "请先打包本地模组，打包完成后才能上传。",
-            "請先打包本地模組，打包完成後才能上傳。",
-            "アップロードする前にローカル MOD をパッケージしてください。"
+            "Upload directly, or pack local mods first to include them.",
+            "可以直接上传；需要包含本地模组时再打包。",
+            "可以直接上傳；需要包含本地模組時再打包。",
+            "そのままアップロードできます。ローカル MOD を含める場合は先にパッケージしてください。"
         );
+        OssSettingsButton.Content = OperationText.Choose(
+            _language, "OSS settings", "OSS 配置", "OSS 設定", "OSS 設定"
+        );
+        UpdateOssStatus();
         GiteeTokenLabel.Text = OperationText.Choose(
             _language, "Gitee token", "Gitee Token", "Gitee Token", "Gitee トークン"
         );
@@ -282,8 +290,8 @@ public partial class ExportCollectionWindow : Window
         _lastGiteeRepoNameDefault = _packName + "-Rimworld-PackFrame";
         GiteeRepoNameBox.Text = _lastGiteeRepoNameDefault;
         UpdateGiteeRepoNamePreview();
-        UploadGiteeButton.IsEnabled = false;
-        UploadGithubButton.IsEnabled = false;
+        UploadGiteeButton.IsEnabled = true;
+        UploadGithubButton.IsEnabled = true;
 
         LoadExistingCover();
         ShowPage(1);
@@ -651,12 +659,47 @@ public partial class ExportCollectionWindow : Window
         var giteeToken = IndexGiteeTokenBox.Text?.Trim();
         var githubUrl = IndexRepoUrlBox.Text?.Trim();
         var giteeUrl = IndexGiteeRepoUrlBox.Text?.Trim();
-        if (string.IsNullOrWhiteSpace(token) ||
-            (string.IsNullOrWhiteSpace(githubUrl) && string.IsNullOrWhiteSpace(giteeUrl)))
+        var hasGithub = !string.IsNullOrWhiteSpace(githubUrl);
+        var hasGitee = !string.IsNullOrWhiteSpace(giteeUrl);
+        if (!hasGithub && !hasGitee)
         {
             IndexStatus.Text = Localization.ExportCollectionIndexFailed(
                 _language,
-                "GitHub Token / at least one repository link is empty."
+                OperationText.Choose(
+                    _language,
+                    "At least one repository link is required.",
+                    "至少填写一个合集仓库链接。",
+                    "至少填寫一個合集倉庫連結。",
+                    "少なくとも 1 つのリポジトリリンクを入力してください。"
+                )
+            );
+            return;
+        }
+        if (hasGithub && string.IsNullOrWhiteSpace(token))
+        {
+            IndexStatus.Text = Localization.ExportCollectionIndexFailed(
+                _language,
+                OperationText.Choose(
+                    _language,
+                    "GitHub Token is required when a GitHub repository link is filled.",
+                    "填写 GitHub 仓库链接时必须填写 GitHub Token。",
+                    "填寫 GitHub 倉庫連結時必須填寫 GitHub Token。",
+                    "GitHub リポジトリリンクを入力する場合は GitHub Token が必要です。"
+                )
+            );
+            return;
+        }
+        if (hasGitee && string.IsNullOrWhiteSpace(giteeToken) && !hasGithub)
+        {
+            IndexStatus.Text = Localization.ExportCollectionIndexFailed(
+                _language,
+                OperationText.Choose(
+                    _language,
+                    "Gitee Token is required when only a Gitee repository link is filled.",
+                    "只填写 Gitee 仓库链接时必须填写 Gitee Token。",
+                    "只填寫 Gitee 倉庫連結時必須填寫 Gitee Token。",
+                    "Gitee リポジトリリンクのみ入力する場合は Gitee Token が必要です。"
+                )
             );
             return;
         }
@@ -676,7 +719,7 @@ public partial class ExportCollectionWindow : Window
             if (!string.IsNullOrWhiteSpace(githubUrl))
             {
                 info = await GitHubIndexPublisher.ResolvePackAsync(
-                    token,
+                    token!,
                     githubUrl
                 );
                 githubFile =
@@ -688,30 +731,33 @@ public partial class ExportCollectionWindow : Window
             }
 
             var repoFullName = $"{info.Owner}/{info.Repository}";
-            try
+            if (hasGithub)
             {
-                var result = await GitHubIndexPublisher.PublishAsync(
-                    token,
-                    _indexUrl,
-                    info.Owner,
-                    info.Repository,
-                    info.Id,
-                    info.Name,
-                    info.Summary,
-                    info.PackageIds,
-                    GithubCollectionUrlBox.Text?.Trim() ?? string.Empty,
-                    text => Dispatcher.UIThread.Post(() => IndexStatus.Text = text),
-                    language: _language,
-                    giteeFile: giteeFile,
-                    githubFile: githubFile
-                );
-                _indexPrUrl = result.PullRequestUrl;
-                successes.Add("GitHub: " + _indexPrUrl);
-                OpenIndexPrButton.IsVisible = true;
-            }
-            catch (Exception exception)
-            {
-                failures.Add("GitHub: " + exception.Message);
+                try
+                {
+                    var result = await GitHubIndexPublisher.PublishAsync(
+                        token!,
+                        _indexUrl,
+                        info.Owner,
+                        info.Repository,
+                        info.Id,
+                        info.Name,
+                        info.Summary,
+                        info.PackageIds,
+                        GithubCollectionUrlBox.Text?.Trim() ?? string.Empty,
+                        text => Dispatcher.UIThread.Post(() => IndexStatus.Text = text),
+                        language: _language,
+                        giteeFile: giteeFile,
+                        githubFile: githubFile
+                    );
+                    _indexPrUrl = result.PullRequestUrl;
+                    successes.Add("GitHub: " + _indexPrUrl);
+                    OpenIndexPrButton.IsVisible = true;
+                }
+                catch (Exception exception)
+                {
+                    failures.Add("GitHub: " + exception.Message);
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(giteeFile))
@@ -820,18 +866,6 @@ public partial class ExportCollectionWindow : Window
             return;
         }
 
-        if (!_localModsPacked)
-        {
-            GithubStatus.Text = OperationText.Choose(
-                _language,
-                "Pack local mods before uploading.",
-                "请先打包本地模组，打包完成后才能上传。",
-                "請先打包本地模組，打包完成後才能上傳。",
-                "アップロードする前にローカル MOD をパッケージしてください。"
-            );
-            return;
-        }
-
         var token = GithubTokenBox.Text?.Trim();
         var repoName = GiteeRepoNameBox.Text?.Trim();
         if (string.IsNullOrWhiteSpace(token) ||
@@ -844,6 +878,14 @@ public partial class ExportCollectionWindow : Window
             return;
         }
 
+        if (!await EnsureOssArchiveUploadedAsync(GithubStatus))
+        {
+            return;
+        }
+
+        var fallbackArchive = !OssPublisher.IsEnabled(_appConfig)
+            ? StageFallbackArchive()
+            : null;
         SavePackInfo();
         var description = GithubRepoDescriptionBox.Text?.Trim() ?? string.Empty;
         var collectionUrl = GithubCollectionUrlBox.Text?.Trim() ?? string.Empty;
@@ -871,6 +913,7 @@ public partial class ExportCollectionWindow : Window
             ));
 
             _githubUrl = published.Url;
+            FinishFallbackArchive(fallbackArchive);
             GithubStatus.Text = Localization.ExportCollectionGithubSuccess(
                 _language,
                 published.Url
@@ -881,6 +924,7 @@ public partial class ExportCollectionWindow : Window
         }
         catch (Exception exception)
         {
+            RestoreFallbackArchive(fallbackArchive);
             GithubStatus.Text = Localization.ExportCollectionGithubFailed(
                 _language,
                 exception.Message
@@ -932,9 +976,186 @@ public partial class ExportCollectionWindow : Window
         });
     }
 
+    private async void OnOssSettingsClick(object? sender, RoutedEventArgs e)
+    {
+        var window = new OssSettingsWindow(_appConfig, _language);
+        if (await window.ShowDialog<bool>(this))
+        {
+            UpdateOssStatus();
+        }
+    }
+
+    private void UpdateOssStatus()
+    {
+        if (!_appConfig.OssEnabled)
+        {
+            OssStatus.Text = OperationText.Choose(
+                _language,
+                "OSS upload is disabled. Local mods will use the Gitee/GitHub Release fallback.",
+                "OSS 上传已关闭。本地模组将使用 Gitee/GitHub Release 回退。",
+                "OSS 上傳已關閉。本地模組將使用 Gitee/GitHub Release 回退。",
+                "OSS アップロードは無効です。ローカル MOD は Gitee/GitHub Release のフォールバックを使用します。"
+            );
+            return;
+        }
+
+        OssStatus.Text = OssPublisher.IsConfigured(_appConfig)
+            ? OperationText.Choose(
+                _language,
+                "OSS configured: ",
+                "OSS 已配置：",
+                "OSS 已設定：",
+                "OSS 設定済み: "
+            ) + _appConfig.OssBucket
+            : OperationText.Choose(
+                _language,
+                "OSS is not configured. Local mods will not be uploaded.",
+                "尚未配置 OSS，本地模组不会上传。",
+                "尚未設定 OSS，本地模組不會上傳。",
+                "OSS が未設定のため、ローカル MOD はアップロードされません。"
+            );
+    }
+
+    private string? StageFallbackArchive()
+    {
+        var uploadPath = ModpackRepoExporter.GetUploadArchivePath(_result.RepoPath);
+        if (!File.Exists(uploadPath))
+        {
+            return null;
+        }
+
+        var fallbackPath = Path.Combine(_result.RepoPath, "mods.zip");
+        if (File.Exists(fallbackPath))
+        {
+            File.Delete(fallbackPath);
+        }
+        File.Move(uploadPath, fallbackPath);
+        ModpackRepoExporter.SetModsArchive(_result.RepoPath, "mods.zip");
+        return fallbackPath;
+    }
+
+    private void FinishFallbackArchive(string? fallbackPath)
+    {
+        if (fallbackPath is null || !File.Exists(fallbackPath))
+        {
+            return;
+        }
+
+        var finishedPath = ModpackRepoExporter.GetFinishedArchivePath(_result.RepoPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(finishedPath)!);
+        var manifestPath = Path.Combine(_result.RepoPath, "pack.json");
+        var manifest = System.Text.Json.JsonSerializer.Deserialize(
+            File.ReadAllText(manifestPath),
+            PackFrameJsonContext.Default.ModpackRepoManifest
+        );
+        if (manifest?.ModsArchive is { } archive &&
+            Uri.TryCreate(archive, UriKind.Absolute, out _))
+        {
+            File.Move(fallbackPath, finishedPath, true);
+        }
+        else
+        {
+            File.Copy(fallbackPath, finishedPath, true);
+        }
+    }
+
+    private static void RestoreFallbackArchive(string? fallbackPath)
+    {
+        if (fallbackPath is null || !File.Exists(fallbackPath))
+        {
+            return;
+        }
+
+        var repoPath = Path.GetDirectoryName(fallbackPath);
+        if (repoPath is null)
+        {
+            return;
+        }
+
+        var uploadPath = Path.Combine(
+            repoPath,
+            "upload",
+            Path.GetFileName(repoPath) + ".zip"
+        );
+        Directory.CreateDirectory(Path.GetDirectoryName(uploadPath)!);
+        File.Move(fallbackPath, uploadPath, true);
+    }
+
+    private async Task<bool> EnsureOssArchiveUploadedAsync(TextBlock status)
+    {
+        var uploadPath = ModpackRepoExporter.GetUploadArchivePath(_result.RepoPath);
+        var finishedPath = ModpackRepoExporter.GetFinishedArchivePath(_result.RepoPath);
+        if (!File.Exists(uploadPath))
+        {
+            return true;
+        }
+
+        if (!_appConfig.OssEnabled)
+        {
+            status.Text = OperationText.Choose(
+                _language,
+                "OSS upload is disabled; using the Gitee/GitHub Release fallback for the local mods archive.",
+                "OSS 上传已关闭；本地模组压缩包将使用 Gitee/GitHub Release 回退。",
+                "OSS 上傳已關閉；本地模組壓縮包將使用 Gitee/GitHub Release 回退。",
+                "OSS アップロードは無効です。ローカル MOD のアーカイブは Gitee/GitHub Release のフォールバックを使用します。"
+            );
+            return true;
+        }
+
+        if (!OssPublisher.IsConfigured(_appConfig))
+        {
+            status.Text = OperationText.Choose(
+                _language,
+                "OSS is not configured; using the Gitee/GitHub Release fallback for the local mods archive.",
+                "未配置 OSS，本地模组压缩包将回退到 Gitee/GitHub Release。",
+                "未設定 OSS，本地模組壓縮包將回退到 Gitee/GitHub Release。",
+                "OSS が未設定のため、ローカル MOD は Gitee/GitHub Release にフォールバックします。"
+            );
+            return true;
+        }
+
+        status.Text = OperationText.Choose(
+            _language,
+            "Uploading local mods archive to OSS...",
+            "正在上传本地模组压缩包到 OSS...",
+            "正在上傳本地模組壓縮包到 OSS...",
+            "ローカル MOD のアーカイブを OSS にアップロードしています..."
+        );
+        try
+        {
+            var url = await OssPublisher.UploadAsync(
+                _appConfig,
+                uploadPath,
+                Path.GetFileName(uploadPath)
+            );
+            ModpackRepoExporter.SetModsArchive(_result.RepoPath, url);
+            Directory.CreateDirectory(Path.GetDirectoryName(finishedPath)!);
+            File.Move(uploadPath, finishedPath, true);
+            status.Text = OperationText.Choose(
+                _language,
+                "Local mods archive uploaded to OSS.",
+                "本地模组压缩包已上传到 OSS。",
+                "本地模組壓縮包已上傳到 OSS。",
+                "ローカル MOD のアーカイブを OSS にアップロードしました。"
+            );
+            return true;
+        }
+        catch (Exception exception)
+        {
+            status.Text = OperationText.Choose(
+                _language,
+                "OSS upload failed: ",
+                "OSS 上传失败：",
+                "OSS 上傳失敗：",
+                "OSS アップロード失敗: "
+            ) + exception.Message;
+            return false;
+        }
+    }
+
     private async void OnPackLocalModsClick(object? sender, RoutedEventArgs e)
     {
-        if (_packing || _localModsPacked)
+        if (_busy || _packing || _localModsPacked)
         {
             return;
         }
@@ -998,6 +1219,8 @@ public partial class ExportCollectionWindow : Window
         finally
         {
             _packing = false;
+            UploadGiteeButton.IsEnabled = true;
+            UploadGithubButton.IsEnabled = true;
             if (!_localModsPacked)
             {
                 PackLocalModsButton.IsEnabled = true;
@@ -1009,18 +1232,6 @@ public partial class ExportCollectionWindow : Window
     {
         if (_busy || _packing)
         {
-            return;
-        }
-
-        if (!_localModsPacked)
-        {
-            GiteeStatus.Text = OperationText.Choose(
-                _language,
-                "Pack local mods before uploading.",
-                "请先打包本地模组，打包完成后才能上传。",
-                "請先打包本地模組，打包完成後才能上傳。",
-                "アップロードする前にローカル MOD をパッケージしてください。"
-            );
             return;
         }
 
@@ -1039,6 +1250,14 @@ public partial class ExportCollectionWindow : Window
             return;
         }
 
+        if (!await EnsureOssArchiveUploadedAsync(GiteeStatus))
+        {
+            return;
+        }
+
+        var fallbackArchive = !OssPublisher.IsEnabled(_appConfig)
+            ? StageFallbackArchive()
+            : null;
         SavePackInfo();
         var description = GithubRepoDescriptionBox.Text?.Trim() ?? string.Empty;
         var collectionUrl = GithubCollectionUrlBox.Text?.Trim() ?? string.Empty;
@@ -1065,6 +1284,7 @@ public partial class ExportCollectionWindow : Window
 
             _giteeUrl = published.Url;
             _giteePackUrl = published.RawUrl;
+            FinishFallbackArchive(fallbackArchive);
             GiteeStatus.Text = OperationText.Choose(
                 _language,
                 "Gitee upload complete: ",
@@ -1076,6 +1296,7 @@ public partial class ExportCollectionWindow : Window
         }
         catch (Exception exception)
         {
+            RestoreFallbackArchive(fallbackArchive);
             GiteeStatus.Text = OperationText.Choose(
                 _language,
                 "Gitee upload failed: ",

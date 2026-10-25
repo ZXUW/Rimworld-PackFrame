@@ -15,6 +15,12 @@ public sealed class AppConfig
     public List<string> ProfileOrder { get; set; } = new();
     public string? ModpackIndexUrl { get; set; }
     public string? BackgroundColor { get; set; }
+    public string? OssEndpoint { get; set; }
+    public string? OssBucket { get; set; }
+    public string? OssPrefix { get; set; }
+    public string? OssAccessKeyId { get; set; }
+    public string? OssAccessKeySecret { get; set; }
+    public bool OssEnabled { get; set; } = true;
 
     public static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "packframe.json");
 

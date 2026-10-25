@@ -288,6 +288,17 @@
                                Foreground="{DynamicResource MutedTextBrush}"
                                TextWrapping="Wrap" />
 
+                    <Button x:Name="OssSettingsButton"
+                            Theme="{StaticResource FlatButton}"
+                            MinHeight="34"
+                            Padding="16,6"
+                            HorizontalAlignment="Left"
+                            Margin="0,4,0,0"
+                            Click="OnOssSettingsClick" />
+                    <TextBlock x:Name="OssStatus"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               TextWrapping="Wrap" />
+
                     <TextBlock x:Name="GiteeTokenLabel"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontWeight="SemiBold"

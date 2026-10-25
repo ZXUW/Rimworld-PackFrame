@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -26,6 +27,7 @@ public sealed record GiteePublishResult(
 public static class GiteePublisher
 {
     private const string ApiRoot = "https://gitee.com/api/v5";
+    private const string ArchiveTag = "packframe-mods";
 
     public static async Task<GiteePublishResult> PublishAsync(
         string repoPath,
@@ -70,6 +72,15 @@ public static class GiteePublisher
             .Where(file => !IsIgnored(repoPath, file))
             .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var largeArchive = files.FirstOrDefault(file =>
+            Path.GetFileName(file).Equals("mods.zip", StringComparison.OrdinalIgnoreCase)
+        );
+        if (largeArchive is not null)
+        {
+            files.Remove(largeArchive);
+            SetModsArchive(repoPath, null);
+        }
+
         var relativeFiles = files
             .Select(file => Path.GetRelativePath(repoPath, file).Replace('\\', '/'))
             .ToHashSet(StringComparer.Ordinal);
@@ -98,27 +109,53 @@ public static class GiteePublisher
             });
         }
 
-        if (actions.Count == 0)
+        if (actions.Count > 0)
         {
-            return BuildResult(owner, name, branch, files.Count);
+            status?.Invoke(OperationText.GiteeCommit(language));
+            await CommitAsync(client, owner, name, branch, actions, cancellationToken);
         }
 
-        status?.Invoke(OperationText.GiteeCommit(language));
-        var payload = new JsonObject
+        if (largeArchive is not null)
         {
-            ["branch"] = branch,
-            ["message"] = "Update PackFrame modpack",
-            ["actions"] = actions
-        };
-        using var response = await client.PostAsync(
-            $"{ApiRoot}/repos/{owner}/{name}/commits",
-            JsonContent(payload),
-            cancellationToken
-        );
-        using var document = await ReadDocumentAsync(response, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(ApiError("POST /commits", response, document));
+            status?.Invoke(OperationText.Choose(
+                language,
+                "Uploading large mods archive to Gitee Release...",
+                "正在上传本地模组压缩包到 Gitee Release...",
+                "正在上傳本地模組壓縮包到 Gitee Release...",
+                "ローカル MOD のアーカイブを Gitee Release にアップロードしています..."
+            ));
+            var archiveUrl = await UploadLargeArchiveAsReleaseAsync(
+                client,
+                owner,
+                name,
+                largeArchive,
+                branch,
+                cancellationToken
+            );
+            SetModsArchive(repoPath, archiveUrl);
+            status?.Invoke(OperationText.GiteeCommit(language));
+            await CommitAsync(
+                client,
+                owner,
+                name,
+                branch,
+                new JsonArray
+                {
+                    (JsonNode)new JsonObject
+                    {
+                        ["action"] = "update",
+                        ["path"] = "pack.json",
+                        ["content"] = Convert.ToBase64String(
+                            await File.ReadAllBytesAsync(
+                                Path.Combine(repoPath, "pack.json"),
+                                cancellationToken
+                            )
+                        ),
+                        ["encoding"] = "base64"
+                    }
+                },
+                cancellationToken
+            );
         }
 
         status?.Invoke(OperationText.GiteeDone(language));
@@ -204,7 +241,7 @@ public static class GiteePublisher
         return owner.Length > 0 && repository.Length > 0;
     }
 
-    private static readonly HttpClient Http = new();
+    private static readonly HttpClient Http = GiteeHttp.CreateClient();
     public static string NormalizeRepositoryName(string name)
     {
         return GitHubPublisher.NormalizeRepositoryName(name);
@@ -234,9 +271,9 @@ public static class GiteePublisher
 
     private static HttpClient CreateClient(string token)
     {
-        var client = new HttpClient
+        var client = new HttpClient(GiteeHttp.CreateHandler())
         {
-            Timeout = TimeSpan.FromMinutes(15)
+            Timeout = TimeSpan.FromMinutes(60)
         };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("PackFrame");
         client.DefaultRequestHeaders.Authorization =
@@ -255,8 +292,11 @@ public static class GiteePublisher
         {
             throw new InvalidOperationException(ApiError("GET /user", response, document));
         }
-        return document.RootElement.GetProperty("login").GetString()
-            ?? throw new InvalidOperationException("Gitee login not found.");
+        return document.RootElement.ValueKind == JsonValueKind.Object &&
+               document.RootElement.TryGetProperty("login", out var login) &&
+               !string.IsNullOrWhiteSpace(login.GetString())
+            ? login.GetString()!
+            : throw new InvalidOperationException("Gitee login not found.");
     }
 
     private static async Task<string> EnsureRepositoryAsync(
@@ -304,10 +344,167 @@ public static class GiteePublisher
             throw new InvalidOperationException(ApiError("GET /repos", repo, repoDocument));
         }
 
-        var branch = repoDocument.RootElement.TryGetProperty("default_branch", out var value)
+        var branch = repoDocument.RootElement.ValueKind == JsonValueKind.Object &&
+                     repoDocument.RootElement.TryGetProperty("default_branch", out var value)
             ? value.GetString()
             : null;
         return string.IsNullOrWhiteSpace(branch) ? "main" : branch;
+    }
+
+    private static async Task<string> UploadLargeArchiveAsReleaseAsync(
+        HttpClient client,
+        string owner,
+        string name,
+        string archivePath,
+        string branch,
+        CancellationToken cancellationToken
+    )
+    {
+        var assetName = await ArchiveAssetNameAsync(archivePath, cancellationToken);
+        var digest = Path.GetFileNameWithoutExtension(assetName)["mods-".Length..];
+        var tag = ArchiveTag + "-" + digest[..16];
+        long? releaseId = null;
+        using (var existing = await client.GetAsync(
+            $"{ApiRoot}/repos/{owner}/{name}/releases/tags/{Uri.EscapeDataString(tag)}",
+            cancellationToken
+        ))
+        {
+            if (existing.IsSuccessStatusCode)
+            {
+                using var document = await ReadDocumentAsync(existing, cancellationToken);
+                releaseId = ReadLong(document.RootElement, "id");
+            }
+            else if (existing.StatusCode != HttpStatusCode.NotFound)
+            {
+                using var document = await ReadDocumentAsync(existing, cancellationToken);
+                throw new InvalidOperationException(
+                    ApiError("GET /releases/tags", existing, document)
+                );
+            }
+        }
+
+        if (releaseId is null)
+        {
+            using var created = await client.PostAsync(
+                $"{ApiRoot}/repos/{owner}/{name}/releases",
+                JsonContent(new JsonObject
+                {
+                    ["tag_name"] = tag,
+                    ["name"] = "PackFrame local mods",
+                    ["body"] = "Local mods archive uploaded by PackFrame.",
+                    ["prerelease"] = false,
+                    ["target_commitish"] = branch
+                }),
+                cancellationToken
+            );
+            using var document = await ReadDocumentAsync(created, cancellationToken);
+            if (!created.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    ApiError($"POST /repos/{owner}/{name}/releases", created, document)
+                );
+            }
+
+            releaseId = ReadLong(document.RootElement, "id")
+                ?? throw new InvalidOperationException(
+                    "Gitee release response did not contain an id."
+                );
+        }
+
+        using var stream = File.OpenRead(archivePath);
+        using var fileContent = new StreamContent(stream);
+        using var content = new MultipartFormDataContent();
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        content.Add(fileContent, "file", assetName);
+        using var response = await client.PostAsync(
+            $"{ApiRoot}/repos/{owner}/{name}/releases/{releaseId}/attach_files",
+            content,
+            cancellationToken
+        );
+        using var responseDocument = await ReadDocumentAsync(response, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                ApiError(
+                    $"POST /releases/{releaseId}/attach_files",
+                    response,
+                    responseDocument
+                )
+            );
+        }
+
+        return responseDocument.RootElement.ValueKind == JsonValueKind.Object &&
+               responseDocument.RootElement.TryGetProperty(
+                   "browser_download_url",
+                   out var url
+               ) &&
+               !string.IsNullOrWhiteSpace(url.GetString())
+            ? url.GetString()!
+            : throw new InvalidOperationException("Gitee attachment URL is empty.");
+    }
+
+    private static long? ReadLong(JsonElement element, string property)
+    {
+        return element.ValueKind == JsonValueKind.Object &&
+               element.TryGetProperty(property, out var value) &&
+               value.TryGetInt64(out var result)
+            ? result
+            : null;
+    }
+
+    private static async Task<string> ArchiveAssetNameAsync(
+        string path,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var stream = File.OpenRead(path);
+        return "mods-" + Convert.ToHexString(
+            await SHA256.HashDataAsync(stream, cancellationToken)
+        ).ToLowerInvariant() + ".zip";
+    }
+
+    private static async Task CommitAsync(
+        HttpClient client,
+        string owner,
+        string name,
+        string branch,
+        JsonArray actions,
+        CancellationToken cancellationToken
+    )
+    {
+        using var response = await client.PostAsync(
+            $"{ApiRoot}/repos/{owner}/{name}/commits",
+            JsonContent(new JsonObject
+            {
+                ["branch"] = branch,
+                ["message"] = "Update PackFrame modpack",
+                ["actions"] = actions
+            }),
+            cancellationToken
+        );
+        using var document = await ReadDocumentAsync(response, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(ApiError("POST /commits", response, document));
+        }
+    }
+
+    private static void SetModsArchive(string repoPath, string? url)
+    {
+        var path = Path.Combine(repoPath, "pack.json");
+        var manifest = JsonSerializer.Deserialize(
+            File.ReadAllText(path),
+            PackFrameJsonContext.Default.ModpackRepoManifest
+        ) ?? throw new InvalidOperationException("pack.json could not be read.");
+
+        manifest.ModsArchive = url;
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(
+                manifest,
+                PackFrameJsonContext.Default.ModpackRepoManifest
+            )
+        );
     }
 
     private static async Task<HashSet<string>> GetTreeAsync(
@@ -333,11 +530,13 @@ public static class GiteePublisher
         }
 
         var paths = new HashSet<string>(StringComparer.Ordinal);
-        if (document.RootElement.TryGetProperty("tree", out var tree))
+        if (document.RootElement.ValueKind == JsonValueKind.Object &&
+            document.RootElement.TryGetProperty("tree", out var tree))
         {
             foreach (var item in tree.EnumerateArray())
             {
-                if (item.TryGetProperty("type", out var type) &&
+                if (item.ValueKind == JsonValueKind.Object &&
+                    item.TryGetProperty("type", out var type) &&
                     type.GetString() == "blob" &&
                     item.TryGetProperty("path", out var path) &&
                     path.GetString() is { Length: > 0 } value)
@@ -352,11 +551,20 @@ public static class GiteePublisher
     private static bool IsIgnored(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path);
-        return relative.Split(
-                Path.DirectorySeparatorChar,
-                Path.AltDirectorySeparatorChar
-            )
-            .Any(segment => segment.Equals(".git", StringComparison.OrdinalIgnoreCase));
+        var segments = relative.Split(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar
+        );
+        if (segments.Any(segment =>
+                segment.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("upload", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("finished", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("mods", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static StringContent JsonContent(JsonNode value)

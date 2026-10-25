@@ -4777,7 +4777,7 @@ public partial class MainWindow : Window
     private void OnBackgroundClick(object? sender, RoutedEventArgs e)
     {
         var flyout = new MenuFlyout();
-        foreach (var (key, hex) in ThemeService.BackgroundPresets)
+        foreach (var (key, hex, light) in ThemeService.BackgroundPresets)
         {
             var item = new MenuItem
             {
@@ -4792,9 +4792,10 @@ public partial class MainWindow : Window
                 }
             };
             var selectedHex = hex;
+            var selectedLight = light;
             item.Click += (_, _) =>
             {
-                ThemeService.Apply(selectedHex);
+                ThemeService.Apply(selectedHex, selectedLight);
                 _config.BackgroundColor = selectedHex;
                 _config.Save();
             };
@@ -4807,6 +4808,7 @@ public partial class MainWindow : Window
     {
         return key switch
         {
+            "rimworld" => "Rimworld",
             "dark" => OperationText.Choose(_config.Language, "Deep blue", "深蓝", "深藍", "ディープブルー"),
             "black" => OperationText.Choose(_config.Language, "Black", "黑色", "黑色", "ブラック"),
             "purple" => OperationText.Choose(_config.Language, "Purple", "暗紫", "暗紫", "パープル"),
@@ -6326,7 +6328,8 @@ public partial class MainWindow : Window
                         packageId => SelectModForInstance(packageId, instance),
                         progress,
                         _config.Language
-                    ))
+                    )),
+                _config
             );
             await window.ShowDialog(this);
         }

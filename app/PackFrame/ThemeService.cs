@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Media;
 
@@ -8,14 +9,15 @@ internal static class ThemeService
 {
     public const string DefaultBackground = "#20354A";
 
-    public static readonly (string Key, string Hex)[] BackgroundPresets =
+    public static readonly (string Key, string Hex, string? Light)[] BackgroundPresets =
     {
-        ("default", "#20354A"),
-        ("dark", "#182938"),
-        ("black", "#15181D"),
-        ("purple", "#251F33"),
-        ("green", "#1D2C27"),
-        ("brown", "#2B2421")
+        ("default", "#20354A", null),
+        ("dark", "#182938", null),
+        ("black", "#15181D", null),
+        ("rimworld", "#15191D", "#3C4A50"),
+        ("purple", "#251F33", null),
+        ("green", "#1D2C27", null),
+        ("brown", "#2B2421", null)
     };
 
     public static SolidColorBrush BackgroundBrush { get; private set; } =
@@ -39,18 +41,27 @@ internal static class ThemeService
     public static SolidColorBrush SelectedBrush { get; } =
         new(Color.Parse("#5C6E82"));
 
-    public static void Apply(string? hex)
+    public static void Apply(string? hex, string? lightHex = null)
     {
         var value = Normalize(hex);
         var background = Color.Parse(value);
         BackgroundBrush = new SolidColorBrush(background);
-        SecondaryBrush.Color = Mix(background, Colors.White, 0.16);
+        if (string.IsNullOrWhiteSpace(lightHex))
+        {
+            lightHex = BackgroundPresets
+                .FirstOrDefault(preset =>
+                    preset.Hex.Equals(value, StringComparison.OrdinalIgnoreCase))
+                .Light;
+        }
+        SecondaryBrush.Color = TryParseColor(lightHex) ??
+            Mix(background, Colors.White, 0.16);
         var textBase = Luminance(background) > 128 ? Colors.Black : Colors.White;
         PrimaryTextBrush.Color = Mix(background, textBase, 0.90);
         SecondaryTextBrush.Color = Mix(background, textBase, 0.75);
         MutedTextBrush.Color = Mix(background, textBase, 0.55);
         HoverBrush.Color = Mix(background, textBase, 0.20);
-        SelectedBrush.Color = Mix(background, textBase, 0.27);
+        SelectedBrush.Color = TryParseColor(lightHex) ??
+            Mix(background, textBase, 0.27);
         if (Application.Current is { } application)
         {
             application.Resources["AppBackgroundBrush"] = BackgroundBrush;
@@ -60,6 +71,23 @@ internal static class ThemeService
             UpdateResource(application, "MutedTextBrush", MutedTextBrush);
             UpdateResource(application, "ItemHoverBrush", HoverBrush);
             UpdateResource(application, "ItemSelectedBrush", SelectedBrush);
+        }
+    }
+
+    private static Color? TryParseColor(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Color.Parse(hex.Trim());
+        }
+        catch
+        {
+            return null;
         }
     }
 

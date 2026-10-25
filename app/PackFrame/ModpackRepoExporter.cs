@@ -124,7 +124,8 @@ public static class ModpackRepoExporter
             }
         }
 
-        var archivePath = Path.Combine(repoPath, "mods.zip");
+        var archivePath = GetUploadArchivePath(repoPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(archivePath)!);
         if (localMods.Count > 0)
         {
             progress?.Invoke(OperationText.Choose(
@@ -142,10 +143,10 @@ public static class ModpackRepoExporter
             ZipFile.CreateFromDirectory(
                 modsPath,
                 archivePath,
-                CompressionLevel.Optimal,
+                CompressionLevel.SmallestSize,
                 includeBaseDirectory: false
             );
-            manifest.ModsArchive = "mods.zip";
+            manifest.ModsArchive = null;
         }
         else
         {
@@ -209,11 +210,6 @@ public static class ModpackRepoExporter
 
         var outputRoot = Path.Combine(packRoot, "Output profile");
         var repoPath = Path.Combine(outputRoot, repoName);
-        if (Directory.Exists(repoPath))
-        {
-            Directory.Delete(repoPath, true);
-        }
-
         Directory.CreateDirectory(repoPath);
         var configPath = Path.Combine(repoPath, "config");
         var modsPath = Path.Combine(repoPath, "mods");
@@ -224,6 +220,34 @@ public static class ModpackRepoExporter
             Directory.CreateDirectory(modsPath);
         }
         Directory.CreateDirectory(imagesPath);
+
+        ModpackRepoManifest? existingManifest = null;
+        var existingManifestPath = Path.Combine(repoPath, "pack.json");
+        if (File.Exists(existingManifestPath))
+        {
+            try
+            {
+                existingManifest = JsonSerializer.Deserialize(
+                    File.ReadAllText(existingManifestPath),
+                    PackFrameJsonContext.Default.ModpackRepoManifest
+                );
+            }
+            catch
+            {
+                existingManifest = null;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(existingManifest?.Name))
+        {
+            displayName = existingManifest.Name.Trim();
+        }
+
+        var legacyArchive = Path.Combine(repoPath, "mods.zip");
+        if (File.Exists(legacyArchive))
+        {
+            File.Delete(legacyArchive);
+        }
 
         var configFiles = CopyConfig(instance.ConfigDirectoryPath, configPath);
         var localMods = CopyLocalMods(
@@ -293,7 +317,12 @@ public static class ModpackRepoExporter
             missingMods.Add(packageId);
         }
 
-        string? modsArchive = null;
+        string? modsArchive = existingManifest?.ModsArchive;
+        if (!string.IsNullOrWhiteSpace(modsArchive) &&
+            !Uri.TryCreate(modsArchive, UriKind.Absolute, out _))
+        {
+            modsArchive = null;
+        }
         if (includeLocalMods && localMods.Count > 0 && Directory.Exists(modsPath))
         {
             modsArchive = "mods.zip";
@@ -306,7 +335,7 @@ public static class ModpackRepoExporter
             ZipFile.CreateFromDirectory(
                 modsPath,
                 archivePath,
-                CompressionLevel.Optimal,
+                CompressionLevel.SmallestSize,
                 includeBaseDirectory: false
             );
             Directory.Delete(modsPath, true);
@@ -316,26 +345,41 @@ public static class ModpackRepoExporter
             Directory.Delete(modsPath, true);
         }
 
-        var id = string.IsNullOrWhiteSpace(instance.Metadata?.PackId)
-            ? Slugify(displayName, instance.FolderName)
-            : instance.Metadata.PackId.Trim();
+        var generatedId = Slugify(displayName, instance.FolderName);
+        var id = string.IsNullOrWhiteSpace(existingManifest?.Id) ||
+                 !string.Equals(
+                     existingManifest.Id,
+                     generatedId,
+                     StringComparison.OrdinalIgnoreCase
+                 )
+            ? generatedId
+            : existingManifest.Id;
+        var workshopCollectionId =
+            existingManifest?.WorkshopCollectionId ?? instance.Metadata?.WorkshopCollectionId;
+        var configBaseUrl = !string.IsNullOrWhiteSpace(existingManifest?.ConfigBaseUrl)
+            ? existingManifest!.ConfigBaseUrl
+            : string.IsNullOrWhiteSpace(instance.Metadata?.ConfigBaseUrl)
+                ? null
+                : instance.Metadata.ConfigBaseUrl.Trim();
         var manifest = new ModpackRepoManifest
         {
             Revision = Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), checked((instance.Metadata?.InstalledRevision ?? 0) + 1)),
-            Version = DateTime.UtcNow.ToString("yyyy.MM.dd.HHmmss"),
-            Changelog = string.Empty,
+            Version = existingManifest?.Version ?? DateTime.UtcNow.ToString("yyyy.MM.dd.HHmmss"),
+            Changelog = existingManifest?.Changelog ?? string.Empty,
             ModsArchive = modsArchive,
+            Image = existingManifest?.Image,
             Id = id,
-            WorkshopCollectionId = instance.Metadata?.WorkshopCollectionId,
-            WorkshopUrl = instance.Metadata?.WorkshopCollectionId is { Length: > 0 } collectionId
-                ? "https://steamcommunity.com/sharedfiles/filedetails/?id=" + collectionId : null,
+            WorkshopCollectionId = workshopCollectionId,
+            WorkshopUrl = string.IsNullOrWhiteSpace(workshopCollectionId)
+                ? existingManifest?.WorkshopUrl
+                : "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshopCollectionId,
             Name = displayName,
-            Author = string.Empty,
-            Description = displayName,
+            Author = existingManifest?.Author ?? string.Empty,
+            Description = string.IsNullOrWhiteSpace(existingManifest?.Description)
+                ? displayName
+                : existingManifest.Description,
             GameVersion = instance.GameVersion,
-            ConfigBaseUrl = string.IsNullOrWhiteSpace(instance.Metadata?.ConfigBaseUrl)
-                ? null
-                : instance.Metadata.ConfigBaseUrl.Trim(),
+            ConfigBaseUrl = configBaseUrl,
             ConfigFiles = configFiles,
             Mods = localMods,
             PackageIds = packageIds
@@ -384,6 +428,54 @@ public static class ModpackRepoExporter
                 .Where(name => name.Length > 0)
                 .ToList(),
             missingMods
+        );
+    }
+
+    public static string GetUploadArchivePath(string repoPath)
+    {
+        return Path.Combine(repoPath, "upload", GetArchiveFileName(repoPath));
+    }
+
+    public static string GetFinishedArchivePath(string repoPath)
+    {
+        return Path.Combine(repoPath, "finished", GetArchiveFileName(repoPath));
+    }
+
+    private static string GetArchiveFileName(string repoPath)
+    {
+        var name = Path.GetFileName(
+            repoPath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            )
+        );
+        return string.IsNullOrWhiteSpace(name) ? "mods.zip" : name + ".zip";
+    }
+
+    public static void SetModsArchive(string repoPath, string? url)
+    {
+        var path = Path.Combine(repoPath, "pack.json");
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var manifest = JsonSerializer.Deserialize(
+            File.ReadAllText(path),
+            PackFrameJsonContext.Default.ModpackRepoManifest
+        );
+        if (manifest is null)
+        {
+            throw new InvalidDataException("pack.json is empty: " + path);
+        }
+
+        manifest.ModsArchive = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(
+                manifest,
+                PackFrameJsonContext.Default.ModpackRepoManifest
+            )
         );
     }
 
@@ -468,6 +560,11 @@ public static class ModpackRepoExporter
         if (!string.IsNullOrWhiteSpace(name))
         {
             manifest.Name = name.Trim();
+            var generatedId = Slugify(manifest.Name, "pack");
+            if (!string.Equals(manifest.Id, generatedId, StringComparison.OrdinalIgnoreCase))
+            {
+                manifest.Id = generatedId;
+            }
         }
         manifest.Description = description.Trim();
         if (!string.IsNullOrWhiteSpace(version)) manifest.Version = version.Trim();
@@ -637,7 +734,11 @@ public static class ModpackRepoExporter
                 continue;
             }
 
-            File.Copy(file, Path.Combine(target, name), true);
+            var targetPath = Path.Combine(target, name);
+            if (!File.Exists(targetPath))
+            {
+                File.Copy(file, targetPath, true);
+            }
             result.Add(name);
         }
 
@@ -666,8 +767,7 @@ public static class ModpackRepoExporter
         {
             var directory = directories[index];
             var name = Path.GetFileName(directory);
-            if (name.StartsWith("PF_", StringComparison.OrdinalIgnoreCase) ||
-                IsWorkshopMod(directory))
+            if (name.StartsWith("PF_", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -741,52 +841,32 @@ public static class ModpackRepoExporter
             PackageId = mod.PackageId
         };
     }
-    private static bool IsWorkshopMod(string directory)
-    {
-        if (ulong.TryParse(Path.GetFileName(directory), out _))
-        {
-            return true;
-        }
-
-        var publishedPath = Path.Combine(directory, "About", "PublishedFileId.txt");
-        if (!File.Exists(publishedPath))
-        {
-            return false;
-        }
-
-        return ulong.TryParse(File.ReadAllText(publishedPath).Trim(), out _);
-    }
-
     private static ulong? TryGetWorkshopId(ModInfo? mod, string packageId)
     {
-        if (mod is not null)
+        if (mod is null || mod.Source != ModSource.Workshop)
         {
-            var folder = Path.GetFileName(
-                mod.Path.TrimEnd(
-                    Path.DirectorySeparatorChar,
-                    Path.AltDirectorySeparatorChar
-                )
-            );
-            if (ulong.TryParse(folder, out var folderId))
-            {
-                return folderId;
-            }
-
-            var publishedPath = Path.Combine(mod.Path, "About", "PublishedFileId.txt");
-            if (File.Exists(publishedPath) &&
-                ulong.TryParse(File.ReadAllText(publishedPath).Trim(), out var publishedId))
-            {
-                return publishedId;
-            }
-
-            var linkId = ParseWorkshopIdFromUrl(mod.Link);
-            if (linkId is not null)
-            {
-                return linkId;
-            }
+            return null;
         }
 
-        return null;
+        var folder = Path.GetFileName(
+            mod.Path.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            )
+        );
+        if (ulong.TryParse(folder, out var folderId))
+        {
+            return folderId;
+        }
+
+        var publishedPath = Path.Combine(mod.Path, "About", "PublishedFileId.txt");
+        if (File.Exists(publishedPath) &&
+            ulong.TryParse(File.ReadAllText(publishedPath).Trim(), out var publishedId))
+        {
+            return publishedId;
+        }
+
+        return ParseWorkshopIdFromUrl(mod.Link);
     }
 
     private static ulong? ParseWorkshopIdFromUrl(string? url)
@@ -832,6 +912,11 @@ public static class ModpackRepoExporter
         Directory.CreateDirectory(target);
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.TopDirectoryOnly))
         {
+            if (IsDevelopmentFile(Path.GetFileName(file)))
+            {
+                continue;
+            }
+
             File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
         }
 
@@ -852,6 +937,15 @@ public static class ModpackRepoExporter
 
             CopyDirectory(directory, Path.Combine(target, name));
         }
+    }
+
+    private static bool IsDevelopmentFile(string name)
+    {
+        return name.EndsWith(".psd", StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith(".psd~", StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string SanitizePathName(string value)

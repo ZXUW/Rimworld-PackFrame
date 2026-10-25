@@ -19,7 +19,7 @@ public sealed record GiteeIndexPublishResult(string PullRequestUrl);
 public static class GiteeIndexPublisher
 {
     private const string ApiRoot = "https://gitee.com/api/v5";
-    private static readonly HttpClient Http = new();
+    private static readonly HttpClient Http = GiteeHttp.CreateClient();
 
     public static async Task<GiteeIndexPublishResult> PublishAsync(
         string token,
@@ -241,7 +241,7 @@ public static class GiteeIndexPublisher
 
     private static HttpClient CreateClient(string token)
     {
-        var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        var client = new HttpClient(GiteeHttp.CreateHandler()) { Timeout = TimeSpan.FromMinutes(5) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("PackFrame");
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("token", token.Trim());

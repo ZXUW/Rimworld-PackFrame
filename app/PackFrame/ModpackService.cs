@@ -93,7 +93,7 @@ public static class ModpackService
     public const string GitHubIndexUrl =
         "https://raw.githubusercontent.com/ZXUW/PackFrame-Modpacks/main/index.json";
 
-    private const long MaxDownloadBytes = 512L * 1024 * 1024;
+    private const long MaxDownloadBytes = 4L * 1024 * 1024 * 1024;
 
     private static readonly HttpClient Http = CreateHttpClient();
 

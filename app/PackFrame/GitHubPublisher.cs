@@ -70,8 +70,7 @@ public static class GitHubPublisher
             .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var largeArchive = files.FirstOrDefault(file =>
-            Path.GetFileName(file).Equals("mods.zip", StringComparison.OrdinalIgnoreCase) &&
-            new FileInfo(file).Length > 95L * 1024 * 1024
+            Path.GetFileName(file).Equals("mods.zip", StringComparison.OrdinalIgnoreCase)
         );
         if (largeArchive is not null)
         {
@@ -642,15 +641,17 @@ public static class GitHubPublisher
     private static bool IsIgnored(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path);
-        foreach (var segment in relative.Split(
+        var segments = relative.Split(
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar
-        ))
+        );
+        if (segments.Any(segment =>
+                segment.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("upload", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("finished", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("mods", StringComparison.OrdinalIgnoreCase)))
         {
-            if (segment.Equals(".git", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            return true;
         }
 
         return false;
