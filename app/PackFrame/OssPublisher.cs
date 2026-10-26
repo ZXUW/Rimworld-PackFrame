@@ -50,7 +50,10 @@ public static class OssPublisher
         var endpoint = NormalizeEndpoint(config.OssEndpoint!);
         var key = BuildObjectKey(config.OssPrefix, objectName);
         var resource = $"/{bucket}/{key}";
-        var contentType = "application/zip";
+        var contentType = Path.GetExtension(filePath)
+            .Equals(".7z", StringComparison.OrdinalIgnoreCase)
+            ? "application/x-7z-compressed"
+            : "application/zip";
         var date = DateTime.UtcNow.ToString("r", CultureInfo.InvariantCulture);
         var canonicalHeaders = string.Empty;
         var stringToSign =

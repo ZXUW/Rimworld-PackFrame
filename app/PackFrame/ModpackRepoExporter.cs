@@ -30,6 +30,7 @@ public sealed class ModpackRepoManifest
     public string? Repo { get; set; }
     public string? Ref { get; set; }
     public string? ModsArchive { get; set; }
+    public string? ModsArchiveR2 { get; set; }
     public List<string> ConfigFiles { get; set; } = new();
     public List<ModpackRepoMod> Mods { get; set; } = new();
     public List<string> PackageIds { get; set; } = new();
@@ -93,7 +94,7 @@ public static class ModpackRepoExporter
             "正在掃描本地模組...",
             "ローカル MOD をスキャンしています..."
         ));
-        var localMods = CopyLocalMods(instance, modsPath, progress, language);
+        var localMods = CopyLocalMods(instance, modsPath, resolveMod, progress, language);
         var localIds = new HashSet<string>(
             localMods
                 .Select(mod => mod.PackageId)
@@ -140,12 +141,7 @@ public static class ModpackRepoExporter
                 File.Delete(archivePath);
             }
 
-            ZipFile.CreateFromDirectory(
-                modsPath,
-                archivePath,
-                CompressionLevel.SmallestSize,
-                includeBaseDirectory: false
-            );
+            CreateModsArchive(modsPath, archivePath);
             manifest.ModsArchive = null;
         }
         else
@@ -253,6 +249,7 @@ public static class ModpackRepoExporter
         var localMods = CopyLocalMods(
             instance,
             includeLocalMods ? modsPath : null,
+            resolveMod,
             progress: null,
             language: null
         );
@@ -332,12 +329,7 @@ public static class ModpackRepoExporter
                 File.Delete(archivePath);
             }
 
-            ZipFile.CreateFromDirectory(
-                modsPath,
-                archivePath,
-                CompressionLevel.SmallestSize,
-                includeBaseDirectory: false
-            );
+            CreateModsArchive(modsPath, archivePath);
             Directory.Delete(modsPath, true);
         }
         else if (Directory.Exists(modsPath))
@@ -367,6 +359,7 @@ public static class ModpackRepoExporter
             Version = existingManifest?.Version ?? DateTime.UtcNow.ToString("yyyy.MM.dd.HHmmss"),
             Changelog = existingManifest?.Changelog ?? string.Empty,
             ModsArchive = modsArchive,
+            ModsArchiveR2 = existingManifest?.ModsArchiveR2,
             Image = existingManifest?.Image,
             Id = id,
             WorkshopCollectionId = workshopCollectionId,
@@ -560,10 +553,9 @@ public static class ModpackRepoExporter
         if (!string.IsNullOrWhiteSpace(name))
         {
             manifest.Name = name.Trim();
-            var generatedId = Slugify(manifest.Name, "pack");
-            if (!string.Equals(manifest.Id, generatedId, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(manifest.Id))
             {
-                manifest.Id = generatedId;
+                manifest.Id = Slugify(manifest.Name, "pack");
             }
         }
         manifest.Description = description.Trim();
@@ -735,10 +727,7 @@ public static class ModpackRepoExporter
             }
 
             var targetPath = Path.Combine(target, name);
-            if (!File.Exists(targetPath))
-            {
-                File.Copy(file, targetPath, true);
-            }
+            File.Copy(file, targetPath, true);
             result.Add(name);
         }
 
@@ -751,6 +740,7 @@ public static class ModpackRepoExporter
     private static List<ModpackRepoMod> CopyLocalMods(
         ManagedInstance instance,
         string? target,
+        Func<string, ModInfo?>? resolveMod = null,
         Action<string>? progress = null,
         string? language = null
     )
@@ -763,6 +753,10 @@ public static class ModpackRepoExporter
         }
 
         var directories = Directory.EnumerateDirectories(source).ToList();
+        var activePackageIds = new HashSet<string>(
+            instance.ActivePackageIds,
+            StringComparer.OrdinalIgnoreCase
+        );
         for (var index = 0; index < directories.Count; index++)
         {
             var directory = directories[index];
@@ -773,7 +767,16 @@ public static class ModpackRepoExporter
             }
 
             var packageId = ModCatalog.ReadPackageId(directory);
-            if (string.IsNullOrWhiteSpace(packageId))
+            if (string.IsNullOrWhiteSpace(packageId) ||
+                !activePackageIds.Contains(packageId))
+            {
+                continue;
+            }
+
+            var resolved = resolveMod?.Invoke(packageId);
+            if (resolved is not null &&
+                (resolved.Source == ModSource.Workshop ||
+                 resolved.Source == ModSource.Official))
             {
                 continue;
             }
@@ -946,6 +949,22 @@ public static class ModpackRepoExporter
                name.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
                name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
                name.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void CreateModsArchive(string source, string destination)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        if (File.Exists(destination))
+        {
+            File.Delete(destination);
+        }
+
+        ZipFile.CreateFromDirectory(
+            source,
+            destination,
+            CompressionLevel.Fastest,
+            includeBaseDirectory: false
+        );
     }
 
     private static string SanitizePathName(string value)

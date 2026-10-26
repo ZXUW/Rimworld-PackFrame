@@ -308,14 +308,8 @@ public static class ModCatalog
                     continue;
                 }
 
-                if (existing.IsProfileMods && mod.Source == ModSource.Workshop)
-                {
-                    continue;
-                }
-
                 existing.IsDuplicate = true;
-                if (mod.Source == ModSource.Local &&
-                    existing.Source != ModSource.Local)
+                if (SourceRank(mod.Source) < SourceRank(existing.Source))
                 {
                     mod.IsDuplicate = true;
                     mods[mod.PackageId] = mod;
@@ -331,6 +325,14 @@ public static class ModCatalog
             .OrderBy(mod => mod.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
     }
+
+    private static int SourceRank(ModSource source) => source switch
+    {
+        ModSource.Official => 0,
+        ModSource.Workshop => 1,
+        ModSource.Local => 2,
+        _ => 3
+    };
 
     public static string? ReadPackageId(string directory)
     {

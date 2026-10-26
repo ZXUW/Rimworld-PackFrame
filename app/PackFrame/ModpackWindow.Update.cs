@@ -78,10 +78,13 @@ public partial class ModpackWindow
                 T("Download and review changes?", "下载更新并查看变更？", "下載更新並查看變更？", "更新をダウンロードして確認しますか？");
             if (!await new ConfirmWindow(prompt, T("Download", "下载", "下載", "ダウンロード"), Localization.CancelButton(_language)).ShowDialog<bool>(this)) return;
             staging = Path.Combine(_packRoot, "runtime", "install-" + Guid.NewGuid().ToString("N"));
+            _archiveDownloadControl = new ArchiveDownloadControl();
+            ShowOssFallback(pack, skipModsDownload: false);
             var result = await ModpackService.InstallAsync(pack, _game, _packRoot, Path.Combine(staging, "Mods"),
                 useSteamCmd: _currentInstance.IsSteamCmd,
                 status: text => Dispatcher.UIThread.Post(() => { if (!_closed) Find<TextBlock>("StatusText").Text = text; }),
-                cancellationToken: cancellation.Token, language: _language);
+                cancellationToken: cancellation.Token, language: _language,
+                archiveDownloadControl: _archiveDownloadControl);
             cancellation.Token.ThrowIfCancellationRequested();
             if (!_currentInstance.IsSteamCmd && (result.UnresolvedWorkshopCount > 0 || pack.Mods.Any(mod => ModpackService.ParseWorkshopId(mod.WorkshopId ?? mod.WorkshopUrl) is { } id &&
                 !File.Exists(Path.Combine(_game.WorkshopPath ?? "", id.ToString(), "About", "About.xml"))))
@@ -105,6 +108,9 @@ public partial class ModpackWindow
         {
             if (staging is not null) FileTransactions.TryDeleteDirectory(staging);
             _committingUpdate = false;
+            _archiveDownloadControl?.Dispose();
+            _archiveDownloadControl = null;
+            HideOssFallback();
             _operationCancellation = null; _busy = false;
             if (!_closed) SetControls(true);
         }

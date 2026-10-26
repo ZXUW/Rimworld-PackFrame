@@ -72,12 +72,32 @@ public static class GiteePublisher
             .Where(file => !IsIgnored(repoPath, file))
             .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var largeArchive = files.FirstOrDefault(file =>
-            Path.GetFileName(file).Equals("mods.zip", StringComparison.OrdinalIgnoreCase)
+        var collectionName = Path.GetFileName(
+            repoPath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            )
         );
+        var rootArchives = files
+            .Where(file => IsRootArchive(repoPath, file))
+            .ToList();
+        var largeArchive =
+            rootArchives.FirstOrDefault(file =>
+                Path.GetFileName(file).Equals(
+                    collectionName + ".zip",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ) ??
+            rootArchives.FirstOrDefault(file =>
+                Path.GetExtension(file).Equals(".zip", StringComparison.OrdinalIgnoreCase)
+            ) ??
+            rootArchives.FirstOrDefault(file =>
+                Path.GetExtension(file).Equals(".7z", StringComparison.OrdinalIgnoreCase)
+            ) ??
+            rootArchives.FirstOrDefault();
         if (largeArchive is not null)
         {
-            files.Remove(largeArchive);
+            files.RemoveAll(file => IsRootArchive(repoPath, file));
             SetModsArchive(repoPath, null);
         }
 
@@ -414,7 +434,11 @@ public static class GiteePublisher
         using var stream = File.OpenRead(archivePath);
         using var fileContent = new StreamContent(stream);
         using var content = new MultipartFormDataContent();
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(
+            Path.GetExtension(assetName).Equals(".7z", StringComparison.OrdinalIgnoreCase)
+                ? "application/x-7z-compressed"
+                : "application/zip"
+        );
         content.Add(fileContent, "file", assetName);
         using var response = await client.PostAsync(
             $"{ApiRoot}/repos/{owner}/{name}/releases/{releaseId}/attach_files",
@@ -460,7 +484,7 @@ public static class GiteePublisher
         await using var stream = File.OpenRead(path);
         return "mods-" + Convert.ToHexString(
             await SHA256.HashDataAsync(stream, cancellationToken)
-        ).ToLowerInvariant() + ".zip";
+        ).ToLowerInvariant() + Path.GetExtension(path).ToLowerInvariant();
     }
 
     private static async Task CommitAsync(
@@ -546,6 +570,20 @@ public static class GiteePublisher
             }
         }
         return paths;
+    }
+
+    private static bool IsRootArchive(string root, string path)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        if (relative.Contains(Path.DirectorySeparatorChar) ||
+            relative.Contains(Path.AltDirectorySeparatorChar))
+        {
+            return false;
+        }
+
+        var extension = Path.GetExtension(relative);
+        return extension.Equals(".7z", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".zip", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsIgnored(string root, string path)

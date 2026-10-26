@@ -69,9 +69,29 @@ public static class GitHubPublisher
             .Where(file => !IsIgnored(repoPath, file))
             .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var largeArchive = files.FirstOrDefault(file =>
-            Path.GetFileName(file).Equals("mods.zip", StringComparison.OrdinalIgnoreCase)
+        var collectionName = Path.GetFileName(
+            repoPath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            )
         );
+        var rootArchives = files
+            .Where(file => IsRootArchive(repoPath, file))
+            .ToList();
+        var largeArchive =
+            rootArchives.FirstOrDefault(file =>
+                Path.GetFileName(file).Equals(
+                    collectionName + ".zip",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ) ??
+            rootArchives.FirstOrDefault(file =>
+                Path.GetExtension(file).Equals(".zip", StringComparison.OrdinalIgnoreCase)
+            ) ??
+            rootArchives.FirstOrDefault(file =>
+                Path.GetExtension(file).Equals(".7z", StringComparison.OrdinalIgnoreCase)
+            ) ??
+            rootArchives.FirstOrDefault();
         if (largeArchive is not null)
         {
             status?.Invoke(OperationText.GithubAsset(language));
@@ -83,7 +103,7 @@ public static class GitHubPublisher
                 cancellationToken, branch
             );
             SetModsArchive(repoPath, archiveUrl);
-            files.Remove(largeArchive);
+            files.RemoveAll(file => IsRootArchive(repoPath, file));
         }
 
         await PublishFilesAsync(client, owner, name, repoPath, files, largeArchive is not null,
@@ -337,8 +357,29 @@ public static class GitHubPublisher
         if (removeArchive)
         {
             using var oldTree = await GitRequestAsync(client, HttpMethod.Get, root + "/git/trees/" + baseTree, null, cancellationToken);
-            if (oldTree.RootElement.GetProperty("tree").EnumerateArray().Any(item => item.GetProperty("path").GetString() == "mods.zip"))
-                entries.Add((JsonNode)new JsonObject { ["path"] = "mods.zip", ["mode"] = "100644", ["type"] = "blob", ["sha"] = null });
+            foreach (var item in oldTree.RootElement.GetProperty("tree").EnumerateArray())
+            {
+                var archivePath = item.GetProperty("path").GetString();
+                if (string.IsNullOrWhiteSpace(archivePath) ||
+                    archivePath.Contains('/') ||
+                    archivePath.Contains('\\'))
+                {
+                    continue;
+                }
+
+                var extension = Path.GetExtension(archivePath);
+                if (extension.Equals(".7z", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    entries.Add((JsonNode)new JsonObject
+                    {
+                        ["path"] = archivePath,
+                        ["mode"] = "100644",
+                        ["type"] = "blob",
+                        ["sha"] = null
+                    });
+                }
+            }
         }
         using var tree = await GitRequestAsync(client, HttpMethod.Post, root + "/git/trees",
             new JsonObject { ["base_tree"] = baseTree, ["tree"] = entries }, cancellationToken);
@@ -377,7 +418,7 @@ public static class GitHubPublisher
     private static async Task<string> ArchiveAssetNameAsync(string path, CancellationToken token)
     {
         await using var stream = File.OpenRead(path);
-        return "mods-" + Convert.ToHexString(await SHA256.HashDataAsync(stream, token)).ToLowerInvariant() + ".zip";
+        return "mods-" + Convert.ToHexString(await SHA256.HashDataAsync(stream, token)).ToLowerInvariant() + Path.GetExtension(path).ToLowerInvariant();
     }
 
     private static async Task CleanupArchiveAssetsAsync(HttpClient client, string owner, string name, string path, CancellationToken token)
@@ -394,7 +435,9 @@ public static class GitHubPublisher
             foreach (var asset in assets.RootElement.EnumerateArray())
             {
                 var assetName = asset.GetProperty("name").GetString() ?? "";
-                if (assetName == keep || assetName.Length != 73 || !assetName.StartsWith("mods-") || !assetName.EndsWith(".zip")) continue;
+                if (assetName == keep ||
+                    !assetName.StartsWith("mods-") ||
+                    (!assetName.EndsWith(".zip") && !assetName.EndsWith(".7z"))) continue;
                 obsolete.Add(asset.GetProperty("id").GetInt64());
             }
             if (assets.RootElement.GetArrayLength() < 100) break;
@@ -447,7 +490,11 @@ public static class GitHubPublisher
                 return asset.GetProperty("browser_download_url").GetString()!;
         using var stream = File.OpenRead(archivePath);
         using var content = new StreamContent(stream);
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        content.Headers.ContentType = new MediaTypeHeaderValue(
+            Path.GetExtension(assetName).Equals(".7z", StringComparison.OrdinalIgnoreCase)
+                ? "application/x-7z-compressed"
+                : "application/zip"
+        );
         content.Headers.ContentLength = stream.Length;
 
         using var assetResponse = await client.PostAsync(
@@ -460,7 +507,7 @@ public static class GitHubPublisher
         {
             throw new InvalidOperationException(
                 ApiError(
-                    $"POST release asset {tag}/mods.zip",
+                    $"POST release asset {tag}/{assetName}",
                     assetResponse,
                     assetDocument
                 )
@@ -636,6 +683,20 @@ public static class GitHubPublisher
         return normalized.Length > 350
             ? normalized[..350].TrimEnd()
             : normalized;
+    }
+
+    private static bool IsRootArchive(string root, string path)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        if (relative.Contains(Path.DirectorySeparatorChar) ||
+            relative.Contains(Path.AltDirectorySeparatorChar))
+        {
+            return false;
+        }
+
+        var extension = Path.GetExtension(relative);
+        return extension.Equals(".7z", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".zip", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsIgnored(string root, string path)

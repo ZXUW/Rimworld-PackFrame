@@ -57,6 +57,8 @@ public partial class ModpackWindow : Window
     private bool _canApplyConfig;
     private bool _closed;
     private CancellationTokenSource? _operationCancellation;
+    private ArchiveDownloadControl? _archiveDownloadControl;
+    private bool _resumeDownloadRequested;
     private int _detailVersion;
     private CancellationTokenSource? _coverCancellation;
     private readonly Dictionary<string, byte[]> _coverCache = new();
@@ -141,6 +143,44 @@ public partial class ModpackWindow : Window
         Find<Button>("CancelOperationButton").Content =
             Localization.CancelButton(_language);
         Find<Button>("CancelOperationButton").IsVisible = false;
+
+        var resumeDownload = Find<Button>("ResumeDownloadButton");
+        resumeDownload.Content = OperationText.Choose(
+            _language,
+            "Refresh and resume",
+            "刷新并继续下载",
+            "刷新並繼續下載",
+            "更新して再開"
+        );
+        ToolTip.SetTip(
+            resumeDownload,
+            OperationText.Choose(
+                _language,
+                "Cancel the current connection and retry from the saved partial download.",
+                "取消当前连接，从已保存的断点继续下载。",
+                "取消目前連線，從已儲存的斷點繼續下載。",
+                "現在の接続を中止し、保存済みの途中データから再開します。"
+            )
+        );
+
+        var ossFallback = Find<Button>("OssFallbackButton");
+        ossFallback.Content = OperationText.Choose(
+            _language,
+            "Switch to Aliyun OSS (traffic is expensive)",
+            "换为阿里云 OSS 下载",
+            "換為阿里雲 OSS 下載",
+            "Aliyun OSS に切り替え（通信量が高い）"
+        );
+        ToolTip.SetTip(
+            ossFallback,
+            OperationText.Choose(
+                _language,
+                "Aliyun OSS egress is 0.5 CNY/GB.",
+                "阿里云 OSS 的下载流量0.5元/GB。",
+                "阿里雲 OSS 的下載流量0.5元/GB。",
+                "Cloudflare R2 が使えない場合を除き、Aliyun OSS は使用しないでください。通信量が高額です。"
+            )
+        );
 
         Find<TextBlock>("StatusText").Text = Localization.ModpackNoUrl(_language);
         SetControls(true);
@@ -787,6 +827,10 @@ public partial class ModpackWindow : Window
         SetControls(false);
         Find<TextBlock>("StatusText").Text =
             Localization.ModpackStatusInstalling(_language);
+        _archiveDownloadControl = new ArchiveDownloadControl();
+        _resumeDownloadRequested = false;
+        ShowResumeDownload();
+        ShowOssFallback(_selectedPack, skipModsDownload);
 
 
         var stagingRoot = Path.Combine(
@@ -798,6 +842,7 @@ public partial class ModpackWindow : Window
         using var cancellation = new CancellationTokenSource();
         _operationCancellation = cancellation;
         SetControls(false);
+        var retry = false;
         try
         {
             var result = await ModpackService.InstallAsync(
@@ -818,7 +863,9 @@ public partial class ModpackWindow : Window
                         }
                     });
                 },
-                cancellation.Token, _language
+                cancellation.Token,
+                _language,
+                _archiveDownloadControl
             );
             if (!_closed)
             {
@@ -834,8 +881,16 @@ public partial class ModpackWindow : Window
             TryDeleteDirectory(stagingRoot);
             if (!_closed)
             {
-                Find<TextBlock>("StatusText").Text =
-                    Localization.OperationCancelled(_language);
+                if (_resumeDownloadRequested)
+                {
+                    _resumeDownloadRequested = false;
+                    retry = true;
+                }
+                else
+                {
+                    Find<TextBlock>("StatusText").Text =
+                        Localization.OperationCancelled(_language);
+                }
             }
         }
         catch (Exception exception)
@@ -855,12 +910,104 @@ public partial class ModpackWindow : Window
                 _operationCancellation = null;
             }
 
+            _archiveDownloadControl?.Dispose();
+            _archiveDownloadControl = null;
+            HideOssFallback();
+            HideResumeDownload();
             _busy = false;
             if (!_closed)
             {
                 SetControls(true);
             }
         }
+
+        if (retry && !_closed)
+        {
+            await InstallAsync(workshopLink, useSteamCmd, skipModsDownload);
+        }
+    }
+
+    private void ShowResumeDownload()
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        var button = Find<Button>("ResumeDownloadButton");
+        button.IsVisible = true;
+        button.IsEnabled = true;
+    }
+
+    private void HideResumeDownload()
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        Find<Button>("ResumeDownloadButton").IsVisible = false;
+    }
+
+    private void OnResumeDownloadClick(object? sender, RoutedEventArgs e)
+    {
+        if (_operationCancellation is null || _closed)
+        {
+            return;
+        }
+
+        _resumeDownloadRequested = true;
+        Find<Button>("ResumeDownloadButton").IsVisible = false;
+        Find<TextBlock>("StatusText").Text = OperationText.Choose(
+            _language,
+            "Reconnecting and resuming download...",
+            "正在重新连接并从断点继续下载...",
+            "正在重新連線並從斷點繼續下載...",
+            "再接続して途中からダウンロードを再開しています..."
+        );
+        _operationCancellation.Cancel();
+    }
+
+    private void ShowOssFallback(ModpackDefinition pack, bool skipModsDownload)
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        var button = Find<Button>("OssFallbackButton");
+        button.IsVisible = !skipModsDownload &&
+            !string.IsNullOrWhiteSpace(pack.ModsArchiveR2) &&
+            !string.IsNullOrWhiteSpace(pack.ModsArchive);
+        button.IsEnabled = true;
+    }
+
+    private void HideOssFallback()
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        Find<Button>("OssFallbackButton").IsVisible = false;
+    }
+
+    private void OnUseOssClick(object? sender, RoutedEventArgs e)
+    {
+        if (_archiveDownloadControl is null || _closed)
+        {
+            return;
+        }
+
+        Find<Button>("OssFallbackButton").IsVisible = false;
+        Find<TextBlock>("StatusText").Text = OperationText.Choose(
+            _language,
+            "Cancelling Cloudflare R2; switching to Aliyun OSS...",
+            "正在取消 Cloudflare R2，切换为阿里云 OSS...",
+            "正在取消 Cloudflare R2，切換為阿里雲 OSS...",
+            "Cloudflare R2 を中止し、Aliyun OSS に切り替えています..."
+        );
+        _archiveDownloadControl.SwitchToOss();
     }
 
     private void OnCancelOperationClick(object? sender, RoutedEventArgs e)

@@ -202,8 +202,8 @@ try
 
     var saveFolder = Path.Combine(root, "space 中文", "profile1");
     var launch = GameLaunchService.BuildStartInfo("game executable", root, saveFolder, false);
-    Check(launch.ArgumentList.SequenceEqual(new[] { "-logfile", Path.Combine(saveFolder, "player.log"), "-savedatafolder=" + saveFolder }) &&
-        !launch.UseShellExecute, "launch arguments preserve spaces and Unicode");
+Check(launch.ArgumentList.SequenceEqual(new[] { "-logfile", Path.Combine(saveFolder, "player.log"), "-savedatafolder=" + saveFolder }) &&
+!launch.UseShellExecute, "launch arguments preserve spaces and Unicode");
     var steamLaunch = GameLaunchService.BuildSteamStartInfo("steam.exe", saveFolder);
     Check(steamLaunch.ArgumentList.SequenceEqual(new[] { "-applaunch", "294100", "-logfile", Path.Combine(saveFolder, "player.log"), "-savedatafolder=" + saveFolder }),
         "steam launch arguments");
@@ -369,6 +369,23 @@ try
     Check(ModpackService.ResolveImage(packManifest, "https://example.com/cover.png") ==
         "https://example.com/cover.png", "absolute cover image stays absolute");
     await PublishingChecks.Run(root);
+    CoverChecks.Run(root);
+    var ownedCollections = new[]
+    {
+        new OwnedCollection(1, "Same", new ulong[] { 10, 20 }),
+        new OwnedCollection(2, "Same", new ulong[] { 30 }),
+        new OwnedCollection(3, "Renamed", Array.Empty<ulong>())
+    };
+    Check(SteamCollectionClient.SelectCandidates(ownedCollections, "Same", 3).Single().Id == 3,
+        "bound collection ID wins even after renaming");
+    Check(SteamCollectionClient.SelectCandidates(ownedCollections, " same ", null).Count == 2,
+        "duplicate owned collection titles require selection");
+    Check(SteamCollectionClient.SelectCandidates(ownedCollections, "Other", 999).Count == 0,
+        "unowned or missing bound collection is never selected for update");
+    var collectionDelta = SteamCollectionClient.CollectionDelta(new ulong[] { 10, 20 }, new ulong[] { 20, 30, 30 });
+    Check(collectionDelta.Add.SequenceEqual(new ulong[] { 30 }) && collectionDelta.Remove.SequenceEqual(new ulong[] { 10 }),
+        "collection update computes additions and removals without duplicates");
+    UpdateChecks.Run(root);
     Console.WriteLine("Rule and publishing checks passed.");
 }
 finally

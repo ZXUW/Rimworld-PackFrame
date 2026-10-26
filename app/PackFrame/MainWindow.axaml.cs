@@ -3615,6 +3615,22 @@ public partial class MainWindow : Window
             return null;
         }
 
+        var official = candidates.FirstOrDefault(mod =>
+            mod.Source == ModSource.Official
+        );
+        if (official is not null)
+        {
+            return official;
+        }
+
+        var workshop = candidates.FirstOrDefault(mod =>
+            mod.Source == ModSource.Workshop
+        );
+        if (workshop is not null)
+        {
+            return workshop;
+        }
+
         if (instance is null || instance.IsOfficial || instance.IsScratch)
         {
             return candidates.FirstOrDefault(mod => !mod.IsProfileMods) ??
@@ -3642,6 +3658,41 @@ public partial class MainWindow : Window
                        StringComparison.OrdinalIgnoreCase
                    )) ??
                candidates[0];
+    }
+
+    private ModInfo? SelectModForExport(string packageId, ManagedInstance? instance)
+    {
+        if (!_modsByPackage.TryGetValue(packageId, out var candidates) ||
+            candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var instanceLocal = candidates.FirstOrDefault(mod =>
+            mod.Source == ModSource.Local &&
+            mod.IsProfileMods &&
+            (instance is null ||
+             string.Equals(
+                 mod.ProfileFolder,
+                 instance.FolderName,
+                 StringComparison.OrdinalIgnoreCase
+             )));
+        if (instanceLocal is not null)
+        {
+            return instanceLocal;
+        }
+
+        var workshop = candidates.FirstOrDefault(mod =>
+            mod.Source == ModSource.Workshop
+        );
+        if (workshop is not null)
+        {
+            return workshop;
+        }
+
+        return candidates.FirstOrDefault(mod =>
+            mod.Source == ModSource.Local && !mod.IsProfileMods
+        );
     }
 
     private async void OnInstanceSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -6312,7 +6363,7 @@ public partial class MainWindow : Window
                 ModpackRepoExporter.Prepare(
                     _packRoot,
                     instance,
-                    packageId => SelectModForInstance(packageId, instance)
+                    packageId => SelectModForExport(packageId, instance)
                 )
             );
             var window = new ExportCollectionWindow(
@@ -6325,7 +6376,7 @@ public partial class MainWindow : Window
                     ModpackRepoExporter.MaterializeLocalMods(
                         export.RepoPath,
                         instance,
-                        packageId => SelectModForInstance(packageId, instance),
+                        packageId => SelectModForExport(packageId, instance),
                         progress,
                         _config.Language
                     )),

@@ -12,6 +12,33 @@ internal static class OperationText
     };
     public static string Download(string? language) => Choose(language, "Downloading local mods archive...", "正在下载本地模组压缩包...", "正在下載本機模組壓縮包...", "ローカル MOD アーカイブをダウンロード中...");
     public static string Extract(string? language) => Choose(language, "Extracting local mods...", "正在解压本地模组...", "正在解壓本機模組...", "ローカル MOD を展開中...");
+    public static string Install(string? language) => Choose(language, "Installing mods...", "正在安装模组...", "正在安裝模組...", "MOD をインストール中...");
+    public static string ExtractProgress(
+        string? language,
+        int completed,
+        int total,
+        long bytes,
+        long totalBytes,
+        string currentFile,
+        System.TimeSpan elapsed
+    ) => Choose(
+        language,
+        $"Extracting: {completed:N0} / {total:N0} files | {FormatBytes(bytes)} / {FormatBytes(totalBytes)} | Current: {currentFile} | Elapsed: {FormatElapsed(elapsed)}",
+        $"正在解压：{completed:N0} / {total:N0} 文件 | 已写入：{FormatBytes(bytes)} / {FormatBytes(totalBytes)} | 当前：{currentFile} | 已用时：{FormatElapsed(elapsed)}",
+        $"正在解壓：{completed:N0} / {total:N0} 檔案 | 已寫入：{FormatBytes(bytes)} / {FormatBytes(totalBytes)} | 目前：{currentFile} | 已用時：{FormatElapsed(elapsed)}",
+        $"展開中: {completed:N0} / {total:N0} ファイル | {FormatBytes(bytes)} / {FormatBytes(totalBytes)} | 現在: {currentFile} | 経過: {FormatElapsed(elapsed)}"
+    );
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1L << 30) return (bytes / (double)(1L << 30)).ToString("0.0") + " GB";
+        if (bytes >= 1L << 20) return (bytes / (double)(1L << 20)).ToString("0.0") + " MB";
+        if (bytes >= 1L << 10) return (bytes / (double)(1L << 10)).ToString("0.0") + " KB";
+        return bytes + " B";
+    }
+    private static string FormatElapsed(System.TimeSpan elapsed) =>
+        elapsed.TotalHours >= 1
+            ? elapsed.ToString(@"hh\:mm\:ss")
+            : elapsed.ToString(@"mm\:ss");
     public static string Config(string? language, string name) => Choose(language, "Downloading config: ", "正在下载配置：", "正在下載設定：", "設定をダウンロード中: ") + name;
     public static string SteamDownload(string? language) => Choose(language, "Downloading/updating SteamCMD...", "正在下载并更新 SteamCMD...", "正在下載並更新 SteamCMD...", "SteamCMD をダウンロード・更新中...");
     public static string SteamExtract(string? language) => Choose(language, "Extracting SteamCMD...", "正在解压 SteamCMD...", "正在解壓 SteamCMD...", "SteamCMD を展開中...");

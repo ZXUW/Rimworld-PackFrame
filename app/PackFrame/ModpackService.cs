@@ -6,11 +6,15 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using SharpCompress.Archives;
+using SharpCompress.Common;
 
 namespace PackFrame;
 
@@ -49,9 +53,24 @@ public sealed class ModpackDefinition
     public string? Repo { get; set; }
     public string? Ref { get; set; }
     public string? ModsArchive { get; set; }
+    public string? ModsArchiveR2 { get; set; }
     public List<string> ConfigFiles { get; set; } = new();
     public List<ModpackMod> Mods { get; set; } = new();
     public List<string> PackageIds { get; set; } = new();
+}
+
+public sealed class ArchiveDownloadControl : IDisposable
+{
+    public bool PreferOss { get; private set; }
+    internal CancellationTokenSource R2Cancellation { get; } = new();
+
+    public void SwitchToOss()
+    {
+        PreferOss = true;
+        R2Cancellation.Cancel();
+    }
+
+    public void Dispose() => R2Cancellation.Dispose();
 }
 
 public sealed class ModpackMod
@@ -294,6 +313,11 @@ public static class ModpackService
                 {
                     pack.ModsArchive = new Uri(packUri, pack.ModsArchive).AbsoluteUri;
                 }
+                if (!string.IsNullOrWhiteSpace(pack.ModsArchiveR2) &&
+                    !Uri.TryCreate(pack.ModsArchiveR2, UriKind.Absolute, out _))
+                {
+                    pack.ModsArchiveR2 = new Uri(packUri, pack.ModsArchiveR2).AbsoluteUri;
+                }
                 if (!string.IsNullOrWhiteSpace(pack.ConfigBaseUrl) &&
                     !Uri.TryCreate(pack.ConfigBaseUrl, UriKind.Absolute, out _))
                 {
@@ -337,7 +361,8 @@ public static class ModpackService
         bool skipModsDownload = false,
         Action<string>? status = null,
         CancellationToken cancellationToken = default,
-        string? language = null
+        string? language = null,
+        ArchiveDownloadControl? archiveDownloadControl = null
     )
     {
         if (string.IsNullOrWhiteSpace(game.GamePath))
@@ -347,48 +372,89 @@ public static class ModpackService
 
         Directory.CreateDirectory(modsRoot);
         var modsArchiveExtracted = false;
-        if (!skipModsDownload && !string.IsNullOrWhiteSpace(pack.ModsArchive))
+        var ossArchiveUri = ResolveModsArchiveUri(pack);
+        var r2ArchiveUri = ResolveR2ArchiveUri(pack);
+        var useR2 = r2ArchiveUri is not null &&
+            archiveDownloadControl?.PreferOss != true;
+        var archiveUri = useR2 ? r2ArchiveUri : ossArchiveUri;
+        if (!skipModsDownload && archiveUri is not null)
         {
-            var archiveUri = ResolveModsArchiveUri(pack);
-            if (archiveUri is null)
-            {
-                throw new InvalidOperationException(
-                    "The local mods archive has no download URL."
-                );
-            }
-
-            var temporaryArchive = Path.Combine(
-                Path.GetTempPath(),
-                "packframe-mods-" + Guid.NewGuid().ToString("N") + ".zip"
-            );
+            var archivePath = GetDownloadCachePath(archiveUri, pack.Revision);
             try
             {
                 status?.Invoke(OperationText.Download(language));
-                await DownloadAsync(
-                    archiveUri,
-                    temporaryArchive,
-                    status,
-                    cancellationToken, language
-                );
+                if (useR2)
+                {
+                    using var linked = archiveDownloadControl is null
+                        ? null
+                        : CancellationTokenSource.CreateLinkedTokenSource(
+                            cancellationToken,
+                            archiveDownloadControl.R2Cancellation.Token
+                        );
+                    try
+                    {
+                        await DownloadAsync(
+                            r2ArchiveUri!,
+                            archivePath,
+                            status,
+                            linked?.Token ?? cancellationToken,
+                            language
+                        );
+                    }
+                    catch (OperationCanceledException) when (
+                        !cancellationToken.IsCancellationRequested &&
+                        archiveDownloadControl?.PreferOss == true &&
+                        ossArchiveUri is not null)
+                    {
+                        status?.Invoke(OperationText.Choose(
+                            language,
+                            "Cloudflare R2 download cancelled; switching to Aliyun OSS...",
+                            "已取消 Cloudflare R2 下载，正在切换为阿里云 OSS...",
+                            "已取消 Cloudflare R2 下載，正在切換為阿里雲 OSS...",
+                            "Cloudflare R2 のダウンロードを中止し、Aliyun OSS に切り替えています..."
+                        ));
+                        archivePath = GetDownloadCachePath(
+                            ossArchiveUri,
+                            pack.Revision
+                        );
+                        await DownloadAsync(
+                            ossArchiveUri,
+                            archivePath,
+                            status,
+                            cancellationToken,
+                            language
+                        );
+                    }
+                }
+                else
+                {
+                    await DownloadAsync(
+                        archiveUri,
+                        archivePath,
+                        status,
+                        cancellationToken,
+                        language
+                    );
+                }
                 status?.Invoke(OperationText.Extract(language));
-                ZipFile.ExtractToDirectory(
-                    temporaryArchive,
-                    modsRoot,
-                    overwriteFiles: true
+                await Task.Run(
+                    () => ExtractModsArchive(
+                        archivePath,
+                        modsRoot,
+                        status,
+                        language,
+                        cancellationToken
+                    ),
+                    cancellationToken
                 );
+                status?.Invoke(OperationText.Install(language));
                 modsArchiveExtracted = true;
             }
             finally
             {
-                try
+                if (modsArchiveExtracted)
                 {
-                    if (File.Exists(temporaryArchive))
-                    {
-                        File.Delete(temporaryArchive);
-                    }
-                }
-                catch
-                {
+                    TryDeleteFile(archivePath);
                 }
             }
         }
@@ -650,7 +716,7 @@ public static class ModpackService
                 status?.Invoke(OperationText.Config(language, name));
                 var url = baseUrl + "/" + Uri.EscapeDataString(name);
                 var destination = Path.Combine(staging, name);
-                await DownloadAsync(new Uri(url), destination, null, cancellationToken);
+                await DownloadAsync(new Uri(url), destination, null, cancellationToken, resume: false);
                 if (Path.GetExtension(name).Equals(".xml", StringComparison.OrdinalIgnoreCase))
                     XDocument.Load(destination);
             }
@@ -1029,9 +1095,15 @@ public static class ModpackService
             : new[] { installedId };
     }
 
-    private static Uri? ResolveModsArchiveUri(ModpackDefinition pack)
+    private static Uri? ResolveModsArchiveUri(ModpackDefinition pack) =>
+        ResolveArchiveUri(pack, pack.ModsArchive);
+
+    private static Uri? ResolveR2ArchiveUri(ModpackDefinition pack) =>
+        ResolveArchiveUri(pack, pack.ModsArchiveR2);
+
+    private static Uri? ResolveArchiveUri(ModpackDefinition pack, string? value)
     {
-        var archive = pack.ModsArchive?.Trim();
+        var archive = value?.Trim();
         if (string.IsNullOrWhiteSpace(archive))
         {
             return null;
@@ -1058,32 +1130,250 @@ public static class ModpackService
             $"https://raw.githubusercontent.com/{pack.Repo.Trim()}/{pack.Ref.Trim()}/{path}"
         );
     }
+    private static void ExtractModsArchive(
+        string archivePath,
+        string target,
+        Action<string>? status,
+        string? language,
+        CancellationToken cancellationToken
+    )
+    {
+        Directory.CreateDirectory(target);
+        var root = Path.GetFullPath(target);
+        var prefix = root.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar
+        ) + Path.DirectorySeparatorChar;
+        var stopwatch = Stopwatch.StartNew();
+        var lastReport = TimeSpan.FromMilliseconds(-500);
+        var completed = 0;
+        long bytesWritten = 0;
+
+        if (!IsSevenZipArchive(archivePath))
+        {
+            using var archive = ZipFile.OpenRead(archivePath);
+            var entries = archive.Entries
+                .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
+                .ToList();
+            var total = entries.Count;
+            var totalBytes = entries.Sum(entry => entry.Length);
+
+            void Report(string currentFile, bool force = false)
+            {
+                var elapsed = stopwatch.Elapsed;
+                if (!force && elapsed - lastReport < TimeSpan.FromMilliseconds(350))
+                {
+                    return;
+                }
+
+                lastReport = elapsed;
+                status?.Invoke(OperationText.ExtractProgress(
+                    language,
+                    completed,
+                    total,
+                    bytesWritten,
+                    totalBytes,
+                    currentFile,
+                    elapsed
+                ));
+            }
+
+            foreach (var entry in entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var destination = GetArchiveDestination(root, prefix, entry.FullName);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                using (var input = entry.Open())
+                using (var output = File.Create(destination))
+                {
+                    input.CopyTo(output);
+                }
+
+                completed++;
+                bytesWritten += entry.Length;
+                Report(entry.FullName);
+            }
+
+            Report(string.Empty, true);
+            return;
+        }
+
+        using var sevenZip = ArchiveFactory.OpenArchive(archivePath);
+        var sevenZipEntries = sevenZip.Entries
+            .Where(entry => !entry.IsDirectory)
+            .ToList();
+        var sevenZipTotal = sevenZipEntries.Count;
+        var sevenZipTotalBytes = sevenZipEntries.Sum(entry => Math.Max(0, entry.Size));
+
+        void ReportSevenZip(string currentFile, bool force = false)
+        {
+            var elapsed = stopwatch.Elapsed;
+            if (!force && elapsed - lastReport < TimeSpan.FromMilliseconds(350))
+            {
+                return;
+            }
+
+            lastReport = elapsed;
+            status?.Invoke(OperationText.ExtractProgress(
+                language,
+                completed,
+                sevenZipTotal,
+                bytesWritten,
+                sevenZipTotalBytes,
+                currentFile,
+                elapsed
+            ));
+        }
+
+        using var reader = sevenZip.ExtractAllEntries();
+        while (reader.MoveToNextEntry())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var entry = reader.Entry;
+            if (entry.IsDirectory)
+            {
+                continue;
+            }
+
+            var key = entry.Key?.Replace('\\', '/').TrimStart('/');
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            var destination = GetArchiveDestination(root, prefix, key);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            using (var input = reader.OpenEntryStream())
+            using (var output = File.Create(destination))
+            {
+                input.CopyTo(output);
+            }
+
+            completed++;
+            bytesWritten += Math.Max(0, entry.Size);
+            ReportSevenZip(key);
+        }
+
+        ReportSevenZip(string.Empty, true);
+    }
+
+    private static string GetArchiveDestination(string root, string prefix, string key)
+    {
+        var normalized = key.Replace('\\', '/');
+        var destination = Path.GetFullPath(
+            Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar))
+        );
+        if (!destination.StartsWith(
+                prefix,
+                OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal
+            ))
+        {
+            throw new InvalidDataException("Archive entry escapes the target directory.");
+        }
+
+        return destination;
+    }
+
+    private static bool IsSevenZipArchive(string path)
+    {
+        Span<byte> signature = stackalloc byte[6];
+        using var stream = File.OpenRead(path);
+        return stream.Read(signature) == signature.Length &&
+               signature[0] == 0x37 &&
+               signature[1] == 0x7A &&
+               signature[2] == 0xBC &&
+               signature[3] == 0xAF &&
+               signature[4] == 0x27 &&
+               signature[5] == 0x1C;
+    }
+
+    private static string GetDownloadCachePath(Uri uri, long? revision)
+    {
+        var key = uri.AbsoluteUri + "|" + (revision?.ToString() ?? "0");
+        var hash = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(key))
+        ).ToLowerInvariant();
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "PackFrame",
+            "downloads"
+        );
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, hash + ".part");
+    }
+
     private static async Task DownloadAsync(
         Uri uri,
         string path,
         Action<string>? status,
-        CancellationToken cancellationToken, string? language = null
+        CancellationToken cancellationToken,
+        string? language = null,
+        bool resume = true
     )
     {
-        using var response = await Http.GetAsync(
-            uri,
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var existing = resume && File.Exists(path)
+            ? new FileInfo(path).Length
+            : 0;
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (existing > 0)
+        {
+            request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(
+                existing,
+                null
+            );
+        }
+
+        using var response = await Http.SendAsync(
+            request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
+        if (existing > 0 &&
+            response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+        {
+            return;
+        }
         response.EnsureSuccessStatusCode();
-        if (response.Content.Headers.ContentLength > MaxDownloadBytes)
+        var partial = response.StatusCode == HttpStatusCode.PartialContent;
+        if (existing > 0 && !partial)
+        {
+            existing = 0;
+        }
+
+        var contentRange = response.Content.Headers.ContentRange;
+        if (partial &&
+            existing > 0 &&
+            contentRange?.From is { } from &&
+            from != existing)
+        {
+            throw new InvalidDataException("Download range does not match the partial file.");
+        }
+
+        var totalLength = partial
+            ? contentRange?.Length ??
+              (existing + (response.Content.Headers.ContentLength ?? 0))
+            : response.Content.Headers.ContentLength ?? 0;
+        if (totalLength > MaxDownloadBytes)
         {
             throw new InvalidOperationException("Downloaded file is too large.");
         }
 
+        var append = partial && existing > 0;
         await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var destination = File.Create(path);
-        var totalLength = response.Content.Headers.ContentLength ?? 0;
+        await using var destination = new FileStream(
+            path,
+            append ? FileMode.Append : FileMode.Create,
+            FileAccess.Write,
+            FileShare.None
+        );
         var stopwatch = Stopwatch.StartNew();
-        var lastBytes = 0L;
+        var lastBytes = existing;
         var lastSeconds = 0d;
         var buffer = new byte[81920];
-        long total = 0;
+        var total = existing;
         int read;
         while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
         {

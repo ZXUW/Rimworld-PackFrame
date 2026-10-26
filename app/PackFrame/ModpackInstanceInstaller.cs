@@ -12,15 +12,19 @@ internal static class ModpackInstanceInstaller
         Directory.CreateDirectory(instances);
         var temporary = Path.Combine(instances, ".install-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporary);
+        var movedMods = false;
+        string? movedModsTarget = null;
         try
         {
             // Build under a hidden temporary root; Discover never sees a partial profile.
             var created = InstanceStore.CreateNew(temporary, null, gameVersion, result.PackageIds);
             InstanceStore.RenameInstance(created, result.Name);
             InstanceStore.SetPackBinding(created, result.Id, result.ConfigBaseUrl, result.ConfigFiles, result.SteamCmd);
-            CopyTree(result.ModsSourcePath, Path.Combine(created.DirectoryPath, "Mods"));
             CopyTree(result.ConfigSourcePath, created.ConfigDirectoryPath);
             PackUpdateService.RecordInstallation(created, result);
+            movedModsTarget = Path.Combine(created.DirectoryPath, "Mods");
+            MoveTree(result.ModsSourcePath, movedModsTarget);
+            movedMods = true;
             var validated = InstanceStore.LoadInstance(created.DirectoryPath);
             var destination = Path.Combine(instances, $"profile{InstanceStore.GetNextIndex(packRoot)}");
             Directory.Move(created.DirectoryPath, destination);
@@ -32,6 +36,25 @@ internal static class ModpackInstanceInstaller
             };
             if (staging is not null) FileTransactions.TryDeleteDirectory(staging);
             return installed;
+        }
+        catch
+        {
+            if (movedMods &&
+                movedModsTarget is not null &&
+                Directory.Exists(movedModsTarget) &&
+                result.ModsSourcePath is not null &&
+                !Directory.Exists(result.ModsSourcePath))
+            {
+                try
+                {
+                    MoveTree(movedModsTarget, result.ModsSourcePath);
+                }
+                catch
+                {
+                }
+            }
+
+            throw;
         }
         finally { FileTransactions.TryDeleteDirectory(temporary); }
     }
@@ -63,6 +86,32 @@ internal static class ModpackInstanceInstaller
     {
         if (new DirectoryInfo(path).LinkTarget is not null)
             throw new IOException("Install staging must not contain directory links: " + path);
+    }
+
+    private static void MoveTree(string? source, string destination)
+    {
+        if (source is null) return;
+        if (!Directory.Exists(source)) throw new DirectoryNotFoundException(source);
+        RejectLinks(source);
+        var sourceRoot = Path.GetFullPath(source);
+        var destinationRoot = Path.GetFullPath(destination);
+        if (!string.Equals(
+                Path.GetPathRoot(sourceRoot),
+                Path.GetPathRoot(destinationRoot),
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            CopyTree(sourceRoot, destinationRoot);
+            Directory.Delete(sourceRoot, true);
+            return;
+        }
+
+        if (Directory.Exists(destinationRoot))
+        {
+            Directory.Delete(destinationRoot, true);
+        }
+
+        Directory.Move(sourceRoot, destinationRoot);
     }
 
     internal static void CopyTree(string? source, string destination)

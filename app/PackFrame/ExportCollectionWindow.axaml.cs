@@ -730,6 +730,13 @@ public partial class ExportCollectionWindow : Window
                 info = await GiteePublisher.ResolvePackAsync(giteeUrl!);
             }
 
+            var summary = await ShowIndexSummaryAsync(info.Summary);
+            if (summary is null)
+            {
+                IndexStatus.Text = Localization.OperationCancelled(_language);
+                return;
+            }
+
             var repoFullName = $"{info.Owner}/{info.Repository}";
             if (hasGithub)
             {
@@ -742,7 +749,7 @@ public partial class ExportCollectionWindow : Window
                         info.Repository,
                         info.Id,
                         info.Name,
-                        info.Summary,
+                        summary,
                         info.PackageIds,
                         GithubCollectionUrlBox.Text?.Trim() ?? string.Empty,
                         text => Dispatcher.UIThread.Post(() => IndexStatus.Text = text),
@@ -781,7 +788,7 @@ public partial class ExportCollectionWindow : Window
                             ModpackService.GiteeIndexUrl,
                             info.Id,
                             info.Name,
-                            info.Summary,
+                            summary,
                             githubFile,
                             giteeFile,
                             repoFullName,
@@ -823,6 +830,22 @@ public partial class ExportCollectionWindow : Window
             SubmitIndexButton.IsEnabled = true;
         }
     }
+    private async Task<string?> ShowIndexSummaryAsync(string fallback)
+    {
+        var inherited = PackDescriptionBox.Text?.Trim();
+        if (string.IsNullOrWhiteSpace(inherited))
+        {
+            inherited = _packDescription;
+        }
+        if (string.IsNullOrWhiteSpace(inherited))
+        {
+            inherited = fallback;
+        }
+
+        var dialog = new IndexSummaryWindow(inherited, _language);
+        return await dialog.ShowDialog<string?>(this);
+    }
+
     private void OnOpenIndexPrClick(object? sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(_indexPrUrl))
@@ -1018,20 +1041,47 @@ public partial class ExportCollectionWindow : Window
 
     private string? StageFallbackArchive()
     {
-        var uploadPath = ModpackRepoExporter.GetUploadArchivePath(_result.RepoPath);
-        if (!File.Exists(uploadPath))
+        var uploadPath = EnsureNamedUploadArchive();
+        if (uploadPath is null)
         {
             return null;
         }
 
-        var fallbackPath = Path.Combine(_result.RepoPath, "mods.zip");
-        if (File.Exists(fallbackPath))
-        {
-            File.Delete(fallbackPath);
-        }
-        File.Move(uploadPath, fallbackPath);
-        ModpackRepoExporter.SetModsArchive(_result.RepoPath, "mods.zip");
+        var fallbackPath = Path.Combine(
+            _result.RepoPath,
+            Path.GetFileName(uploadPath)
+        );
+        File.Move(uploadPath, fallbackPath, true);
+        ModpackRepoExporter.SetModsArchive(
+            _result.RepoPath,
+            Path.GetFileName(fallbackPath)
+        );
         return fallbackPath;
+    }
+
+    private string? FindRootArchive()
+    {
+        return Directory
+            .EnumerateFiles(_result.RepoPath, "*", SearchOption.TopDirectoryOnly)
+            .Where(file =>
+            {
+                var extension = Path.GetExtension(file);
+                return extension.Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
+                       extension.Equals(".7z", StringComparison.OrdinalIgnoreCase);
+            })
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+
+    private string? EnsureNamedUploadArchive()
+    {
+        var uploadPath = ModpackRepoExporter.GetUploadArchivePath(_result.RepoPath);
+        if (File.Exists(uploadPath))
+        {
+            return uploadPath;
+        }
+
+        return null;
     }
 
     private void FinishFallbackArchive(string? fallbackPath)
@@ -1072,20 +1122,32 @@ public partial class ExportCollectionWindow : Window
             return;
         }
 
-        var uploadPath = Path.Combine(
-            repoPath,
-            "upload",
-            Path.GetFileName(repoPath) + ".zip"
-        );
+        var uploadPath = ModpackRepoExporter.GetUploadArchivePath(repoPath);
         Directory.CreateDirectory(Path.GetDirectoryName(uploadPath)!);
         File.Move(fallbackPath, uploadPath, true);
     }
 
     private async Task<bool> EnsureOssArchiveUploadedAsync(TextBlock status)
     {
-        var uploadPath = ModpackRepoExporter.GetUploadArchivePath(_result.RepoPath);
         var finishedPath = ModpackRepoExporter.GetFinishedArchivePath(_result.RepoPath);
-        if (!File.Exists(uploadPath))
+        var uploadPath = EnsureNamedUploadArchive();
+        var archiveForLimit = uploadPath ?? FindRootArchive();
+        const long automaticUploadLimit = 100L * 1024 * 1024;
+        if (!OssPublisher.IsEnabled(_appConfig) &&
+            archiveForLimit is not null &&
+            new FileInfo(archiveForLimit).Length > automaticUploadLimit)
+        {
+            status.Text = OperationText.Choose(
+                _language,
+                "Local mods archive exceeds 100 MB and OSS is disabled; automatic upload skipped. Upload it manually later.",
+                "本地模组压缩包超过 100MB，OSS 未启用，已跳过自动上传；请后续手动上传。",
+                "本機模組壓縮包超過 100MB，OSS 未啟用，已略過自動上傳；請後續手動上傳。",
+                "ローカル MOD のアーカイブが 100MB を超え、OSS が無効なため自動アップロードを中止しました。後で手動でアップロードしてください。"
+            );
+            return false;
+        }
+
+        if (uploadPath is null)
         {
             return true;
         }
