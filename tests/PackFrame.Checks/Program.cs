@@ -353,6 +353,20 @@ Check(launch.ArgumentList.SequenceEqual(new[] { "-logfile", Path.Combine(saveFol
     var otherMod = framework with { PackageId = "other", LoadBefore = new(), ForceLoadBefore = new(), IncompatibleWith = new() };
     Check(framework.LoadBefore.SequenceEqual(new[] { "other" }) && framework.ForceLoadBefore.SequenceEqual(new[] { "forced" }),
         "mod metadata reads both Before rule types");
+    var versionDepsFolder = Path.Combine(root, "versioned-deps-mod");
+    Directory.CreateDirectory(Path.Combine(versionDepsFolder, "About"));
+    File.WriteAllText(Path.Combine(versionDepsFolder, "About", "About.xml"),
+        "<ModMetaData><packageId>versioned</packageId>" +
+        "<modDependencies><li><packageId>common.dep</packageId></li></modDependencies>" +
+        "<modDependenciesByVersion>" +
+        "<v1.6><li>old.dep</li></v1.6>" +
+        "<v1.7><li><packageId>new.dep</packageId></li></v1.7>" +
+        "</modDependenciesByVersion></ModMetaData>");
+    var versioned = ModCatalog.ReadMod(versionDepsFolder, ModSource.Local, "1.7.4985")!;
+    Check(versioned.ModDependencies.Contains("common.dep") &&
+        versioned.ModDependencies.Contains("new.dep") &&
+        !versioned.ModDependencies.Contains("old.dep"),
+        "versioned mod dependencies use the current game version");
     var reverseRules = ModOrderRules.ReverseBefore(new[] { otherMod, framework });
     Check(reverseRules["other"].Contains("framework") && reverseRules["forced"].Contains("framework"),
         "Before declarations become correct After constraints for existing reorder actions");

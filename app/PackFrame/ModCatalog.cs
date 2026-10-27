@@ -279,7 +279,7 @@ public static class ModCatalog
         Parallel.For(0, entries.Count, index =>
         {
             var entry = entries[index];
-            loaded[index] = ReadMod(entry.Directory, entry.Source);
+            loaded[index] = ReadMod(entry.Directory, entry.Source, game.Version);
         });
 
         var mods = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
@@ -360,7 +360,11 @@ public static class ModCatalog
         }
     }
 
-    internal static ModInfo? ReadMod(string directory, ModSource source)
+    internal static ModInfo? ReadMod(
+        string directory,
+        ModSource source,
+        string? currentVersion = null
+    )
     {
         var aboutPath = Path.Combine(directory, "About", "About.xml");
         if (!File.Exists(aboutPath))
@@ -427,7 +431,7 @@ public static class ModCatalog
                 LoadBefore = ReadIdList(root, "loadBefore"),
                 ForceLoadBefore = ReadIdList(root, "forceLoadBefore"),
                 IncompatibleWith = ReadIdList(root, "incompatibleWith"),
-                ModDependencies = ReadDependencyIds(root),
+                ModDependencies = ReadDependencyIds(root, currentVersion),
                 Link = ReadLink(root)
             };
         }
@@ -448,17 +452,45 @@ public static class ModCatalog
             .ToList() ?? new List<string>();
     }
 
-    private static List<string> ReadDependencyIds(XElement root)
+    private static List<string> ReadDependencyIds(XElement root, string? currentVersion)
     {
-        var dependencies = root.Elements()
-            .FirstOrDefault(element => element.Name.LocalName == "modDependencies");
-        if (dependencies is null)
+        var result = new List<string>();
+        AddDependencyIds(
+            root.Elements().FirstOrDefault(element => element.Name.LocalName == "modDependencies"),
+            result
+        );
+
+        var byVersion = root.Elements()
+            .FirstOrDefault(element => element.Name.LocalName == "modDependenciesByVersion");
+        if (byVersion is not null)
         {
-            return new List<string>();
+            var current = MajorMinor(currentVersion ?? string.Empty);
+            if (current is not null)
+            {
+                var matchingVersion = byVersion.Elements().FirstOrDefault(element =>
+                {
+                    var name = element.Name.LocalName;
+                    return name.Equals("v" + current, StringComparison.OrdinalIgnoreCase) ||
+                        name.Equals(current, StringComparison.OrdinalIgnoreCase);
+                });
+                AddDependencyIds(matchingVersion, result);
+            }
         }
 
-        var result = new List<string>();
-        foreach (var item in dependencies.Elements()
+        return result
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static void AddDependencyIds(XElement? container, List<string> result)
+    {
+        if (container is null)
+        {
+            return;
+        }
+
+        foreach (var item in container.Elements()
             .Where(element => element.Name.LocalName == "li"))
         {
             var packageId = item.Elements()
@@ -474,8 +506,6 @@ public static class ModCatalog
                 result.Add(packageId);
             }
         }
-
-        return result;
     }
 
     private static string ReadLink(XElement root)

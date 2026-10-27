@@ -216,6 +216,7 @@ public static class InstanceStore
         }
 
         CopyDirectory(source.DirectoryPath, directory, overwrite: true);
+        File.Delete(Path.Combine(directory, "mod-links.txt"));
         var configPath = Path.Combine(directory, "Config", "ModsConfig.xml");
         if (!string.IsNullOrWhiteSpace(gameVersion) && File.Exists(configPath))
         {

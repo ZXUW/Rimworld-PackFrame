@@ -168,8 +168,17 @@ internal static class ModLinkService
                     continue;
                 }
                 var info = new DirectoryInfo(linkPath);
+                var isCurrentProfileTarget = IsUnder(
+                    target,
+                    Path.Combine(instance.DirectoryPath, "Mods")
+                );
+                var isSiblingProfileTarget = !isCurrentProfileTarget &&
+                    IsManagedProfileModsTarget(
+                        target,
+                        Path.GetDirectoryName(instance.DirectoryPath)
+                    );
                 if (!Path.GetFileName(linkPath).StartsWith("PF_", StringComparison.Ordinal) ||
-                    !IsUnder(target, Path.Combine(instance.DirectoryPath, "Mods")))
+                    (!isCurrentProfileTarget && !isSiblingProfileTarget))
                     throw new IOException($"Invalid managed link record: {linkPath}");
                 if (info.LinkTarget is null)
                 {
@@ -257,6 +266,39 @@ internal static class ModLinkService
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal
         );
+    }
+
+    private static bool IsManagedProfileModsTarget(string target, string? instancesRoot)
+    {
+        if (string.IsNullOrWhiteSpace(instancesRoot))
+        {
+            return false;
+        }
+
+        var fullTarget = Path.GetFullPath(target);
+        var modsDirectory = Path.GetDirectoryName(fullTarget);
+        var profileDirectory = modsDirectory is null
+            ? null
+            : Path.GetDirectoryName(modsDirectory);
+        var profileRoot = profileDirectory is null
+            ? null
+            : Path.GetDirectoryName(profileDirectory);
+        return profileRoot is not null &&
+            string.Equals(
+                Path.GetFullPath(profileRoot),
+                Path.GetFullPath(instancesRoot),
+                OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal
+            ) &&
+            Path.GetFileName(modsDirectory)?.Equals(
+                "Mods",
+                StringComparison.OrdinalIgnoreCase
+            ) == true &&
+            Path.GetFileName(profileDirectory)?.StartsWith(
+                "profile",
+                StringComparison.OrdinalIgnoreCase
+            ) == true;
     }
 
     private static void DeleteLink(string path)
