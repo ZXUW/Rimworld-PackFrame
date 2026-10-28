@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -83,8 +84,8 @@ internal static class SteamWorkshopClient
             return false;
         }
 
-        var libraryPath = Path.Combine(gamePath, "steam_api64.dll");
-        if (!File.Exists(libraryPath))
+        var libraryPath = FindSteamApi64Dll(gamePath);
+        if (libraryPath is null)
         {
             error = "steam_api64.dll was not found in the game folder.";
             return false;
@@ -162,6 +163,45 @@ internal static class SteamWorkshopClient
             {
                 NativeLibrary.Free(library);
             }
+        }
+    }
+
+    private static string? FindSteamApi64Dll(string gamePath)
+    {
+        var candidates = new[]
+        {
+            Path.Combine(gamePath, "steam_api64.dll"),
+            Path.Combine(gamePath, "RimWorldWin64_Data", "Plugins", "x86_64", "steam_api64.dll"),
+            Path.Combine(gamePath, "RimWorldWin64_Data", "Plugins", "steam_api64.dll"),
+            Path.Combine(gamePath, "RimWorldWin64_Data", "Plugins", "x86", "steam_api64.dll"),
+            Path.Combine(gamePath, "RimWorldWin64_Data", "steam_api64.dll"),
+            Path.Combine(gamePath, "..", "steam_api64.dll"),
+            Path.Combine(gamePath, "..", "RimWorldWin64_Data", "Plugins", "x86_64", "steam_api64.dll")
+        };
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var full = Path.GetFullPath(candidate);
+                if (File.Exists(full))
+                {
+                    return full;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        try
+        {
+            return Directory
+                .EnumerateFiles(gamePath, "steam_api64.dll", SearchOption.AllDirectories)
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null;
         }
     }
 
