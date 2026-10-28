@@ -13,6 +13,7 @@ internal static class OperationText
     public static string Download(string? language) => Choose(language, "Downloading local mods archive...", "正在下载本地模组压缩包...", "正在下載本機模組壓縮包...", "ローカル MOD アーカイブをダウンロード中...");
     public static string Extract(string? language) => Choose(language, "Extracting local mods...", "正在解压本地模组...", "正在解壓本機模組...", "ローカル MOD を展開中...");
     public static string Install(string? language) => Choose(language, "Installing mods...", "正在安装模组...", "正在安裝模組...", "MOD をインストール中...");
+    public static string ResolveCollection(string? language) => Choose(language, "Resolving Steam collection...", "正在解析 Steam 合集...", "正在解析 Steam 合集...", "Steam コレクションを解析中...");
     public static string ExtractProgress(
         string? language,
         int completed,

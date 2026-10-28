@@ -65,6 +65,7 @@ public partial class ModpackWindow
         _operationCancellation = cancellation;
         SetControls(false);
         string? staging = null;
+        var updateCompleted = false;
         try
         {
             Find<TextBlock>("StatusText").Text = T("Checking updates...", "正在检查更新...", "正在檢查更新...", "更新を確認中...");
@@ -77,7 +78,7 @@ public partial class ModpackWindow
             var prompt = $"{pack.Name}: {pack.Version ?? pack.Revision.ToString()}\n{pack.Changelog}\n" +
                 T("Download and review changes?", "下载更新并查看变更？", "下載更新並查看變更？", "更新をダウンロードして確認しますか？");
             if (!await new ConfirmWindow(prompt, T("Download", "下载", "下載", "ダウンロード"), Localization.CancelButton(_language)).ShowDialog<bool>(this)) return;
-            staging = Path.Combine(_packRoot, "runtime", "install-" + Guid.NewGuid().ToString("N"));
+            staging = Path.Combine(_packRoot, "runtime", StagingFolder(pack.Id));
             _archiveDownloadControl = new ArchiveDownloadControl();
             ShowOssFallback(pack, skipModsDownload: false);
             var result = await ModpackService.InstallAsync(pack, _game, _packRoot, Path.Combine(staging, "Mods"),
@@ -99,6 +100,7 @@ public partial class ModpackWindow
             Find<Button>("CancelOperationButton").IsVisible = false;
             _committingUpdate = true;
             await Task.Run(() => PackUpdateService.Apply(_packRoot, _currentInstance, result, choices.KeepLocal, choices.KeepOrder));
+            updateCompleted = true;
             ConfigApplied = true;
             if (!_closed) Find<TextBlock>("StatusText").Text = T("Update complete.", "更新完成。", "更新完成。", "更新完了。");
         }
@@ -106,7 +108,7 @@ public partial class ModpackWindow
         catch (Exception exception) { AppLog.Error("Update instance", exception); if (!_closed) Find<TextBlock>("StatusText").Text = exception.Message; }
         finally
         {
-            if (staging is not null) FileTransactions.TryDeleteDirectory(staging);
+            if (updateCompleted && staging is not null) FileTransactions.TryDeleteDirectory(staging);
             _committingUpdate = false;
             _archiveDownloadControl?.Dispose();
             _archiveDownloadControl = null;

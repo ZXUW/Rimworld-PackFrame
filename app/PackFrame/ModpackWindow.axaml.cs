@@ -833,11 +833,7 @@ public partial class ModpackWindow : Window
         ShowOssFallback(_selectedPack, skipModsDownload);
 
 
-        var stagingRoot = Path.Combine(
-            _packRoot,
-            "runtime",
-            "install-" + Guid.NewGuid().ToString("N")
-        );
+        var stagingRoot = Path.Combine(_packRoot, "runtime", StagingFolder(_selectedPack.Id));
         var modsRoot = Path.Combine(stagingRoot, "Mods");
         using var cancellation = new CancellationTokenSource();
         _operationCancellation = cancellation;
@@ -878,7 +874,6 @@ public partial class ModpackWindow : Window
         }
         catch (OperationCanceledException)
         {
-            TryDeleteDirectory(stagingRoot);
             if (!_closed)
             {
                 if (_resumeDownloadRequested)
@@ -896,7 +891,6 @@ public partial class ModpackWindow : Window
         catch (Exception exception)
         {
             AppLog.Error("Install modpack", exception);
-            TryDeleteDirectory(stagingRoot);
             if (!_closed)
             {
                 Find<TextBlock>("StatusText").Text =
@@ -1016,6 +1010,16 @@ public partial class ModpackWindow : Window
         Find<TextBlock>("StatusText").Text =
             Localization.OperationCancelled(_language);
     }
+    private static string StagingFolder(string? packId)
+    {
+        var value = string.IsNullOrWhiteSpace(packId) ? "pack" : packId.Trim();
+        var invalid = Path.GetInvalidFileNameChars();
+        var safe = new string(value
+            .Select(character => invalid.Contains(character) ? '_' : character)
+            .ToArray()).Trim();
+        return "install-" + (safe.Length == 0 ? "pack" : safe);
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

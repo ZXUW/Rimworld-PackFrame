@@ -372,6 +372,8 @@ public static class ModpackService
 
         Directory.CreateDirectory(modsRoot);
         var modsArchiveExtracted = false;
+        string? downloadedArchivePath = null;
+        var downloadCacheDirectory = Path.Combine(Path.GetDirectoryName(modsRoot)!, "downloads");
         var ossArchiveUri = ResolveModsArchiveUri(pack);
         var r2ArchiveUri = ResolveR2ArchiveUri(pack);
         var useR2 = r2ArchiveUri is not null &&
@@ -379,9 +381,7 @@ public static class ModpackService
         var archiveUri = useR2 ? r2ArchiveUri : ossArchiveUri;
         if (!skipModsDownload && archiveUri is not null)
         {
-            var archivePath = GetDownloadCachePath(archiveUri, pack.Revision);
-            try
-            {
+            var archivePath = GetDownloadCachePath(archiveUri, pack.Revision, downloadCacheDirectory);
                 status?.Invoke(OperationText.Download(language));
                 if (useR2)
                 {
@@ -415,7 +415,8 @@ public static class ModpackService
                         ));
                         archivePath = GetDownloadCachePath(
                             ossArchiveUri,
-                            pack.Revision
+                            pack.Revision,
+                            downloadCacheDirectory
                         );
                         await DownloadAsync(
                             ossArchiveUri,
@@ -448,15 +449,8 @@ public static class ModpackService
                     cancellationToken
                 );
                 status?.Invoke(OperationText.Install(language));
+                downloadedArchivePath = archivePath;
                 modsArchiveExtracted = true;
-            }
-            finally
-            {
-                if (modsArchiveExtracted)
-                {
-                    TryDeleteFile(archivePath);
-                }
-            }
         }
 
         var stagingRoot = Path.GetDirectoryName(modsRoot);
@@ -569,6 +563,7 @@ public static class ModpackService
             ParseWorkshopId(pack.WorkshopUrl);
         if (collectionId is not null)
         {
+            status?.Invoke(OperationText.ResolveCollection(language));
             await AddWorkshopTargetAsync(
                 collectionId.Value,
                 workshopIds,
@@ -584,6 +579,7 @@ public static class ModpackService
         }
         if (linkId is not null)
         {
+            status?.Invoke(OperationText.ResolveCollection(language));
             await AddWorkshopTargetAsync(
                 linkId.Value,
                 workshopIds,
@@ -668,6 +664,11 @@ public static class ModpackService
                 .Concat(packageIds.Where(id => !orderSet.Contains(id)))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        if (downloadedArchivePath is not null)
+        {
+            TryDeleteFile(downloadedArchivePath);
         }
 
         var name = string.IsNullOrWhiteSpace(pack.Name)
@@ -779,6 +780,42 @@ public static class ModpackService
     }
 
     private static async Task<List<ulong>> ResolveCollectionAsync(
+        ulong collectionId,
+        CancellationToken cancellationToken
+    )
+    {
+        Exception? lastError = null;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            try
+            {
+                return await ResolveCollectionOnceAsync(collectionId, cancellationToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                lastError = new TimeoutException("Steam collection request timed out.");
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (
+                exception is HttpRequestException or IOException or JsonException
+            )
+            {
+                lastError = exception;
+            }
+
+            if (attempt < 3)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(attempt), cancellationToken);
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException("Steam collection request failed.");
+    }
+
+    private static async Task<List<ulong>> ResolveCollectionOnceAsync(
         ulong collectionId,
         CancellationToken cancellationToken
     )
@@ -1289,17 +1326,19 @@ public static class ModpackService
                signature[5] == 0x1C;
     }
 
-    private static string GetDownloadCachePath(Uri uri, long? revision)
+    private static string GetDownloadCachePath(
+        Uri uri,
+        long? revision,
+        string? cacheDirectory = null
+    )
     {
         var key = uri.AbsoluteUri + "|" + (revision?.ToString() ?? "0");
         var hash = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(key))
         ).ToLowerInvariant();
-        var directory = Path.Combine(
-            Path.GetTempPath(),
-            "PackFrame",
-            "downloads"
-        );
+        var directory = string.IsNullOrWhiteSpace(cacheDirectory)
+            ? Path.Combine(Path.GetTempPath(), "PackFrame", "downloads")
+            : cacheDirectory;
         Directory.CreateDirectory(directory);
         return Path.Combine(directory, hash + ".part");
     }
