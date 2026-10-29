@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -5962,15 +5963,16 @@ public partial class MainWindow : Window
                 hasOfficialPath,
                 () => _ = CopyInstanceAsync(column)
             ));
-            flyout.Items.Add(CreateMenuItem(
-                Localization.ExportInstance(language),
-                hasOfficialPath,
-                () => _ = ExportInstanceAsync(column)
-            ));
+            flyout.Items.Add(CreateExportMenuItem(column, hasOfficialPath));
             flyout.Items.Add(CreateMenuItem(
                 Localization.ImportInstance(language),
                 hasPackRoot,
                 () => _ = ImportInstancesAsync(column)
+            ));
+            flyout.Items.Add(CreateMenuItem(
+                Localization.UploadInstance(language),
+                hasOfficialPath,
+                () => _ = ExportInstanceAsync(column)
             ));
             flyout.Items.Add(CreateMenuItem(
                 Localization.OpenInstance(language),
@@ -5989,10 +5991,11 @@ public partial class MainWindow : Window
             () => _ = RenameInstanceAsync(column)));
         flyout.Items.Add(CreateMenuItem(Localization.DeleteInstance(language), hasInstance,
             () => _ = DeleteInstanceAsync(column)));
-        flyout.Items.Add(CreateMenuItem(Localization.ExportInstance(language), hasInstance,
-            () => _ = ExportInstanceAsync(column)));
+        flyout.Items.Add(CreateExportMenuItem(column, hasInstance));
         flyout.Items.Add(CreateMenuItem(Localization.ImportInstance(language), hasPackRoot,
             () => _ = ImportInstancesAsync(column)));
+        flyout.Items.Add(CreateMenuItem(Localization.UploadInstance(language), hasInstance,
+            () => _ = ExportInstanceAsync(column)));
         flyout.Items.Add(CreateMenuItem(Localization.OpenInstance(language), hasInstance,
             () => OpenInstance(column)));
 
@@ -6008,6 +6011,44 @@ public partial class MainWindow : Window
         };
         item.Click += (_, _) => action();
         return item;
+    }
+
+    private MenuItem CreateExportMenuItem(int column, bool enabled)
+    {
+        var language = _config.Language;
+        var item = new MenuItem
+        {
+            Header = Localization.ExportInstance(language),
+            IsEnabled = enabled
+        };
+        item.Items.Add(CreateMenuItem(
+            Localization.ExportRml(language),
+            enabled,
+            () => _ = ExportProfileAsync(column, true)
+        ));
+        item.Items.Add(CreateMenuItem(
+            Localization.ExportXml(language),
+            enabled,
+            () => _ = ExportProfileAsync(column, false)
+        ));
+        item.Items.Add(CreateMenuItem(
+            Localization.OpenExportFolder(language),
+            enabled,
+            OpenExportFolder
+        ));
+        return item;
+    }
+
+    private void OpenExportFolder()
+    {
+        if (_packRoot is null)
+        {
+            return;
+        }
+
+        var path = Path.Combine(_packRoot, "Output profile");
+        Directory.CreateDirectory(path);
+        InstanceStore.OpenFolder(path);
     }
 
     private MenuItem CreateConfigFolderMenuItem(int column)
@@ -6342,6 +6383,140 @@ public partial class MainWindow : Window
         _lastInstanceIndex2 = index2;
 
         RefreshManager(true);
+    }
+
+    private async Task ExportProfileAsync(int column, bool rml)
+    {
+        if (_packRoot is null)
+        {
+            return;
+        }
+
+        var instance = GetSelectedInstance(column);
+        if (instance is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var activeIds = instance.ActivePackageIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToList();
+            var entries = activeIds
+                .Select(id =>
+                {
+                    var mod = SelectModForInstance(id, instance);
+                    return (Id: id, Name: mod?.Name ?? id, SteamId: ExportSteamId(mod, id));
+                })
+                .ToList();
+
+            var outputDirectory = Path.Combine(_packRoot, "Output profile");
+            Directory.CreateDirectory(outputDirectory);
+            var displayName = string.IsNullOrWhiteSpace(instance.DisplayName)
+                ? instance.FolderName
+                : instance.DisplayName;
+            var invalid = Path.GetInvalidFileNameChars();
+            var safeName = new string(displayName
+                .Select(character => invalid.Contains(character) ? '_' : character)
+                .ToArray()).Trim();
+            if (safeName.Length == 0)
+            {
+                safeName = instance.FolderName;
+            }
+
+            var path = Path.Combine(outputDirectory, safeName + (rml ? ".rml" : ".xml"));
+            var version = !string.IsNullOrWhiteSpace(instance.GameVersion)
+                ? instance.GameVersion
+                : _gameVersion ?? string.Empty;
+            var knownExpansions = instance.KnownExpansions.Count > 0
+                ? instance.KnownExpansions.ToList()
+                : activeIds
+                    .Where(id => id.StartsWith("ludeon.rimworld", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+            await Task.Run(() =>
+            {
+                if (rml)
+                {
+                    WriteRmlProfile(path, version, entries);
+                }
+                else
+                {
+                    WriteXmlProfile(path, version, activeIds, knownExpansions);
+                }
+            });
+            ShowToast(Localization.ExportProfileDone(_config.Language, path));
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Export profile: " + instance.FolderName, exception);
+            ShowToast(exception.Message);
+        }
+    }
+
+    private static ulong ExportSteamId(ModInfo? mod, string packageId)
+    {
+        var workshopId = mod is null ? null : GetWorkshopId(mod);
+        if (workshopId is not null)
+        {
+            return workshopId.Value;
+        }
+
+        return packageId.ToLowerInvariant() switch
+        {
+            "ludeon.rimworld.royalty" => 1149640,
+            "ludeon.rimworld.ideology" => 1392840,
+            "ludeon.rimworld.biotech" => 1826140,
+            "ludeon.rimworld.anomaly" => 2380740,
+            "ludeon.rimworld.odyssey" => 3022790,
+            _ => 0
+        };
+    }
+
+    private static void WriteRmlProfile(
+        string path,
+        string version,
+        IReadOnlyList<(string Id, string Name, ulong SteamId)> entries
+    )
+    {
+        var document = new XDocument(
+            new XDeclaration("1.0", "utf-8", null),
+            new XElement("savedModList",
+                new XElement("meta",
+                    new XElement("gameVersion", version),
+                    new XElement("modIds", entries.Select(entry =>
+                        new XElement("li", entry.Id))),
+                    new XElement("modSteamIds", entries.Select(entry =>
+                        new XElement("li", entry.SteamId))),
+                    new XElement("modNames", entries.Select(entry =>
+                        new XElement("li", entry.Name)))),
+                new XElement("modList",
+                    new XElement("ids", entries.Select(entry =>
+                        new XElement("li", entry.Id))),
+                    new XElement("names", entries.Select(entry =>
+                        new XElement("li", entry.Name)))))
+        );
+        document.Save(path);
+    }
+
+    private static void WriteXmlProfile(
+        string path,
+        string version,
+        IReadOnlyList<string> activeIds,
+        IReadOnlyList<string> knownExpansions
+    )
+    {
+        var document = new XDocument(
+            new XDeclaration("1.0", "utf-8", null),
+            new XElement("ModsConfigData",
+                new XElement("version", version),
+                new XElement("activeMods", activeIds.Select(id =>
+                    new XElement("li", id))),
+                new XElement("knownExpansions", knownExpansions.Select(id =>
+                    new XElement("li", id))))
+        );
+        document.Save(path);
     }
 
     private async Task ExportInstanceAsync(int column)

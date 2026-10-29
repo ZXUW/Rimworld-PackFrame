@@ -283,6 +283,61 @@ public static class Localization
         };
     }
 
+    public static string UploadInstance(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "上传",
+            TraditionalChinese => "上傳",
+            Japanese => "アップロード",
+            _ => "Upload"
+        };
+    }
+
+    public static string ExportRml(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "RML（游戏内格式）",
+            TraditionalChinese => "RML（遊戲內格式）",
+            Japanese => "RML（ゲーム内形式）",
+            _ => "RML (in-game format)"
+        };
+    }
+
+    public static string ExportXml(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "XML（一般管理器格式）",
+            TraditionalChinese => "XML（一般管理器格式）",
+            Japanese => "XML（一般マネージャー形式）",
+            _ => "XML (manager format)"
+        };
+    }
+
+    public static string OpenExportFolder(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "打开导出文件夹",
+            TraditionalChinese => "開啟匯出資料夾",
+            Japanese => "エクスポートフォルダーを開く",
+            _ => "Open export folder"
+        };
+    }
+
+    public static string ExportProfileDone(string? language, string path)
+    {
+        return language switch
+        {
+            SimplifiedChinese => $"已导出：{path}",
+            TraditionalChinese => $"已匯出：{path}",
+            Japanese => $"エクスポートしました：{path}",
+            _ => $"Exported: {path}"
+        };
+    }
+
     public static string ImportInstance(string? language)
     {
         return language switch
