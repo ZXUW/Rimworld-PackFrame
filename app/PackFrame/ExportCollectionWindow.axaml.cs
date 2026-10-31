@@ -906,7 +906,8 @@ public partial class ExportCollectionWindow : Window
             return;
         }
 
-        var fallbackArchive = !OssPublisher.IsEnabled(_appConfig)
+        var fallbackArchive = _localModsPacked &&
+            !OssPublisher.IsEnabled(_appConfig)
             ? StageFallbackArchive()
             : null;
         SavePackInfo();
@@ -1059,18 +1060,32 @@ public partial class ExportCollectionWindow : Window
         return fallbackPath;
     }
 
-    private string? FindRootArchive()
+    private void MoveStaleRootArchives()
     {
-        return Directory
+        var finished = Path.Combine(_result.RepoPath, "finished");
+        Directory.CreateDirectory(finished);
+        foreach (var file in Directory
             .EnumerateFiles(_result.RepoPath, "*", SearchOption.TopDirectoryOnly)
             .Where(file =>
             {
                 var extension = Path.GetExtension(file);
                 return extension.Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
                        extension.Equals(".7z", StringComparison.OrdinalIgnoreCase);
-            })
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .FirstOrDefault();
+            }))
+        {
+            var destination = Path.Combine(finished, Path.GetFileName(file));
+            var suffix = 0;
+            while (File.Exists(destination))
+            {
+                suffix++;
+                destination = Path.Combine(
+                    finished,
+                    Path.GetFileNameWithoutExtension(file) + "-" + suffix + Path.GetExtension(file)
+                );
+            }
+
+            File.Move(file, destination);
+        }
     }
 
     private string? EnsureNamedUploadArchive()
@@ -1130,12 +1145,24 @@ public partial class ExportCollectionWindow : Window
     private async Task<bool> EnsureOssArchiveUploadedAsync(TextBlock status)
     {
         var finishedPath = ModpackRepoExporter.GetFinishedArchivePath(_result.RepoPath);
-        var uploadPath = EnsureNamedUploadArchive();
-        var archiveForLimit = uploadPath ?? FindRootArchive();
+        var uploadPath = _localModsPacked ? EnsureNamedUploadArchive() : null;
+        if (!_localModsPacked)
+        {
+            MoveStaleRootArchives();
+            status.Text = OperationText.Choose(
+                _language,
+                "Local mods are not packed; uploading configuration and collection metadata only.",
+                "本地模组未打包，只上传配置和合集信息。",
+                "本機模組未打包，只上傳設定和合集資訊。",
+                "ローカル MOD は未パックのため、設定とコレクション情報のみアップロードします。"
+            );
+            return true;
+        }
+
         const long automaticUploadLimit = 100L * 1024 * 1024;
-        if (!OssPublisher.IsEnabled(_appConfig) &&
-            archiveForLimit is not null &&
-            new FileInfo(archiveForLimit).Length > automaticUploadLimit)
+        if (uploadPath is not null &&
+            !OssPublisher.IsEnabled(_appConfig) &&
+            new FileInfo(uploadPath).Length > automaticUploadLimit)
         {
             status.Text = OperationText.Choose(
                 _language,
@@ -1149,6 +1176,7 @@ public partial class ExportCollectionWindow : Window
 
         if (uploadPath is null)
         {
+            MoveStaleRootArchives();
             return true;
         }
 
@@ -1317,7 +1345,8 @@ public partial class ExportCollectionWindow : Window
             return;
         }
 
-        var fallbackArchive = !OssPublisher.IsEnabled(_appConfig)
+        var fallbackArchive = _localModsPacked &&
+            !OssPublisher.IsEnabled(_appConfig)
             ? StageFallbackArchive()
             : null;
         SavePackInfo();
