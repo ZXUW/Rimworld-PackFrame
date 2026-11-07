@@ -431,6 +431,7 @@ public partial class MainWindow : Window
         _packRoot = AppPaths.FindPackRoot();
         InitializePaneSelection();
         InitializePaneNavigation();
+        InitializeWorkshopMonitoring();
         ApplyLocalization();
         UpdateEnableTargetBorders();
         UpdateUndoButton();
@@ -1771,69 +1772,11 @@ public partial class MainWindow : Window
 
     private List<MissingModRow> BuildMissingMods(int instanceIndex)
     {
-        var result = new List<MissingModRow>();
         if (instanceIndex < 0 || instanceIndex >= _instances.Count)
         {
-            return result;
+            return new List<MissingModRow>();
         }
-
-        var instance = _instances[instanceIndex];
-        var mapping = ModFullNameList.Load(instance);
-        var history = ModFullNameList.LoadHistory(instance).ToDictionary(
-            entry => entry.PackageId,
-            StringComparer.OrdinalIgnoreCase
-        );
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var activeId in instance.ActivePackageIds)
-        {
-            var packageId = activeId.Trim();
-            if (packageId.Length == 0 ||
-                _modsById.ContainsKey(packageId) ||
-                !seen.Add(packageId))
-            {
-                continue;
-            }
-
-            mapping.TryGetValue(packageId, out var entry);
-            history.TryGetValue(packageId, out var historyEntry);
-            var label = entry?.Label;
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                label = historyEntry?.Label;
-            }
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                label = packageId;
-            }
-            var author = entry?.Author;
-            if (string.IsNullOrWhiteSpace(author))
-            {
-                author = historyEntry?.Author;
-            }
-            if (string.IsNullOrWhiteSpace(author))
-            {
-                author = "—";
-            }
-            var link = entry?.Link;
-            if (string.IsNullOrWhiteSpace(link))
-            {
-                link = historyEntry?.Link;
-            }
-            if (string.IsNullOrWhiteSpace(link))
-            {
-                link = "—";
-            }
-
-            result.Add(new MissingModRow
-            {
-                Label = label,
-                Author = author,
-                PackageId = packageId,
-                Link = link
-            });
-        }
-
-        return result;
+        return BuildAvailabilityRows(_instances[instanceIndex]);
     }
 
     private int GetHistoryCount(int instanceIndex)
@@ -1846,16 +1789,19 @@ public partial class MainWindow : Window
         return ModFullNameList.LoadHistory(_instances[instanceIndex]).Count;
     }
 
-    private void UpdateMissingButton(Button button, int missingCount, int historyCount)
+    private void UpdateMissingButton(Button button, IReadOnlyList<MissingModRow> rows, int historyCount)
     {
-        button.IsVisible = missingCount > 0 || historyCount > 0;
-        if (missingCount > 0)
+        button.IsVisible = rows.Count > 0 || historyCount > 0;
+        if (rows.Count > 0)
         {
-            button.Content = Localization.MissingModsLabel(
-                _config.Language,
-                missingCount
-            );
-            ToolTip.SetTip(button, Localization.MissingModsTooltip(_config.Language));
+            var missing = rows.Count(row => row.Availability == WorkshopModAvailability.Missing);
+            var downloading = rows.Count(row => row.IsDownloading);
+            button.Content = new TextBlock
+            {
+                Text = Localization.ModAvailabilityLabel(_config.Language, missing, downloading, rows.Count - missing - downloading),
+                TextWrapping = TextWrapping.Wrap
+            };
+            ToolTip.SetTip(button, Localization.ModAvailabilityTitle(_config.Language));
             return;
         }
 
@@ -1902,7 +1848,9 @@ public partial class MainWindow : Window
             rows,
             _config.Language
         );
-        await window.ShowDialog(this);
+        _modStatusWindows[window] = instance;
+        try { await window.ShowDialog(this); }
+        finally { _modStatusWindows.Remove(window); }
     }
 
     private void UpdateHeaders()
@@ -2310,6 +2258,7 @@ public partial class MainWindow : Window
             if (version == _loadVersion)
             {
                 _loadingMods = false;
+                WakeWorkshopMonitoring();
                 _refreshButton.Content = Localization.Refresh(_config.Language);
                 _refreshButton.IsEnabled = true;
             }
@@ -2609,14 +2558,15 @@ public partial class MainWindow : Window
         );
         UpdateMissingButton(
             _activeMissing1,
-            _missingMods1.Count,
+            _missingMods1,
             _missingMods1.Count > 0 ? 0 : GetHistoryCount(index1)
         );
         UpdateMissingButton(
             _activeMissing2,
-            _missingMods2.Count,
+            _missingMods2,
             _missingMods2.Count > 0 ? 0 : GetHistoryCount(index2)
         );
+        UpdateOpenModStatusWindows();
 
         if (!selectFirst)
         {
@@ -4102,10 +4052,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        var installedIds = new HashSet<string>(
-            _allMods.Select(mod => mod.PackageId),
-            StringComparer.OrdinalIgnoreCase
-        );
         var savedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var column = 0; column < 2; column++)
         {
@@ -4121,11 +4067,17 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            var missingIds = instance.ActivePackageIds
-                .Where(id => !installedIds.Contains(id))
+            var activeIds = new HashSet<string>(instance.ActivePackageIds, StringComparer.OrdinalIgnoreCase);
+            var availability = BuildAvailabilityRows(instance);
+            var missingIds = availability
+                .Where(row => row.Availability == WorkshopModAvailability.Missing && activeIds.Contains(row.PackageId))
+                .Select(row => row.PackageId)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            ModFullNameList.Save(instance, _allMods, missingIds);
+            var pendingIds = availability
+                .Where(row => row.Availability != WorkshopModAvailability.Missing && activeIds.Contains(row.PackageId))
+                .Select(row => row.PackageId).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            ModFullNameList.Save(instance, _allMods, missingIds, pendingIds);
         }
     }
 

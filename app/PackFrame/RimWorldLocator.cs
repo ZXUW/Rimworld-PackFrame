@@ -242,7 +242,7 @@ public static class RimWorldLocator
         }
     }
 
-    private static List<string> GetSteamRoots()
+    internal static List<string> GetSteamRoots()
     {
         var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void Add(string? path)

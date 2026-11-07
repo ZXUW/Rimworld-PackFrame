@@ -77,6 +77,7 @@ public sealed class InstanceMetadata
     public bool SteamCmd { get; set; }
     public string? ModsArchiveName { get; set; }
     public Dictionary<string, string> AppliedOverlays { get; set; } = new();
+    public List<WorkshopModReference> WorkshopMods { get; set; } = new();
 }
 
 public static class InstanceStore
@@ -326,6 +327,27 @@ public static class InstanceStore
         FileTransactions.WriteAtomic(Path.Combine(instance.DirectoryPath, MetadataFileName), path =>
             File.WriteAllText(path, JsonSerializer.Serialize(metadata, PackFrameJsonContext.Default.InstanceMetadata)));
         instance.Metadata = metadata;
+    }
+
+    internal static bool ResolveWorkshopReferences(ManagedInstance instance, IReadOnlyList<WorkshopModReference> references)
+    {
+        instance.EnsureHealthy();
+        // A catalogue scan may have started before another operation updated the
+        // binding or name. Merge just the references into the current disk metadata.
+        var metadata = ReadMetadata(instance.DirectoryPath) ?? new InstanceMetadata();
+        var resolved = WorkshopModReferences.Normalize(references)
+            .Where(reference => reference.PackageId is not null)
+            .ToDictionary(reference => reference.WorkshopId);
+        var changed = false;
+        metadata.WorkshopMods = WorkshopModReferences.Normalize(metadata.WorkshopMods).Select(reference =>
+        {
+            if (reference.PackageId is not null || !resolved.TryGetValue(reference.WorkshopId, out var installed)) return reference;
+            changed = true;
+            return reference with { PackageId = installed.PackageId, Name = reference.Name ?? installed.Name };
+        }).ToList();
+        if (!changed) return false;
+        SaveMetadata(instance, metadata);
+        return true;
     }
 
     private sealed record PendingActiveMods(

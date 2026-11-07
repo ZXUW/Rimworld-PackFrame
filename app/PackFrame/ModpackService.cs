@@ -107,7 +107,8 @@ public sealed record ModpackInstallResult(
     IReadOnlyList<string>? ReplacedModFolders = null,
     string? ModsArchiveName = null,
     IReadOnlyDictionary<string, string>? AppliedOverlays = null,
-    bool SparseMods = false
+    bool SparseMods = false,
+    IReadOnlyList<WorkshopModReference>? WorkshopMods = null
 );
 
 public static class ModpackService
@@ -522,6 +523,7 @@ public static class ModpackService
         var packageIds = new List<string>();
         var workshopIds = new List<ulong>();
         var explicitWorkshopPackageIds = new Dictionary<ulong, string>();
+        var declaredWorkshopMods = new Dictionary<ulong, WorkshopModReference>();
         var resolvedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var mods = pack.Mods ?? new List<ModpackMod>();
         var githubCount = 0;
@@ -586,6 +588,7 @@ public static class ModpackService
                 }
 
                 AddUnique(workshopIds, id.Value);
+                declaredWorkshopMods[id.Value] = new WorkshopModReference(id.Value, packageId, mod.Name);
                 if (!string.IsNullOrWhiteSpace(packageId))
                 {
                     explicitWorkshopPackageIds[id.Value] = packageId;
@@ -675,6 +678,7 @@ public static class ModpackService
             }
         }
 
+        var resolvedWorkshopPackageIds = new Dictionary<ulong, string>(explicitWorkshopPackageIds);
         foreach (var id in workshopIds)
         {
             if (explicitWorkshopPackageIds.TryGetValue(id, out var explicitId))
@@ -689,12 +693,12 @@ public static class ModpackService
             }
             if (!string.IsNullOrWhiteSpace(installedId))
             {
+                resolvedWorkshopPackageIds.TryAdd(id, installedId);
                 AddPackageId(installedId, Array.Empty<string>(), packageIds, resolvedPackageIds);
             }
         }
 
         var unresolvedWorkshopCount = workshopIds.Count(id =>
-            !explicitWorkshopPackageIds.ContainsKey(id) &&
             string.IsNullOrWhiteSpace(ReadWorkshopPackageId(game.WorkshopPath, id)) &&
             (!useSteamCmd || string.IsNullOrWhiteSpace(
                 ReadWorkshopPackageId(modsRoot, id)
@@ -746,7 +750,8 @@ public static class ModpackService
             replacedModFolders,
             reuseBase ? installedArchiveName ?? archiveName : archiveName,
             appliedOverlays,
-            reuseBase
+            reuseBase,
+            WorkshopModReferences.ForTargets(workshopIds, declaredWorkshopMods, resolvedWorkshopPackageIds)
         );
     }
 

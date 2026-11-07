@@ -1191,6 +1191,71 @@ public static class Localization
         };
     }
 
+    public static string WorkshopStatus(string? language, WorkshopModAvailability availability,
+        ulong bytes = 0, ulong total = 0)
+    {
+        var text = availability switch
+        {
+            WorkshopModAvailability.CheckingSteam => OperationText.Choose(language,
+                "Checking Steam", "正在检查 Steam", "正在檢查 Steam", "Steam を確認中"),
+            WorkshopModAvailability.Unknown => OperationText.Choose(language,
+                "Unknown", "状态未知", "狀態未知", "状態不明"),
+            WorkshopModAvailability.Queued => OperationText.Choose(language,
+                "Queued", "等待下载", "等待下載", "ダウンロード待ち"),
+            WorkshopModAvailability.Downloading => OperationText.Choose(language,
+                "Downloading", "正在下载", "正在下載", "ダウンロード中"),
+            WorkshopModAvailability.Completing => OperationText.Choose(language,
+                "Refreshing", "正在刷新", "正在重新整理", "更新中"),
+            _ => OperationText.Choose(language, "Missing", "缺失", "缺失", "欠落")
+        };
+        if (availability == WorkshopModAvailability.Downloading && total > 0)
+        {
+            var percent = (int)System.Math.Clamp(100d * bytes / total, 0, 100);
+            text += $" {percent}%";
+        }
+        return text;
+    }
+
+    public static string ModAvailabilityLabel(string? language, int missing, int downloading, int unknown)
+    {
+        var parts = new System.Collections.Generic.List<string>();
+        if (missing > 0) parts.Add(MissingModsLabel(language, missing));
+        if (downloading > 0) parts.Add(OperationText.Choose(language,
+            $"Downloading {downloading}", $"下载中 {downloading}", $"下載中 {downloading}", $"ダウンロード中 {downloading}"));
+        if (unknown > 0) parts.Add(OperationText.Choose(language,
+            $"Unknown {unknown}", $"未知 {unknown}", $"未知 {unknown}", $"状態不明 {unknown}"));
+        return parts.Count > 0 ? string.Join(" · ", parts) : OperationText.Choose(language,
+            "All available", "模组均可用", "模組皆可用", "すべて利用可能");
+    }
+
+    public static string ModAvailabilitySummary(string? language, string name, int missing,
+        int downloading, int unknown, int checking = 0)
+    {
+        var summary = missing > 0 || downloading > 0 || unknown > 0
+            ? ModAvailabilityLabel(language, missing, downloading, unknown)
+            : string.Empty;
+        if (checking > 0)
+        {
+            if (summary.Length > 0) summary += " · ";
+            summary += OperationText.Choose(language, $"Checking Steam {checking}",
+                $"正在检查 Steam {checking}", $"正在檢查 Steam {checking}", $"Steam を確認中 {checking}");
+        }
+        if (summary.Length == 0) summary = ModAvailabilityLabel(language, 0, 0, 0);
+        return string.IsNullOrWhiteSpace(name) ? summary : name + ": " + summary;
+    }
+
+    public static string WorkshopAutoRefreshNote(string? language) => OperationText.Choose(language,
+        "Updates automatically when downloads finish.",
+        "下载完成后自动更新。",
+        "下載完成後自動更新。",
+        "ダウンロード完了後に自動更新します。");
+
+    public static string ModAvailabilityTitle(string? language) => OperationText.Choose(language,
+        "Mod status", "模组状态", "模組狀態", "MOD の状態");
+
+    public static string StatusHeader(string? language) => OperationText.Choose(language,
+        "Status", "状态", "狀態", "状態");
+
     public static string MissingModsLabel(string? language, int count)
     {
         return language switch
@@ -1784,10 +1849,10 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => $"已创建实例“{name}”，启用 {count} 个模组；{unresolved} 个工坊模组待下载后刷新启用。",
-            TraditionalChinese => $"已建立實例「{name}」，啟用 {count} 個模組；{unresolved} 個工坊模組待下載後重新整理啟用。",
-            Japanese => $"インスタンス「{name}」を作成し、{count} 個のMODを有効にしました。{unresolved} 個のワークショップMODはダウンロード後に更新して有効にしてください。",
-            _ => $"Created instance \"{name}\" with {count} active mods; {unresolved} Workshop mods need to finish downloading before they can be activated."
+            SimplifiedChinese => $"已创建实例“{name}”（{count} 个模组）。\n{unresolved} 个工坊模组尚未就绪，下载完成后自动更新。",
+            TraditionalChinese => $"已建立實例「{name}」（{count} 個模組）。\n{unresolved} 個工作坊模組尚未就緒，下載完成後自動更新。",
+            Japanese => $"「{name}」を作成しました（MOD {count} 個）。\nワークショップMOD {unresolved} 個は未準備です。ダウンロード完了後に自動更新します。",
+            _ => $"Created \"{name}\" ({count} {(count == 1 ? "mod" : "mods")}).\n{unresolved} Workshop {(unresolved == 1 ? "mod is" : "mods are")} not ready yet. Updates automatically when downloads finish."
         };
     }
 
@@ -1806,10 +1871,10 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "查看缺失模组",
-            TraditionalChinese => "檢視缺失模組",
-            Japanese => "欠落MODを表示",
-            _ => "View missing mods"
+            SimplifiedChinese => "查看模组状态",
+            TraditionalChinese => "檢視模組狀態",
+            Japanese => "MODの状態を表示",
+            _ => "View mod status"
         };
     }
 
