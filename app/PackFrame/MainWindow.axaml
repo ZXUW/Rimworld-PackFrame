@@ -423,18 +423,21 @@
                                 BorderBrush="{StaticResource SecondaryBrush}"
                                 BorderThickness="0,1,0,0"
                                 Padding="4,4,4,2">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,*">
                                 <TextBlock x:Name="ActiveProblemS1"
+                                           Margin="0,0,12,0"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            TextWrapping="NoWrap"
                                            Cursor="Hand"
                                            PointerPressed="OnActiveProblemS1Click" />
                                 <TextBlock x:Name="ActiveProblemV1"
+                                           Grid.Column="1" Margin="0,0,12,0"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            TextWrapping="NoWrap"
                                            Cursor="Hand"
                                            PointerPressed="OnActiveProblemV1Click" />
                                 <TextBlock x:Name="ActiveProblemR1"
+                                           Grid.Column="2" Margin="0,0,12,0"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            TextWrapping="NoWrap"
                                            Cursor="Hand"
@@ -446,10 +449,11 @@
                                            Cursor="Hand"
                                            PointerPressed="OnActiveLocalCount1Click" />
                                 <Button x:Name="ActiveMissing1"
+                                        Grid.Column="3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                         Classes="footerlink"
                                         IsVisible="False"
                                         Click="OnMissing1Click" />
-                            </StackPanel>
+                            </Grid>
                         </Border>                    </Grid>
                 </Border>
 
@@ -572,18 +576,21 @@
                                 BorderBrush="{StaticResource SecondaryBrush}"
                                 BorderThickness="0,1,0,0"
                                 Padding="4,4,4,2">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,*">
                                 <TextBlock x:Name="ActiveProblemS2"
+                                           Margin="0,0,12,0"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            TextWrapping="NoWrap"
                                            Cursor="Hand"
                                            PointerPressed="OnActiveProblemS2Click" />
                                 <TextBlock x:Name="ActiveProblemV2"
+                                           Grid.Column="1" Margin="0,0,12,0"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            TextWrapping="NoWrap"
                                            Cursor="Hand"
                                            PointerPressed="OnActiveProblemV2Click" />
                                 <TextBlock x:Name="ActiveProblemR2"
+                                           Grid.Column="2" Margin="0,0,12,0"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            TextWrapping="NoWrap"
                                            Cursor="Hand"
@@ -595,10 +602,11 @@
                                            Cursor="Hand"
                                            PointerPressed="OnActiveLocalCount2Click" />
                                 <Button x:Name="ActiveMissing2"
+                                        Grid.Column="3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                         Classes="footerlink"
                                         IsVisible="False"
                                         Click="OnMissing2Click" />
-                            </StackPanel>
+                            </Grid>
                         </Border>                    </Grid>
                 </Border>
             </Grid>

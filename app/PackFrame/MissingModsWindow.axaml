@@ -28,21 +28,9 @@
             <TextBlock x:Name="SummaryText"
                        Foreground="{DynamicResource PrimaryTextBrush}"
                        TextWrapping="Wrap" />
-            <TextBlock x:Name="SourceText"
-                       Foreground="{DynamicResource SecondaryTextBrush}"
-                       TextWrapping="Wrap" />
             <TextBlock x:Name="RefreshNoteText"
                        Foreground="{DynamicResource SecondaryTextBrush}"
                        TextWrapping="Wrap" />
-            <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
-                <TextBlock x:Name="MappingLabel"
-                           Foreground="{DynamicResource SecondaryTextBrush}"
-                           Margin="0,0,8,0" />
-                <SelectableTextBlock x:Name="MappingPathText"
-                                     Grid.Column="1"
-                                     Foreground="{DynamicResource PrimaryTextBrush}"
-                                     TextTrimming="CharacterEllipsis" />
-            </Grid>
         </StackPanel>
 
         <Border Grid.Row="2"
@@ -51,7 +39,7 @@
                 BorderThickness="1">
             <Grid RowDefinitions="Auto,*">
                 <Border Background="{DynamicResource SecondaryBrush}" Padding="12,9">
-                    <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*">
+                    <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*,1.5*">
                         <TextBlock x:Name="LabelHeader"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold"
@@ -69,6 +57,11 @@
                         <TextBlock x:Name="LinkHeader"
                                    Grid.Column="3"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,12,0" />
+                        <TextBlock x:Name="StatusHeader"
+                                   Grid.Column="4"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontWeight="SemiBold" />
                     </Grid>
                 </Border>
@@ -80,7 +73,7 @@
                                 <Border BorderBrush="{DynamicResource SecondaryBrush}"
                                         BorderThickness="0,0,0,1"
                                         Padding="12,9">
-                                    <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*">
+                                    <Grid ColumnDefinitions="2*,1.2*,1.6*,2.2*,1.5*">
                                         <SelectableTextBlock Text="{Binding Label}"
                                                              Foreground="{DynamicResource PrimaryTextBrush}"
                                                              TextWrapping="Wrap"
@@ -98,7 +91,12 @@
                                         <SelectableTextBlock Grid.Column="3"
                                                              Text="{Binding Link}"
                                                              Foreground="{DynamicResource PrimaryTextBrush}"
-                                                             TextWrapping="Wrap" />
+                                                             TextWrapping="Wrap"
+                                                             Margin="0,0,12,0" />
+                                        <TextBlock Grid.Column="4"
+                                                   Text="{Binding Status}"
+                                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                                   TextWrapping="Wrap" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>

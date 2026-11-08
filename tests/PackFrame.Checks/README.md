@@ -31,8 +31,36 @@ Failure checks cover damaged-profile isolation, stale pending edits, installatio
 rollback and staging-path rejection, recovery across damaged manifests, mutable
 color snapshots and failed color writes. Linux/macOS CI additionally constructs
 a tar.gz and checks executable permissions through the actual SteamCMD extractor.
+Workshop checks cover bounded Steam KeyValues parsing, passive manifest/log observations,
+unavailable records, deferred/bounded completion rescans, saved item/package mappings,
+restart recovery, and preserving pending edits and unrelated instance metadata.
+These checks use synthetic state and temporary files; they do not contact Steam.
+
+Workshop checks cover installed-manifest changes completed between polls,
+same-second log/ACF timestamps, and secondary-library discovery using Linux
+and macOS client roots. Selection checks repeatedly replace all three panes'
+models while retaining selected package IDs, range anchors and displayed details.
 
 Manual platform checks:
+
+- On Windows x64 with Steam running, install a pack whose local download finishes
+  before its Workshop items. Queued/downloading items must not count as Missing;
+  the status dialog updates while open. Verify Steam keeps downloading while
+  PackFrame checks status and does not mark RimWorld as running. Preallocated file
+  sizes must not appear as download percentages. Verify the lists refresh after
+  each item finishes without pressing Refresh.
+  Keep unsaved order edits, selections, searches and scroll positions in both panes
+  during completion; they must remain intact. Reopen PackFrame during a download
+  and confirm its saved Workshop targets are still monitored.
+- Leave monitoring idle, then install a pack with a new Workshop item. Finishing
+  the catalogue load must start a fresh Steam query without waiting for the idle
+  30-second interval; subsequent pending checks return to four-second polling.
+- Pause Steam downloads and resume them; incomplete items remain pending. Make
+  Steam's manifest/log records unavailable: uncertain Workshop items show Status unavailable,
+  while known missing local/GitHub mods remain Missing. Restart Steam and verify
+  monitoring recovers. SteamCMD instances must keep their existing download flow.
+- A completed Workshop item with unreadable metadata gets a bounded rescan retry;
+  persistent invalid metadata becomes Missing rather than refreshing indefinitely.
 
 - App update checks must only offer published release information. Opening the
   offer must not download, close or restart PackFrame. Download, Later and Install

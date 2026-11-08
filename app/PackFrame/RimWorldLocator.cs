@@ -242,7 +242,7 @@ public static class RimWorldLocator
         }
     }
 
-    private static List<string> GetSteamRoots()
+    internal static List<string> GetSteamRoots()
     {
         var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void Add(string? path)
@@ -293,6 +293,44 @@ public static class RimWorldLocator
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                 "Steam"
             ));
+        }
+
+        return GetSteamRoots(roots, OperatingSystem.IsLinux(), OperatingSystem.IsMacOS(),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            Environment.GetEnvironmentVariable("XDG_DATA_HOME"));
+    }
+
+    // Keep platform/home discovery injectable: tests must not depend on a real
+    // Steam installation or change the process-wide environment.
+    internal static List<string> GetSteamRoots(IEnumerable<string> initialRoots,
+        bool isLinux, bool isMacOS, string? home, string? xdgDataHome)
+    {
+        var roots = new HashSet<string>(isLinux ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+        void Add(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try { roots.Add(Path.GetFullPath(path.Trim().Trim('"'))); }
+            catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException) { }
+        }
+
+        foreach (var root in initialRoots) Add(root);
+        if (isLinux && !string.IsNullOrWhiteSpace(xdgDataHome) && Path.IsPathFullyQualified(xdgDataHome))
+            Add(Path.Combine(xdgDataHome, "Steam"));
+        if (!string.IsNullOrWhiteSpace(home))
+        {
+            if (isLinux)
+            {
+                // .steam entries are often symlinks to the actual client data.
+                Add(Path.Combine(home, ".local", "share", "Steam"));
+                Add(Path.Combine(home, ".steam", "steam"));
+                Add(Path.Combine(home, ".steam", "root"));
+                Add(Path.Combine(home, ".steam", "debian-installation"));
+                Add(Path.Combine(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"));
+            }
+            else if (isMacOS)
+            {
+                Add(Path.Combine(home, "Library", "Application Support", "Steam"));
+            }
         }
 
         return roots.ToList();

@@ -14,6 +14,16 @@ internal sealed record PaneSelectionSnapshot(string? Scope, string[] SelectedIds
     internal static PaneSelectionSnapshot Capture(ListBox list, string? scope, string? anchorId) =>
         new(scope, list.SelectedItems!.OfType<ModInfo>().Select(mod => mod.PackageId).ToArray(), anchorId);
 
+    // Details can belong to the last clicked row of a multi-selection, which is
+    // not necessarily SelectedItem. Always return a current row, never a stale model.
+    internal static ModInfo? ResolveDetails(ListBox? list, string? packageId)
+    {
+        var selected = list?.SelectedItems?.OfType<ModInfo>().ToList();
+        return selected?.FirstOrDefault(mod =>
+            string.Equals(mod.PackageId, packageId, StringComparison.OrdinalIgnoreCase))
+            ?? selected?.LastOrDefault();
+    }
+
     internal int Restore(ListBox list, IReadOnlyList<ModInfo> rows, string? scope, bool selectFirst)
     {
         var sameScope = string.Equals(Scope, scope, StringComparison.OrdinalIgnoreCase);

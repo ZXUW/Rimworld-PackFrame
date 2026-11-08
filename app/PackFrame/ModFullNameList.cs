@@ -35,6 +35,11 @@ public sealed class MissingModRow
     public required string Author { get; init; }
     public required string PackageId { get; init; }
     public required string Link { get; init; }
+    public ulong? WorkshopId { get; init; }
+    public WorkshopModAvailability Availability { get; init; } = WorkshopModAvailability.Missing;
+    public string Status { get; init; } = string.Empty;
+    public bool IsDownloading => Availability is WorkshopModAvailability.Queued or
+        WorkshopModAvailability.Downloading or WorkshopModAvailability.Completing;
 }
 
 public static class ModFullNameList
@@ -65,7 +70,8 @@ public static class ModFullNameList
     public static void Save(
         ManagedInstance instance,
         IEnumerable<ModInfo> mods,
-        IEnumerable<string> missingPackageIds
+        IEnumerable<string> missingPackageIds,
+        IEnumerable<string>? pendingPackageIds = null
     )
     {
         if (string.IsNullOrWhiteSpace(instance.DirectoryPath))
@@ -84,6 +90,9 @@ public static class ModFullNameList
                 missing.Add(id.Trim());
             }
         }
+        var pending = new HashSet<string>((pendingPackageIds ?? Array.Empty<string>())
+            .Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()), StringComparer.OrdinalIgnoreCase);
+        missing.ExceptWith(pending);
 
         var currentMods = new List<ModFullNameEntry>();
         foreach (var mod in mods)
@@ -109,6 +118,22 @@ public static class ModFullNameList
                 Link = string.IsNullOrWhiteSpace(mod.Link)
                     ? oldMod?.Link ?? oldHistory?.Link ?? string.Empty
                     : mod.Link.Trim()
+            });
+        }
+
+        var currentIds = new HashSet<string>(currentMods.Select(mod => mod.PackageId), StringComparer.OrdinalIgnoreCase);
+        foreach (var packageId in pending)
+        {
+            if (currentIds.Contains(packageId)) continue;
+            oldMods.TryGetValue(packageId, out var oldMod);
+            history.TryGetValue(packageId, out var oldHistory);
+            if (oldMod is null && oldHistory is null) continue;
+            currentMods.Add(new ModFullNameEntry
+            {
+                Label = oldMod?.Label ?? oldHistory!.Label,
+                Author = oldMod?.Author ?? oldHistory!.Author,
+                PackageId = packageId,
+                Link = oldMod?.Link ?? oldHistory!.Link
             });
         }
 

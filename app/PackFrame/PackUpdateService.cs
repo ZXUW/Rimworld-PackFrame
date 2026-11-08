@@ -47,6 +47,8 @@ internal static class PackUpdateService
         metadata.ManagedFiles = ConfigHashes(result.ConfigSourcePath);
         metadata.ManagedModFolders = ModFolders(result.ModsSourcePath);
         metadata.ModsArchiveName = result.ModsArchiveName;
+        if (result.WorkshopMods is not null)
+            metadata.WorkshopMods = WorkshopModReferences.Normalize(result.WorkshopMods);
         metadata.AppliedOverlays = result.AppliedOverlays is null
             ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             : result.AppliedOverlays.ToDictionary(
@@ -150,6 +152,8 @@ internal static class PackUpdateService
                     .ToList()
                 : nextMods.Where(folder => !keepLocal.Contains(folder)).ToList();
             metadata.InstalledOrder = order;
+            if (result.WorkshopMods is not null)
+                metadata.WorkshopMods = WorkshopModReferences.Normalize(result.WorkshopMods);
             if (!string.IsNullOrWhiteSpace(result.ModsArchiveName))
             {
                 metadata.ModsArchiveName = result.ModsArchiveName;

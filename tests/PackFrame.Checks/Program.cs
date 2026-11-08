@@ -385,10 +385,17 @@ Check(launch.ArgumentList.SequenceEqual(new[] { "-logfile", Path.Combine(saveFol
     LoadOrderChecks.Run();
     DropPreviewChecks.Run();
     PaneSelectionChecks.Run();
+    WorkshopSelectionRefreshChecks.Run();
     PaneLayoutChecks.Run();
     ProblemFilterChecks.Run();
     await UpdateServiceChecks.Run();
     await AppUpdateChecks.Run(root);
+    await WorkshopDownloadStateChecks.Run();
+    SteamKeyValuesChecks.Run();
+    await WorkshopLocalStateChecks.Run();
+    await SteamRootChecks.Run(root);
+    WorkshopTrackingChecks.Run();
+    WorkshopBindingChecks.Run(root);
     await CatalogChecks.Run(root);
     await DetailsCacheChecks.Run(root);
     await PublishingChecks.Run(root);
