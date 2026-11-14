@@ -247,13 +247,11 @@ internal static class SteamWorkshopClient
         try
         {
             library = NativeLibrary.Load(libraryPath);
-            var init = GetDelegate<SteamApiInit>(library, "SteamAPI_Init");
             var shutdown = GetDelegate<SteamApiShutdown>(library, "SteamAPI_Shutdown");
             var runCallbacks = GetDelegate<SteamApiRunCallbacks>(
                 library,
                 "SteamAPI_RunCallbacks"
             );
-            var getUgc = GetDelegate<SteamUgc>(library, "SteamAPI_SteamUGC_v016");
             var setSubscription = GetDelegate<SteamUgcSetSubscription>(
                 library,
                 subscribe
@@ -261,15 +259,17 @@ internal static class SteamWorkshopClient
                     : "SteamAPI_ISteamUGC_UnsubscribeItem"
             );
 
-            if (!init())
+            if (!SteamNative.TryInit(library, out var initError))
             {
-                error = "Steam is not running or the user is not signed in.";
+                error = string.IsNullOrWhiteSpace(initError)
+                    ? "Steam is not running or the user is not signed in."
+                    : initError;
                 return false;
             }
 
             try
             {
-                var ugc = getUgc();
+                var ugc = SteamNative.GetUgc(library);
                 if (ugc == IntPtr.Zero)
                 {
                     error = "SteamUGC interface was not available.";

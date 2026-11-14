@@ -154,13 +154,11 @@ internal sealed partial class SteamCollectionClient
         cancellationToken.ThrowIfCancellationRequested();
         EnsureAppId();
         var library = NativeLibrary.Load(libraryPath);
-        var init = GetDelegate<SteamApiInit>(library, "SteamAPI_Init");
         var shutdown = GetDelegate<SteamApiShutdown>(library, "SteamAPI_Shutdown");
         var runCallbacks = GetDelegate<SteamApiRunCallbacks>(
             library,
             "SteamAPI_RunCallbacks"
         );
-        var getUgc = GetDelegate<SteamUgc>(library, "SteamAPI_SteamUGC_v016");
         var getUtils = GetDelegate<SteamUtils>(library, "SteamAPI_SteamUtils_v010");
         var createItem = GetDelegate<CreateItem>(
             library,
@@ -203,15 +201,15 @@ internal sealed partial class SteamCollectionClient
             "SteamAPI_ISteamUtils_GetAPICallResult"
         );
 
-        if (!init())
+        if (!SteamNative.TryInit(library, out var initError))
         {
             NativeLibrary.Free(library);
-            throw new InvalidOperationException(
-                "SteamAPI_Init failed. Start Steam and sign in first."
-            );
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(initError)
+                ? "SteamAPI_Init failed. Start Steam and sign in first."
+                : initError);
         }
 
-        var ugc = getUgc();
+        var ugc = SteamNative.GetUgc(library);
         var utils = getUtils();
         if (ugc == IntPtr.Zero || utils == IntPtr.Zero)
         {
