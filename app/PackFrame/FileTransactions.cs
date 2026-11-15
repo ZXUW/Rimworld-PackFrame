@@ -12,6 +12,12 @@ internal static class FileTransactions
         try
         {
             write(temporary);
+            // Packages built before 1.0.14 could extract read-only; replace must still work.
+            if (File.Exists(path) &&
+                (File.GetAttributes(path) & FileAttributes.ReadOnly) != 0)
+            {
+                File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+            }
             File.Move(temporary, path, overwrite: true);
         }
         finally

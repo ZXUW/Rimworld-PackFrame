@@ -60,6 +60,12 @@ try
     catch (IOException) { }
     Check(File.ReadAllText(original) == "old", "interrupted write preserves original");
 
+    File.SetAttributes(original, FileAttributes.ReadOnly);
+    FileTransactions.WriteAtomic(original, temporary => File.WriteAllText(temporary, "replaced"));
+    Check(File.ReadAllText(original) == "replaced" &&
+        (File.GetAttributes(original) & FileAttributes.ReadOnly) == 0,
+        "atomic write replaces a read-only file");
+
     File.WriteAllText(Path.Combine(staging, "a.xml"), "new-a");
     File.WriteAllText(Path.Combine(staging, "b.xml"), "new-b");
     File.WriteAllText(Path.Combine(staging, "c.xml"), "new-c");
