@@ -86,6 +86,60 @@ internal static class UpdateServiceChecks
         await ExpectFailure<HttpRequestException>(() => UpdateService.CheckAsync(client, "windows", Architecture.X64));
         Require(true, "invalid metadata and GitHub rate limits remain visible failures rather than false latest-version claims");
 
+        handler.Respond = (request, _) =>
+        {
+            var url = request.RequestUri!.AbsoluteUri;
+            if (url == UpdateService.LatestReleaseUrl)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+            if (url == UpdateService.GiteeLatestReleaseUrl)
+                return Task.FromResult(Json(JsonSerializer.Serialize(new
+                {
+                    tag_name = Tag, name = "PackFrame 1.0.12", body = "Fixes and improvements.",
+                    prerelease = false, created_at = "2026-11-07T12:00:00Z",
+                    assets = new[]
+                    {
+                        new
+                        {
+                            name = "manifest.json",
+                            browser_download_url = UpdateService.GiteeRepositoryUrl +
+                                "/releases/download/" + Tag + "/manifest.json"
+                        }
+                    }
+                })));
+            if (url.EndsWith("/manifest.json", StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(Json(JsonSerializer.Serialize(new[]
+                {
+                    new { Name = LegacyName, Size = 13004008, Sha256 = Hash,
+                        Version = "1.0.12", Commit = "abc" }
+                })));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        };
+        var beforeFallback = handler.Urls.Count;
+        update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
+        Require(update is { Tag: Tag, Asset: { Name: LegacyName, Size: 13004008 } } &&
+                update.Asset!.Sha256 == Hash.ToLowerInvariant() &&
+                update.Asset.Url.StartsWith(
+                    UpdateService.GiteeRepositoryUrl + "/releases/download/",
+                    StringComparison.Ordinal) &&
+                handler.Urls.Skip(beforeFallback).SequenceEqual(new[]
+                {
+                    UpdateService.LatestReleaseUrl,
+                    UpdateService.GiteeLatestReleaseUrl,
+                    UpdateService.GiteeRepositoryUrl + "/releases/download/" + Tag + "/manifest.json"
+                }),
+            "GitHub rate limits fall back to the Gitee manifest for a verified Windows asset");
+
+        handler.Respond = (request, _) => request.RequestUri!.AbsoluteUri == UpdateService.LatestReleaseUrl
+            ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden))
+            : Task.FromResult(Json(JsonSerializer.Serialize(new
+            {
+                tag_name = Tag, name = "PackFrame 1.0.12", prerelease = false,
+                assets = Array.Empty<object>()
+            })));
+        update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
+        Require(update is { Tag: Tag, Asset: null },
+            "Gitee releases without a manifest keep the release page but offer no in-app package");
+
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         var before = handler.Urls.Count;

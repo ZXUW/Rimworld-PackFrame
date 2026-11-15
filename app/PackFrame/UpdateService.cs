@@ -25,6 +25,9 @@ internal static class UpdateService
 {
     internal const string RepositoryUrl = "https://github.com/ZXUW/Rimworld-PackFrame";
     internal const string LatestReleaseUrl = "https://api.github.com/repos/ZXUW/Rimworld-PackFrame/releases/latest";
+    internal const string GiteeRepositoryUrl = "https://gitee.com/zxuw/Rimworld-PackFrame";
+    internal const string GiteeLatestReleaseUrl =
+        "https://gitee.com/api/v5/repos/zxuw/Rimworld-PackFrame/releases/latest";
     internal const long MaximumArchiveSize = 1024L * 1024 * 1024;
     private const int MaximumMetadataSize = 4 * 1024 * 1024;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -54,6 +57,53 @@ internal static class UpdateService
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        Exception? githubError = null;
+        try
+        {
+            return await CheckGitHubAsync(client, platform, architecture, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or InvalidDataException or IOException)
+        {
+            githubError = exception;
+        }
+
+        try
+        {
+            var gitee = await CheckGiteeAsync(client, platform, architecture, cancellationToken);
+            if (gitee is not null)
+            {
+                return gitee;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch when (githubError is not null)
+        {
+            throw githubError;
+        }
+
+        if (githubError is not null)
+        {
+            throw githubError;
+        }
+
+        return null;
+    }
+
+    // GitHub carries server digests; Gitee only stores the number of requests we make.
+    private static async Task<UpdateInfo?> CheckGitHubAsync(
+        HttpClient client,
+        string platform,
+        Architecture architecture,
+        CancellationToken cancellationToken)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseUrl);
         request.Headers.UserAgent.ParseAdd("PackFrame/" + CurrentVersion);
         request.Headers.Accept.ParseAdd("application/vnd.github+json");
@@ -109,7 +159,128 @@ internal static class UpdateService
             ReadString(release, "name"), published);
     }
 
-    private static UpdateAsset? SelectWindowsAsset(JsonElement release, string tag, Architecture architecture)
+    private static async Task<UpdateInfo?> CheckGiteeAsync(
+        HttpClient client,
+        string platform,
+        Architecture architecture,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, GiteeLatestReleaseUrl);
+        request.Headers.UserAgent.ParseAdd("PackFrame/" + CurrentVersion);
+        request.Headers.Accept.ParseAdd("application/json");
+        using var response = await client.SendAsync(
+            request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        var body = await ReadLimitedAsync(response, cancellationToken);
+        using var document = JsonDocument.Parse(body);
+        var release = document.RootElement;
+        if (release.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Gitee release metadata is not an object.");
+        if (IsTrue(release, "prerelease")) return null;
+        var tag = ReadString(release, "tag_name")?.Trim();
+        if (tag is null || !TryStableVersion(tag, out _)) return null;
+
+        var url = GiteeRepositoryUrl + "/releases/tag/" + Uri.EscapeDataString(tag);
+        DateTimeOffset? published = null;
+        if (release.TryGetProperty("created_at", out var date) &&
+            date.ValueKind == JsonValueKind.String && date.TryGetDateTimeOffset(out var parsed))
+            published = parsed;
+        var asset = string.Equals(platform, "windows", StringComparison.OrdinalIgnoreCase)
+            ? await SelectGiteeAssetAsync(
+                client, release, tag, architecture, cancellationToken)
+            : null;
+        return new UpdateInfo(tag, url, ReadString(release, "body"), asset,
+            ReadString(release, "name"), published);
+    }
+
+    // Gitee has no per-asset digest, so the release carries a manifest.json with sizes and hashes.
+    private static async Task<UpdateAsset?> SelectGiteeAssetAsync(
+        HttpClient client,
+        JsonElement release,
+        string tag,
+        Architecture architecture,
+        CancellationToken cancellationToken)
+    {
+        if (!release.TryGetProperty("assets", out var assets) ||
+            assets.ValueKind != JsonValueKind.Array) return null;
+        string? manifestUrl = null;
+        foreach (var item in assets.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !string.Equals(ReadString(item, "name"), "manifest.json",
+                    StringComparison.OrdinalIgnoreCase)) continue;
+            var candidate = ReadString(item, "browser_download_url");
+            if (IsGiteeAssetUrl(candidate, tag, "manifest.json")) manifestUrl = candidate;
+        }
+
+        if (manifestUrl is null) return null;
+        using var response = await client.GetAsync(manifestUrl, cancellationToken);
+        if (!response.IsSuccessStatusCode) return null;
+        var json = await ReadLimitedAsync(response, cancellationToken);
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Array) return null;
+        var names = WindowsAssetNames(architecture);
+        if (names.Count == 0) return null;
+
+        var found = new List<(int Rank, UpdateAsset Asset)>();
+        foreach (var item in document.RootElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            var name = ReadString(item, "Name");
+            var rank = name is null
+                ? -1
+                : names.FindIndex(expected =>
+                    string.Equals(expected, name, StringComparison.OrdinalIgnoreCase));
+            if (rank < 0 || name is null) continue;
+            var sha = ReadString(item, "Sha256")?.Trim();
+            if (sha is null || sha.Length != 64 || !sha.All(Uri.IsHexDigit)) continue;
+            if (!item.TryGetProperty("Size", out var sizeValue) ||
+                sizeValue.ValueKind != JsonValueKind.Number ||
+                !sizeValue.TryGetInt64(out var size) || size <= 0 ||
+                size > MaximumArchiveSize) continue;
+            var url = GiteeRepositoryUrl + "/releases/download/" +
+                Uri.EscapeDataString(tag) + "/" + Uri.EscapeDataString(name);
+            if (!IsGiteeAssetUrl(url, tag, name)) continue;
+            found.Add((rank, new UpdateAsset(name, url, size, sha.ToLowerInvariant())));
+        }
+
+        if (found.Count == 0) return null;
+        var best = found
+            .Where(candidate => candidate.Rank == found.Min(item => item.Rank))
+            .ToList();
+        return best.Count == 1 ? best[0].Asset : null;
+    }
+
+    private static async Task<byte[]> ReadLimitedAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        if (response.Content.Headers.ContentLength > MaximumMetadataSize)
+            throw new InvalidDataException("Update metadata is too large.");
+        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var bytes = new MemoryStream();
+        var buffer = new byte[8192];
+        int read;
+        while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+        {
+            if (bytes.Length + read > MaximumMetadataSize)
+                throw new InvalidDataException("Update metadata is too large.");
+            bytes.Write(buffer, 0, read);
+        }
+
+        return bytes.ToArray();
+    }
+
+    private static bool IsGiteeAssetUrl(string? url, string tag, string name) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        uri.Host.Equals("gitee.com", StringComparison.OrdinalIgnoreCase) &&
+        uri.AbsolutePath.Equals(
+            $"/zxuw/Rimworld-PackFrame/releases/download/{tag}/{name}",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static List<string> WindowsAssetNames(Architecture architecture)
     {
         var arch = architecture switch
         {
@@ -118,8 +289,7 @@ internal static class UpdateService
             Architecture.Arm64 => "arm64",
             _ => null
         };
-        if (arch is null || !release.TryGetProperty("assets", out var assets) ||
-            assets.ValueKind != JsonValueKind.Array) return null;
+        if (arch is null) return new List<string>();
         var names = new List<string>
         {
             $"PackFrame-win-{arch}.zip",
@@ -131,6 +301,15 @@ internal static class UpdateService
             names.Add("Rimworld.PackFrame-Window64.zip");
             names.Add("Rimworld.PackFrame-Windows64.zip");
         }
+
+        return names;
+    }
+
+    private static UpdateAsset? SelectWindowsAsset(JsonElement release, string tag, Architecture architecture)
+    {
+        var names = WindowsAssetNames(architecture);
+        if (names.Count == 0 || !release.TryGetProperty("assets", out var assets) ||
+            assets.ValueKind != JsonValueKind.Array) return null;
         var candidates = new List<(int Rank, UpdateAsset Asset)>();
         foreach (var item in assets.EnumerateArray())
         {

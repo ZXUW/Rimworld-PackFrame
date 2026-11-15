@@ -496,11 +496,16 @@ internal static class AppUpdateService
     private static void ValidateAsset(UpdateAsset asset)
     {
         if (!Uri.TryCreate(asset.Url, UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
-            !uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) ||
-            !uri.AbsolutePath.StartsWith("/ZXUW/Rimworld-PackFrame/releases/download/", StringComparison.OrdinalIgnoreCase) ||
+            !IsReleaseDownload(uri) ||
             asset.Size is <= 0 or > MaximumArchiveBytes || string.IsNullOrEmpty(asset.Sha256) || asset.Sha256.Length != 64 ||
             !asset.Sha256.All(Uri.IsHexDigit)) throw new InvalidDataException("The release update asset is invalid.");
     }
+
+    private static bool IsReleaseDownload(Uri uri) =>
+        uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) &&
+        uri.AbsolutePath.StartsWith("/ZXUW/Rimworld-PackFrame/releases/download/", StringComparison.OrdinalIgnoreCase) ||
+        uri.Host.Equals("gitee.com", StringComparison.OrdinalIgnoreCase) &&
+        uri.AbsolutePath.StartsWith("/zxuw/Rimworld-PackFrame/releases/download/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsProgramEntry(string name)
     {
