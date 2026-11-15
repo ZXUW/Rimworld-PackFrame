@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace PackFrame;
 
@@ -151,7 +152,50 @@ internal static class GameLaunchService
             AppLog.Error("Find Steam executable: " + gamePath, exception);
         }
 
-        return null;
+        // A second library lives on another drive, so steam.exe is not next to it.
+        return FindRegisteredSteam(gamePath, windows);
+    }
+
+    private static string? FindRegisteredSteam(string gamePath, bool windows)
+    {
+        if (!windows || !OperatingSystem.IsWindows()) return null;
+        try
+        {
+            var fullGamePath = Path.GetFullPath(gamePath);
+            var steamApps = fullGamePath;
+            while (steamApps is not null &&
+                   !Path.GetFileName(steamApps).Equals("steamapps", StringComparison.OrdinalIgnoreCase))
+            {
+                steamApps = Path.GetDirectoryName(steamApps);
+            }
+
+            if (steamApps is null ||
+                !File.Exists(Path.Combine(steamApps, "appmanifest_294100.acf")))
+            {
+                return null;
+            }
+
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
+            var path = key?.GetValue("SteamExe") as string;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                path = key?.GetValue("SteamPath") as string;
+            }
+
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            path = path.Replace('/', Path.DirectorySeparatorChar);
+            if (!Path.GetFileName(path).Equals("steam.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                path = Path.Combine(path, "steam.exe");
+            }
+
+            return File.Exists(path) ? path : null;
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Find registered Steam: " + gamePath, exception);
+            return null;
+        }
     }
 
     private static bool IsUnder(string path, string root, bool windows)
