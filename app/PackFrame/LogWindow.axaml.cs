@@ -25,6 +25,8 @@ public partial class LogWindow : Window
         Title = $"Rimworld PackFrame - {Localization.LogButton(language)}";
         this.FindControl<Button>("OpenLogFileButton")!.Content =
             Localization.OpenLogFile(language);
+        this.FindControl<Button>("OpenLogFolderButton")!.Content =
+            Localization.OpenLogFolder(language);
         KeyDown += OnWindowKeyDown;
         LoadLog();
         Opened += (_, _) => Dispatcher.UIThread.Post(
@@ -71,6 +73,18 @@ public partial class LogWindow : Window
                 FileName = AppLog.LogPath,
                 UseShellExecute = true
             });
+        }
+        catch (Exception exception)
+        {
+            this.FindControl<SelectableTextBlock>("LogText")!.Text = exception.Message;
+        }
+    }
+
+    private void OnOpenLogFolderClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            InstanceStore.OpenFolder(Path.GetDirectoryName(AppLog.LogPath)!);
         }
         catch (Exception exception)
         {

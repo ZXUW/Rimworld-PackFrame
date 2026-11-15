@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Automation;
@@ -182,6 +183,21 @@ public partial class MainWindow
         else
         {
             var ids = _dragPayload.Mods.Select(mod => mod.PackageId).ToList();
+            var unavailable = IsSameInstance(source, destination)
+                ? new List<ModInfo>()
+                : UnavailableForInstance(_dragPayload, destination!);
+            if (unavailable.Count > 0)
+            {
+                _dragGhostAction.Text = BlockedText(unavailable);
+                _dragGhostAction.IsVisible = true;
+                _dropTargetOutline.Width = target.Bounds.Width;
+                _dropTargetOutline.Height = target.Bounds.Height;
+                Canvas.SetLeft(_dropTargetOutline, top.Value.X);
+                Canvas.SetTop(_dropTargetOutline, top.Value.Y);
+                _dropTargetOutline.IsVisible = true;
+                return true;
+            }
+
             var preview = ModListOperations.PreviewInsertion(destination!.ActivePackageIds, ids, targetIndex);
             _dragGhostAction.Text = !preview.HasChanges
                 ? Localization.DragAlreadyHere(_config.Language)

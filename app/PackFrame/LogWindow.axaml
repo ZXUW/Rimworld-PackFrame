@@ -21,13 +21,21 @@
                                      TextWrapping="Wrap" />
             </ScrollViewer>
         </Border>
-        <Button x:Name="OpenLogFileButton"
-                Grid.Row="1"
-                Theme="{StaticResource FlatButton}"
-                MinHeight="32"
-                Padding="24,6"
-                Margin="0,12,0,0"
-                HorizontalAlignment="Right"
-                Click="OnOpenLogFileClick" />
+        <StackPanel Grid.Row="1"
+                    Margin="0,12,0,0"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    HorizontalAlignment="Right">
+            <Button x:Name="OpenLogFolderButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Padding="24,6"
+                    Click="OnOpenLogFolderClick" />
+            <Button x:Name="OpenLogFileButton"
+                    Theme="{StaticResource FlatButton}"
+                    MinHeight="32"
+                    Padding="24,6"
+                    Click="OnOpenLogFileClick" />
+        </StackPanel>
     </Grid>
 </Window>

@@ -21,8 +21,6 @@ internal static class SteamCmdClient
             ? "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz"
             : "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz";
 
-    private static readonly HttpClient Http = CreateHttpClient();
-
     public static string? Find(string packRoot)
     {
         var executable = OperatingSystem.IsWindows()
@@ -62,23 +60,22 @@ internal static class SteamCmdClient
 
         var root = Path.Combine(packRoot, "tools", "steamcmd");
         Directory.CreateDirectory(root);
+        var downloads = Path.Combine(root, "downloads");
+        Directory.CreateDirectory(downloads);
         var zipPath = Path.Combine(
-            Path.GetTempPath(),
-            "packframe-steamcmd-" + Guid.NewGuid().ToString("N") +
-                (OperatingSystem.IsWindows() ? ".zip" : ".tar.gz")
+            downloads,
+            OperatingSystem.IsWindows() ? "steamcmd.zip" : "steamcmd.tar.gz"
         );
 
-        try
         {
             status?.Invoke(OperationText.SteamDownload(language));
-            await using (var input = await Http.GetStreamAsync(
-                             DownloadUrl,
-                             cancellationToken
-                         ))
-            await using (var output = File.Create(zipPath))
-            {
-                await input.CopyToAsync(output, cancellationToken);
-            }
+            await ModpackService.DownloadAsync(
+                new Uri(DownloadUrl),
+                zipPath,
+                status,
+                cancellationToken,
+                language
+            );
 
             status?.Invoke(OperationText.SteamExtract(language));
             await Task.Run(
@@ -143,19 +140,6 @@ internal static class SteamCmdClient
 
             return executable;
         }
-        finally
-        {
-            try
-            {
-                if (File.Exists(zipPath))
-                {
-                    File.Delete(zipPath);
-                }
-            }
-            catch
-            {
-            }
-        }
     }
 
     internal static void ExtractUnixArchive(string path, string destination)
@@ -216,12 +200,28 @@ internal static class SteamCmdClient
                 }
                 args.Add("+quit");
 
-                await RunAsync(
-                    steamCmdPath,
-                    args,
-                    cancellationToken,
-                    timeout: TimeSpan.FromMinutes(30)
-                );
+                // SteamCMD downloads resume; rerunning a failed batch is safe.
+                for (var attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        await RunAsync(
+                            steamCmdPath,
+                            args,
+                            cancellationToken,
+                            timeout: TimeSpan.FromMinutes(30)
+                        );
+                        break;
+                    }
+                    catch (Exception) when (
+                        attempt < 3 && !cancellationToken.IsCancellationRequested)
+                    {
+                        await Task.Delay(
+                            TimeSpan.FromSeconds(3 * attempt),
+                            cancellationToken
+                        );
+                    }
+                }
             }
         }
         finally
@@ -248,12 +248,26 @@ internal static class SteamCmdClient
             }
 
             var target = Path.Combine(modsRoot, id.ToString());
-            if (Directory.Exists(target))
+            var temporary = target + ".copy-" + Guid.NewGuid().ToString("N");
+            CopyDirectory(source, temporary);
+            try
             {
-                Directory.Delete(target, true);
-            }
+                if (Directory.Exists(target))
+                {
+                    Directory.Delete(target, true);
+                }
 
-            CopyDirectory(source, target);
+                Directory.Move(temporary, target);
+            }
+            catch
+            {
+                if (Directory.Exists(temporary))
+                {
+                    Directory.Delete(temporary, true);
+                }
+
+                throw;
+            }
             installed.Add(target);
         }
 
@@ -428,16 +442,6 @@ internal static class SteamCmdClient
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             File.Copy(file, destination, overwrite: true);
         }
-    }
-
-    private static HttpClient CreateHttpClient()
-    {
-        var client = new HttpClient
-        {
-            Timeout = TimeSpan.FromMinutes(5)
-        };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("PackFrame/1.0");
-        return client;
     }
 }
 

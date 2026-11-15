@@ -153,6 +153,28 @@ public static class Localization
         };
     }
 
+    public static string DragBlockedLocalMods(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "含有本地模组，无法移动",
+            TraditionalChinese => "含有本機模組，無法移動",
+            Japanese => "ローカル MOD を含むため移動できません",
+            _ => "Contains local mods; cannot move"
+        };
+    }
+
+    public static string DragBlockedMissing(string? language, string names)
+    {
+        return language switch
+        {
+            SimplifiedChinese => $"目标实例没有：{names}，已阻止添加",
+            TraditionalChinese => $"目標實例沒有：{names}，已阻止加入",
+            Japanese => $"追加先のインスタンスに {names} がないため追加できません",
+            _ => $"The target instance does not have: {names}. Add was blocked."
+        };
+    }
+
     public static string DragMoveHere(string? language)
     {
         return language switch
@@ -1408,6 +1430,17 @@ public static class Localization
             TraditionalChinese => "開啟日誌檔案",
             Japanese => "ログファイルを開く",
             _ => "Open log file"
+        };
+    }
+
+    public static string OpenLogFolder(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "打开日志文件夹",
+            TraditionalChinese => "開啟日誌資料夾",
+            Japanese => "ログフォルダーを開く",
+            _ => "Open log folder"
         };
     }
 

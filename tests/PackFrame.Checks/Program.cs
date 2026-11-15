@@ -390,6 +390,7 @@ Check(launch.ArgumentList.SequenceEqual(new[] { "-logfile", Path.Combine(saveFol
         "https://example.com/cover.png", "absolute cover image stays absolute");
     LoadOrderChecks.Run();
     DropPreviewChecks.Run();
+    await RetryChecks.Run();
     PaneSelectionChecks.Run();
     PaneLayoutChecks.Run();
     ProblemFilterChecks.Run();

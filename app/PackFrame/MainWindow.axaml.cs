@@ -3589,29 +3589,28 @@ public partial class MainWindow : Window
         ManagedInstance? instance
     )
     {
-        var list = mods.ToList();
-        if (instance is null || instance.IsOfficial || instance.IsScratch)
-        {
-            return list.Where(mod => !mod.IsProfileMods).ToList();
-        }
-
-        var scoped = list.Where(mod =>
-            !mod.IsProfileMods ||
-            string.Equals(
-                mod.ProfileFolder,
-                instance.FolderName,
-                StringComparison.OrdinalIgnoreCase
-            )
-        ).ToList();
-        if (instance.IsSteamCmd)
-        {
-            return scoped.Where(mod =>
-                mod.Source == ModSource.Official || mod.IsProfileMods
-            ).ToList();
-        }
-
-        return scoped;
+        return mods.Where(mod => ModVisibility.IsVisible(mod, instance)).ToList();
     }
+
+    private List<ModInfo> UnavailableForInstance(DragPayload payload, ManagedInstance instance)
+    {
+        return payload.Mods
+            .Where(mod =>
+                !_modsByPackage.TryGetValue(mod.PackageId, out var candidates) ||
+                !candidates.Any(candidate => ModVisibility.IsVisible(candidate, instance)))
+            .ToList();
+    }
+
+    private static string DescribeMods(IReadOnlyList<ModInfo> mods)
+    {
+        var names = string.Join(", ", mods.Take(3).Select(mod => mod.Name));
+        return mods.Count > 3 ? $"{names} +{mods.Count - 3}" : names;
+    }
+
+    private string BlockedText(IReadOnlyList<ModInfo> mods) =>
+        mods.Any(mod => mod.IsProfileMods)
+            ? Localization.DragBlockedLocalMods(_config.Language)
+            : Localization.DragBlockedMissing(_config.Language, DescribeMods(mods));
 
     private List<ModInfo> ResolveActive(ManagedInstance? instance)
     {
@@ -5556,6 +5555,13 @@ public partial class MainWindow : Window
         var targetInstance = GetInstanceForColumn(targetColumn);
         if (targetInstance is null || targetInstance.IsDamaged)
         {
+            return;
+        }
+
+        var unavailable = UnavailableForInstance(payload, targetInstance);
+        if (unavailable.Count > 0)
+        {
+            ShowToast(BlockedText(unavailable));
             return;
         }
 

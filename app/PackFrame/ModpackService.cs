@@ -118,8 +118,12 @@ public static class ModpackService
         "https://raw.githubusercontent.com/ZXUW/PackFrame-Modpacks/main/index.json";
 
     private const long MaxDownloadBytes = 4L * 1024 * 1024 * 1024;
+    private static readonly TimeSpan DownloadIdleTimeout = TimeSpan.FromSeconds(120);
 
     private static readonly HttpClient Http = CreateHttpClient();
+
+    // Downloads have no overall deadline; a stalled stream is caught by the idle timeout instead.
+    internal static readonly HttpClient DownloadHttp = CreateDownloadClient();
 
     private static readonly Regex WorkshopIdPattern = new(
         @"[?&]id=(\d+)",
@@ -443,6 +447,30 @@ public static class ModpackService
                             "已取消 Cloudflare R2 下载，正在切换为阿里云 OSS...",
                             "已取消 Cloudflare R2 下載，正在切換為阿里雲 OSS...",
                             "Cloudflare R2 のダウンロードを中止し、Aliyun OSS に切り替えています..."
+                        ));
+                        archivePath = GetDownloadCachePath(
+                            ossArchiveUri,
+                            pack.Revision,
+                            downloadCacheDirectory
+                        );
+                        await DownloadAsync(
+                            ossArchiveUri,
+                            archivePath,
+                            status,
+                            cancellationToken,
+                            language
+                        );
+                    }
+                    catch (Exception) when (
+                        !cancellationToken.IsCancellationRequested &&
+                        ossArchiveUri is not null)
+                    {
+                        status?.Invoke(OperationText.Choose(
+                            language,
+                            "Cloudflare R2 download failed; switching to Aliyun OSS...",
+                            "Cloudflare R2 下载失败，正在切换为阿里云 OSS...",
+                            "Cloudflare R2 下載失敗，正在切換為阿里雲 OSS...",
+                            "Cloudflare R2 のダウンロードに失敗しました。Aliyun OSS に切り替えています..."
                         ));
                         archivePath = GetDownloadCachePath(
                             ossArchiveUri,
@@ -974,7 +1002,9 @@ public static class ModpackService
             : $"https://api.github.com/repos/{repo}/releases/tags/{Uri.EscapeDataString(mod.Tag.Trim())}";
         try
         {
-            var json = await Http.GetStringAsync(releaseUrl, cancellationToken);
+            var json = await HttpRetry.RunAsync(
+                () => Http.GetStringAsync(releaseUrl, cancellationToken),
+                cancellationToken);
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             if (root.TryGetProperty("assets", out var assets) &&
@@ -1024,10 +1054,12 @@ public static class ModpackService
             string.IsNullOrWhiteSpace(mod.Tag)
         )
         {
-            var repoJson = await Http.GetStringAsync(
-                $"https://api.github.com/repos/{repo}",
-                cancellationToken
-            );
+            var repoJson = await HttpRetry.RunAsync(
+                () => Http.GetStringAsync(
+                    $"https://api.github.com/repos/{repo}",
+                    cancellationToken
+                ),
+                cancellationToken);
             using var document = JsonDocument.Parse(repoJson);
             var branch = document.RootElement.TryGetProperty("default_branch", out var branchElement)
                 ? branchElement.GetString()
@@ -1054,11 +1086,14 @@ public static class ModpackService
             "PackFrame",
             "modpack-" + Guid.NewGuid().ToString("N")
         );
-        var zipPath = tempRoot + ".zip";
+        var cacheDirectory = Path.Combine(
+            Path.GetDirectoryName(modsRoot) ?? Path.GetTempPath(),
+            "downloads"
+        );
+        var zipPath = GetDownloadCachePath(uri, null, cacheDirectory);
         var extractRoot = tempRoot + "-extract";
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
             await DownloadAsync(uri, zipPath, null, cancellationToken);
             Directory.CreateDirectory(extractRoot);
             using (var archive = ZipFile.OpenRead(zipPath))
@@ -1124,7 +1159,8 @@ public static class ModpackService
         finally
         {
             TryDeleteDirectory(extractRoot);
-            TryDeleteFile(zipPath);
+            TryDelete(zipPath);
+            TryDelete(zipPath + ".meta");
         }
     }
 
@@ -1817,7 +1853,7 @@ public static class ModpackService
         return Path.Combine(directory, hash + ".part");
     }
 
-    private static async Task DownloadAsync(
+    internal static async Task DownloadAsync(
         Uri uri,
         string path,
         Action<string>? status,
@@ -1827,6 +1863,36 @@ public static class ModpackService
     )
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await DownloadOnceAsync(uri, path, status, cancellationToken, language, resume);
+                return;
+            }
+            catch (Exception exception) when (
+                attempt < HttpRetry.DefaultAttempts &&
+                !cancellationToken.IsCancellationRequested &&
+                HttpRetry.IsTransient(exception))
+            {
+                await Task.Delay(
+                    TimeSpan.FromSeconds(Math.Pow(2, attempt)),
+                    cancellationToken
+                );
+            }
+        }
+    }
+
+    private static async Task DownloadOnceAsync(
+        Uri uri,
+        string path,
+        Action<string>? status,
+        CancellationToken cancellationToken,
+        string? language,
+        bool resume
+    )
+    {
+        var metaPath = path + ".meta";
         var existing = resume && File.Exists(path)
             ? new FileInfo(path).Length
             : 0;
@@ -1837,9 +1903,16 @@ public static class ModpackService
                 existing,
                 null
             );
+            var etag = TryReadText(metaPath);
+            if (!string.IsNullOrWhiteSpace(etag) &&
+                System.Net.Http.Headers.EntityTagHeaderValue.TryParse(etag, out var tag))
+            {
+                request.Headers.IfRange =
+                    new System.Net.Http.Headers.RangeConditionHeaderValue(tag);
+            }
         }
 
-        using var response = await Http.SendAsync(
+        using var response = await DownloadHttp.SendAsync(
             request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
@@ -1847,7 +1920,16 @@ public static class ModpackService
         if (existing > 0 &&
             response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
         {
-            return;
+            // Only trust the partial file when the server confirms the same length.
+            var remoteLength = await TryGetRemoteLengthAsync(uri, cancellationToken);
+            if (remoteLength is null || remoteLength == existing)
+            {
+                return;
+            }
+
+            TryDelete(path);
+            TryDelete(metaPath);
+            throw new IOException("Cached download does not match the server file.");
         }
         response.EnsureSuccessStatusCode();
         var partial = response.StatusCode == HttpStatusCode.PartialContent;
@@ -1887,9 +1969,25 @@ public static class ModpackService
         var lastSeconds = 0d;
         var buffer = new byte[81920];
         var total = existing;
-        int read;
-        while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+        using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        while (true)
         {
+            idle.CancelAfter(DownloadIdleTimeout);
+            int read;
+            try
+            {
+                read = await source.ReadAsync(buffer, idle.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException("Download stalled for 120 seconds.");
+            }
+
+            if (read <= 0)
+            {
+                break;
+            }
+
             total += read;
             if (total > MaxDownloadBytes)
             {
@@ -1908,6 +2006,90 @@ public static class ModpackService
                 lastBytes = total;
                 lastSeconds = now;
             }
+        }
+
+        var etagValue = response.Headers.ETag?.ToString();
+        if (!string.IsNullOrWhiteSpace(etagValue))
+        {
+            TryWriteText(metaPath, etagValue);
+        }
+    }
+
+    private static async Task<long?> TryGetRemoteLengthAsync(
+        Uri uri,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Head, uri);
+            using var response = await DownloadHttp.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken
+            );
+            return response.IsSuccessStatusCode
+                ? response.Content.Headers.ContentLength
+                : null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private static string? TryReadText(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static void TryWriteText(string path, string value)
+    {
+        try
+        {
+            File.WriteAllText(path, value);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
@@ -2095,6 +2277,18 @@ public static class ModpackService
         };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("PackFrame/1.0");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        return client;
+    }
+
+    private static HttpClient CreateDownloadClient()
+    {
+        var handler = new SocketsHttpHandler
+        {
+            ConnectTimeout = TimeSpan.FromSeconds(30),
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10)
+        };
+        var client = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("PackFrame/1.0");
         return client;
     }
 }
