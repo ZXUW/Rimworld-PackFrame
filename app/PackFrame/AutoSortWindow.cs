@@ -363,8 +363,8 @@ internal sealed class AutoSortWindow : Window
         {
             Text = T(
                 $"Scanned {_scan.EnabledCount} active mods · {_scan.InstalledMissing.Count} to enable · {fuzzyPending.Count} similar ID to confirm · {_scan.UninstalledMissing.Count} not installed",
-                $"已扫描 {_scan.EnabledCount} 个启用模组 · 待启用前置 {_scan.InstalledMissing.Count} 个 · 疑似替身待确认 {fuzzyPending.Count} 个 · 未安装 {_scan.UninstalledMissing.Count} 个",
-                $"已掃描 {_scan.EnabledCount} 個啟用模組 · 待啟用前置 {_scan.InstalledMissing.Count} 個 · 疑似替身待確認 {fuzzyPending.Count} 個 · 未安裝 {_scan.UninstalledMissing.Count} 個",
+                $"已扫描 {_scan.EnabledCount} 个启用模组 · 待启用前置 {_scan.InstalledMissing.Count} 个 · ID 相似待确认 {fuzzyPending.Count} 个 · 未安装 {_scan.UninstalledMissing.Count} 个",
+                $"已掃描 {_scan.EnabledCount} 個啟用模組 · 待啟用前置 {_scan.InstalledMissing.Count} 個 · ID 相似待確認 {fuzzyPending.Count} 個 · 未安裝 {_scan.UninstalledMissing.Count} 個",
                 $"有効MOD {_scan.EnabledCount} 件 · 前提追加 {_scan.InstalledMissing.Count} 件 · 類似ID確認 {fuzzyPending.Count} 件 · 未導入 {_scan.UninstalledMissing.Count} 件"),
             TextWrapping = TextWrapping.Wrap,
             Foreground = ThemeService.SecondaryTextBrush
@@ -410,9 +410,9 @@ internal sealed class AutoSortWindow : Window
             {
                 Text = T(
                     $"Similar packageId / renamed prerequisites — please confirm individually ({fuzzyPending.Count})",
-                    $"疑似改名/同源前置（PackageId 相似，请逐个确认） ({fuzzyPending.Count})",
-                    $"疑似改名/同源前置（PackageId 相似，請逐個確認） ({fuzzyPending.Count})",
-                    $"改名・類似PackageIdの前提候補（個別に確認してください） ({fuzzyPending.Count})"),
+                    $"可能改过名的前置（ID 相似） ({fuzzyPending.Count})",
+                    $"可能改過名的前置（ID 相似） ({fuzzyPending.Count})",
+                    $"名前が変わった可能性がある前提MOD（ID が似ている） ({fuzzyPending.Count})"),
                 Margin = new Thickness(0, 6, 0, 0),
                 Foreground = ThemeService.PrimaryTextBrush
             });
@@ -471,9 +471,9 @@ internal sealed class AutoSortWindow : Window
                 var arrow = expanded ? "▼" : "▶";
                 toggleText.Text = T(
                     $"{arrow} Satisfied bundle localization remaining targets ({_scan.IgnoredTranslation.Count})",
-                    $"{arrow} 已满足其一的集束本地化其余前置 ({_scan.IgnoredTranslation.Count})",
-                    $"{arrow} 已滿足其一的集束本地化其餘前置 ({_scan.IgnoredTranslation.Count})",
-                    $"{arrow} 一部充足済みの統合翻訳MODの残り前提 ({_scan.IgnoredTranslation.Count})");
+                    $"{arrow} 汉化模组已满足的其他前置 ({_scan.IgnoredTranslation.Count})",
+                    $"{arrow} 漢化模組已滿足的其他前置 ({_scan.IgnoredTranslation.Count})",
+                    $"{arrow} 充足済みの統合翻訳MODの残り前提 ({_scan.IgnoredTranslation.Count})");
             }
             UpdateToggleLabel(_transExpanded);
 
@@ -508,9 +508,9 @@ internal sealed class AutoSortWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = T(
-                $"Identified {_coreItems.Count} system-level core item(s) (Pre-Core / Core / Official DLCs / HugsLib) · {needsMoveCount} out of position",
-                $"已识别 {_coreItems.Count} 个系统级核心底座（底层补丁 / Core / 官方 DLC / HugsLib） · 待归位 {needsMoveCount} 个",
-                $"已識別 {_coreItems.Count} 個系統級核心底座（底層補丁 / Core / 官方 DLC / HugsLib） · 待歸位 {needsMoveCount} 個",
+                $"Identified {_coreItems.Count} large prerequisite(s) (Harmony / Core / Official DLCs / HugsLib) · {needsMoveCount} out of position",
+                $"已识别 {_coreItems.Count} 个大前置（Harmony / Core / 官方 DLC / HugsLib） · 待归位 {needsMoveCount} 个",
+                $"已識別 {_coreItems.Count} 個大前置（Harmony / Core / 官方 DLC / HugsLib） · 待歸位 {needsMoveCount} 個",
                 $"システム基盤 {_coreItems.Count} 件を検出（Harmony / Core / 公式DLC / HugsLib） · 位置調整 {needsMoveCount} 件"),
             TextWrapping = TextWrapping.Wrap,
             Foreground = ThemeService.SecondaryTextBrush
@@ -520,8 +520,8 @@ internal sealed class AutoSortWindow : Window
         {
             Text = T(
                 $"Core prerequisite top-tier order ({_coreItems.Count})",
-                $"核心前置置顶顺序 ({_coreItems.Count})",
-                $"核心前置置頂順序 ({_coreItems.Count})",
+                $"大前置置顶顺序 ({_coreItems.Count})",
+                $"大前置置頂順序 ({_coreItems.Count})",
                 $"コア前提の最上位配置順 ({_coreItems.Count})"),
             Margin = new Thickness(0, 4, 0, 0),
             Foreground = ThemeService.PrimaryTextBrush
@@ -689,7 +689,7 @@ internal sealed class AutoSortWindow : Window
             var enableBtn = new Button
             {
                 Content = isFuzzy
-                    ? T("Confirm & Enable", "确认采用", "確認採用", "確認して有効化")
+                    ? T("Use this", "就是这个", "就是這個", "これを採用")
                     : T("Enable", "启用", "啟用", "有効化"),
                 Padding = new Thickness(12, 2),
                 MinHeight = 26,
@@ -714,7 +714,7 @@ internal sealed class AutoSortWindow : Window
             {
                 var ignoreBtn = new Button
                 {
-                    Content = T("Not this", "非此模组", "非此模組", "別MOD"),
+                    Content = T("Not this one", "不是它", "不是它", "これではない"),
                     Padding = new Thickness(10, 2),
                     MinHeight = 26,
                     Theme = Application.Current?.FindResource("FlatButton") as ControlTheme
@@ -867,9 +867,9 @@ internal sealed class AutoSortWindow : Window
             {
                 Text = T(
                     $"Enable RimSort Community Rules Database (CC0, {r.CommunityRuleCount} active rule(s))",
-                    $"启用社区排序规则库（内置离线快照 + 双源静默更新，当前命中 {r.CommunityRuleCount} 条）",
-                    $"啟用社區排序規則庫（內置離線快照 + 雙源靜默更新，當前命中 {r.CommunityRuleCount} 條）",
-                    $"コミュニティルールDBを有効化（内蔵スナップショット＋自動更新、現在 {r.CommunityRuleCount} 件一致）"),
+                    $"启用社区排序规则库（{r.CommunityRuleCount} 条有关）",
+                    $"啟用社區排序規則庫（{r.CommunityRuleCount} 條有關）",
+                    $"コミュニティルールDBを有効化（{r.CommunityRuleCount} 件が該当）"),
                 Foreground = ThemeService.PrimaryTextBrush
             }
         };
@@ -883,10 +883,10 @@ internal sealed class AutoSortWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = T(
-                $"Collected {r.Rules.Count} order rule(s) across {r.ActiveCount} active mods · {r.ViolatedRules.Count} inverted · {r.CycleRules.Count} cycle edge(s) · {r.Conflicts.Count} conflict(s)",
-                $"已从 {r.ActiveCount} 个启用模组收集 {r.Rules.Count} 条排序规则 · 当前逆序 {r.ViolatedRules.Count} 条 · 未解循环边 {r.CycleRules.Count} 条 · 不兼容 {r.Conflicts.Count} 组",
-                $"已從 {r.ActiveCount} 個啟用模組收集 {r.Rules.Count} 條排序規則 · 當前逆序 {r.ViolatedRules.Count} 條 · 未解循環邊 {r.CycleRules.Count} 條 · 不兼容 {r.Conflicts.Count} 組",
-                $"有効MOD {r.ActiveCount} 件から {r.Rules.Count} 件の順序ルールを収集 · 順序逆転 {r.ViolatedRules.Count} 件 · 未解決循環 {r.CycleRules.Count} 件 · 非互換 {r.Conflicts.Count} 組"),
+                $"Collected {r.Rules.Count} order rule(s) across {r.ActiveCount} active mods · {r.ViolatedRules.Count} inverted · {r.CycleRules.Count} cycle conflict(s) · {r.Conflicts.Count} conflict(s)",
+                $"已从 {r.ActiveCount} 个启用模组收集 {r.Rules.Count} 条排序规则 · 顺序错误 {r.ViolatedRules.Count} 条 · 循环冲突 {r.CycleRules.Count} 组 · 不兼容 {r.Conflicts.Count} 组",
+                $"已從 {r.ActiveCount} 個啟用模組收集 {r.Rules.Count} 條排序規則 · 順序錯誤 {r.ViolatedRules.Count} 條 · 循環衝突 {r.CycleRules.Count} 組 · 不兼容 {r.Conflicts.Count} 組",
+                $"有効MOD {r.ActiveCount} 件から {r.Rules.Count} 件の順序ルールを収集 · 順序逆転 {r.ViolatedRules.Count} 件 · 循環競合 {r.CycleRules.Count} 件 · 非互換 {r.Conflicts.Count} 組"),
             TextWrapping = TextWrapping.Wrap,
             Foreground = ThemeService.SecondaryTextBrush
         });
@@ -894,14 +894,14 @@ internal sealed class AutoSortWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = T(
-                $"Sources: modDependencies {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · Community {r.CommunityRuleCount} · Implicit Core/DLC {r.ImplicitCoreDlcRuleCount} · Implicit Translation {r.ImplicitTranslationRuleCount}" +
-                (r.ImplicitRjwRuleCount > 0 ? $" · Implicit RJW {r.ImplicitRjwRuleCount}" : string.Empty),
-                $"规则构成：前置依赖 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · 社区规则 {r.CommunityRuleCount} · 隐式本体/DLC {r.ImplicitCoreDlcRuleCount} · 隐式汉化配对 {r.ImplicitTranslationRuleCount}" +
-                (r.ImplicitRjwRuleCount > 0 ? $" · 隐式 RJW 置后 {r.ImplicitRjwRuleCount}" : string.Empty),
-                $"規則構成：前置依賴 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · 社區規則 {r.CommunityRuleCount} · 隱式本體/DLC {r.ImplicitCoreDlcRuleCount} · 隱式漢化配對 {r.ImplicitTranslationRuleCount}" +
-                (r.ImplicitRjwRuleCount > 0 ? $" · 隱式 RJW 置後 {r.ImplicitRjwRuleCount}" : string.Empty),
-                $"内訳：前提依存 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · コミュニティ {r.CommunityRuleCount} · 暗黙Core/DLC {r.ImplicitCoreDlcRuleCount} · 暗黙翻訳ペア {r.ImplicitTranslationRuleCount}" +
-                (r.ImplicitRjwRuleCount > 0 ? $" · 暗黙RJW {r.ImplicitRjwRuleCount}" : string.Empty)),
+                $"Sources: modDependencies {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · Community {r.CommunityRuleCount} · Core/DLC baseline {r.ImplicitCoreDlcRuleCount} · Localization pairing {r.ImplicitTranslationRuleCount}" +
+                (r.ImplicitRjwRuleCount > 0 ? $" · RJW ordering {r.ImplicitRjwRuleCount}" : string.Empty),
+                $"规则来源：前置依赖 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · 社区规则 {r.CommunityRuleCount} · 内置本体/DLC {r.ImplicitCoreDlcRuleCount} · 内置汉化配对 {r.ImplicitTranslationRuleCount}" +
+                (r.ImplicitRjwRuleCount > 0 ? $" · 内置 RJW 置后 {r.ImplicitRjwRuleCount}" : string.Empty),
+                $"規則來源：前置依賴 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · 社區規則 {r.CommunityRuleCount} · 內置本體/DLC {r.ImplicitCoreDlcRuleCount} · 內置漢化配對 {r.ImplicitTranslationRuleCount}" +
+                (r.ImplicitRjwRuleCount > 0 ? $" · 內置 RJW 置後 {r.ImplicitRjwRuleCount}" : string.Empty),
+                $"内訳：前提依存 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · コミュニティ {r.CommunityRuleCount} · 内蔵Core/DLC {r.ImplicitCoreDlcRuleCount} · 内蔵翻訳ペア {r.ImplicitTranslationRuleCount}" +
+                (r.ImplicitRjwRuleCount > 0 ? $" · 内蔵RJW {r.ImplicitRjwRuleCount}" : string.Empty)),
             TextWrapping = TextWrapping.Wrap,
             Foreground = ThemeService.MutedTextBrush
         });
@@ -911,10 +911,10 @@ internal sealed class AutoSortWindow : Window
             panel.Children.Add(new TextBlock
             {
                 Text = T(
-                    $"Unresolved circular rule edges ({r.CycleRules.Count}, select preferred order above or let Step 4 break weakest soft edge)",
-                    $"未解循环规则边 ({r.CycleRules.Count}，可在顶部选择先后顺序，或交由下一步应用排序自动断开最弱软约束)",
-                    $"未解循環規則邊 ({r.CycleRules.Count}，可在頂部選擇先後順序，或交由下一步應用排序自動斷開最弱軟約束)",
-                    $"未解決の循環ルール ({r.CycleRules.Count}、上部で順序を選択するか次のステップで自動解消)"),
+                    $"Unresolved circular dependencies ({r.CycleRules.Count}, choose the order above or let the next step auto-resolve the lowest-priority one)",
+                    $"互相要求对方先加载 ({r.CycleRules.Count}，可在顶部选择先后顺序，或交由下一步应用排序自动解除优先级最低的那条)",
+                    $"互相要求對方先載入 ({r.CycleRules.Count}，可在頂部選擇先後順序，或交由下一步應用排序自動解除優先級最低的那條)",
+                    $"相互に先読み込みを要求 ({r.CycleRules.Count}、上部で順序を選ぶか次のステップで優先度最低のものを自動解除)"),
                 Margin = new Thickness(0, 4, 0, 0),
                 Foreground = ThemeService.PrimaryTextBrush
             });
@@ -931,9 +931,9 @@ internal sealed class AutoSortWindow : Window
         {
             Text = T(
                 $"Currently inverted rules to fix in Step 4 ({r.ViolatedRules.Count})",
-                $"当前违反顺序的待排规则 ({r.ViolatedRules.Count})",
-                $"當前違反順序的待排規則 ({r.ViolatedRules.Count})",
-                $"現在順序が逆転しているルール ({r.ViolatedRules.Count})"),
+                $"当前顺序错误、等待调整的排序 ({r.ViolatedRules.Count})",
+                $"當前順序錯誤、等待調整的排序 ({r.ViolatedRules.Count})",
+                $"現在順序が逆になっているルール ({r.ViolatedRules.Count})"),
             Margin = new Thickness(0, 4, 0, 0),
             Foreground = ThemeService.PrimaryTextBrush
         });
@@ -943,10 +943,10 @@ internal sealed class AutoSortWindow : Window
             panel.Children.Add(new TextBlock
             {
                 Text = T(
-                    "Current load order already satisfies all collected rules.",
-                    "当前启用列表已满足全部已收集的先后规则。",
-                    "當前啟用列表已滿足全部已收集的先後規則。",
-                    "現在の読み込み順はすべての収集済みルールを満たしています。"),
+                    "No sorting errors.",
+                    "无排序错误。",
+                    "無排序錯誤。",
+                    "並び順のエラーはありません。"),
                 Foreground = ThemeService.MutedTextBrush
             });
         }
@@ -994,10 +994,10 @@ internal sealed class AutoSortWindow : Window
             {
                 var arrow = expanded ? "▼" : "▶";
                 toggleText.Text = T(
-                    $"{arrow} Satisfied mod rules ({satisfiedRules.Count}, excluding implicit Core/DLC baseline)",
-                    $"{arrow} 已满足的模组间规则 ({satisfiedRules.Count}，已省略隐式本体/DLC 基础边)",
-                    $"{arrow} 已滿足的模組間規則 ({satisfiedRules.Count}，已省略隱式本體/DLC 基礎邊)",
-                    $"{arrow} 充足済みのMOD間ルール ({satisfiedRules.Count}、暗黙Core/DLCを除く)");
+                    $"{arrow} Satisfied mod ordering ({satisfiedRules.Count})",
+                    $"{arrow} 已符合的模组排序 ({satisfiedRules.Count})",
+                    $"{arrow} 已符合的模組排序 ({satisfiedRules.Count})",
+                    $"{arrow} 充足済みのMOD順序 ({satisfiedRules.Count})");
             }
             UpdateSatisfiedLabel(_satisfiedRulesExpanded);
 
@@ -1229,8 +1229,8 @@ internal sealed class AutoSortWindow : Window
         var status = new TextBlock
         {
             Text = rule.IsViolated
-                ? T("Inverted", "逆序待排", "逆序待排", "順序逆転")
-                : T("Satisfied", "已满足", "已滿足", "充足済"),
+                ? T("Inverted", "排序错误", "排序錯誤", "逆になっている")
+                : T("Satisfied", "已符合", "已符合", "充足済"),
             Margin = new Thickness(10, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = rule.IsViolated ? ThemeService.PrimaryTextBrush : ThemeService.MutedTextBrush
@@ -1255,10 +1255,10 @@ internal sealed class AutoSortWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = T(
-                $"Sort preview: {plan.MovedRows.Count} mod(s) will move across {plan.Rows.Count} active mods · fixes {plan.FixedRuleCount} inverted rule(s) · {plan.BrokenCycleEdges.Count} cycle edge(s) auto-broken",
-                $"排序预览：共 {plan.Rows.Count} 个启用模组中有 {plan.MovedRows.Count} 个发生位置调整 · 修复逆序规则 {plan.FixedRuleCount} 条 · 自动断开残余循环边 {plan.BrokenCycleEdges.Count} 条",
-                $"排序預覽：共 {plan.Rows.Count} 個啟用模組中有 {plan.MovedRows.Count} 個發生位置調整 · 修復逆序規則 {plan.FixedRuleCount} 條 · 自動斷開殘餘循環邊 {plan.BrokenCycleEdges.Count} 條",
-                $"ソートプレビュー：有効MOD {plan.Rows.Count} 件中 {plan.MovedRows.Count} 件が移動 · 逆転解消 {plan.FixedRuleCount} 件 · 循環自動切断 {plan.BrokenCycleEdges.Count} 件"),
+                $"Sort preview: {plan.MovedRows.Count} mod(s) will move across {plan.Rows.Count} active mods · fixes {plan.FixedRuleCount} inverted rule(s) · {plan.BrokenCycleEdges.Count} cycle conflict(s) resolved",
+                $"排序预览：共 {plan.Rows.Count} 个启用模组中有 {plan.MovedRows.Count} 个发生位置调整 · 修复放反了的规则 {plan.FixedRuleCount} 条 · 解除循环冲突 {plan.BrokenCycleEdges.Count} 条",
+                $"排序預覽：共 {plan.Rows.Count} 個啟用模組中有 {plan.MovedRows.Count} 個發生位置調整 · 修復放反了的規則 {plan.FixedRuleCount} 條 · 解除循環衝突 {plan.BrokenCycleEdges.Count} 條",
+                $"ソートプレビュー：有効MOD {plan.Rows.Count} 件中 {plan.MovedRows.Count} 件が移動 · 逆転解消 {plan.FixedRuleCount} 件 · 循環競合の解除 {plan.BrokenCycleEdges.Count} 件"),
             TextWrapping = TextWrapping.Wrap,
             Foreground = ThemeService.SecondaryTextBrush
         });
@@ -1268,10 +1268,10 @@ internal sealed class AutoSortWindow : Window
             panel.Children.Add(new TextBlock
             {
                 Text = T(
-                    $"Auto-broken weakest cycle edge(s) ({plan.BrokenCycleEdges.Count})",
-                    $"已自动断开的最弱循环边 ({plan.BrokenCycleEdges.Count})",
-                    $"已自動斷開的最弱循環邊 ({plan.BrokenCycleEdges.Count})",
-                    $"自動切断された最弱循環ルール ({plan.BrokenCycleEdges.Count})"),
+                    $"Auto-resolved cycle conflicts (lowest priority) ({plan.BrokenCycleEdges.Count})",
+                    $"已自动解除的循环冲突（优先级最低） ({plan.BrokenCycleEdges.Count})",
+                    $"已自動解除的循環衝突（優先級最低） ({plan.BrokenCycleEdges.Count})",
+                    $"自動解除された循環競合（優先度最低） ({plan.BrokenCycleEdges.Count})"),
                 Margin = new Thickness(0, 4, 0, 0),
                 Foreground = ThemeService.PrimaryTextBrush
             });
@@ -1423,35 +1423,35 @@ internal sealed class AutoSortWindow : Window
             _applyAllButton.IsEnabled = selectedCore > 0;
             _footerStatus.Text = selectedCore > 0
                 ? T($"Selected: {selectedCore} core prerequisite(s) to move to top",
-                    $"已勾选：归位核心前置 {selectedCore} 个",
-                    $"已勾選：歸位核心前置 {selectedCore} 個",
+                    $"已勾选：调整大前置 {selectedCore} 个",
+                    $"已勾選：調整大前置 {selectedCore} 個",
                     $"選択中：コア前提の配置調整 {selectedCore} 件")
                 : T("All core prerequisites are in their top-tier positions",
-                    "所有核心前置均已在顶部就位",
-                    "所有核心前置均已在頂部就位",
+                    "大前置无排序错误",
+                    "大前置無排序錯誤",
                     "すべてのコア前提は最上位に配置されています");
         }
         else if (_currentStep == 3)
         {
             _applyAllButton.IsEnabled = false;
             _footerStatus.Text = _rulesResult.ViolatedRules.Count > 0
-                ? T($"Ready to apply sort: {_rulesResult.ViolatedRules.Count} inverted rule(s) detected",
-                    $"规则收集完成：共 {_rulesResult.ViolatedRules.Count} 条逆序规则待下一步应用排序",
-                    $"規則收集完成：共 {_rulesResult.ViolatedRules.Count} 條逆序規則待下一步應用排序",
+                ? T($"Ready to apply sort: {_rulesResult.ViolatedRules.Count} rule(s) in the wrong order detected",
+                    $"规则收集完成：共 {_rulesResult.ViolatedRules.Count} 条排序错误，待下一步应用排序",
+                    $"規則收集完成：共 {_rulesResult.ViolatedRules.Count} 條排序錯誤，待下一步應用排序",
                     $"ルール収集完了：{_rulesResult.ViolatedRules.Count} 件の逆転ルールを検出")
-                : T("Rule check complete: 0 inverted rules",
-                    "规则收集完成：当前 0 条逆序规则",
-                    "規則收集完成：當前 0 條逆序規則",
+                : T("Rule check complete: no rules in the wrong order",
+                    "收集规则：当前没有排序错误",
+                    "收集規則：當前沒有排序錯誤",
                     "ルール収集完了：逆転ルール 0 件");
         }
         else
         {
             _applyAllButton.IsEnabled = _sortPlan.MovedRows.Count > 0;
             _footerStatus.Text = _sortPlan.MovedRows.Count > 0
-                ? T($"Ready: {_sortPlan.MovedRows.Count} mod(s) will be reordered (supports Undo)",
-                    $"待应用：将调整 {_sortPlan.MovedRows.Count} 个模组的位置（支持主界面撤销）",
-                    $"待應用：將調整 {_sortPlan.MovedRows.Count} 個模組的位置（支援主介面撤銷）",
-                    $"適用準備完了：{_sortPlan.MovedRows.Count} 件のMOD順序を更新します（元に戻す対応）")
+                ? T($"Ready: {_sortPlan.MovedRows.Count} mod(s) will be reordered",
+                    $"待应用：将调整 {_sortPlan.MovedRows.Count} 个模组的位置",
+                    $"待應用：將調整 {_sortPlan.MovedRows.Count} 個模組的位置",
+                    $"適用準備完了：{_sortPlan.MovedRows.Count} 件のMOD順序を更新します")
                 : T("Load order already matches all rules",
                     "当前排序已完全就位，无需改动",
                     "當前排序已完全就位，無需改動",

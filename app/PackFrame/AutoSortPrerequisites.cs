@@ -701,11 +701,11 @@ internal static class AutoSortPrerequisites
             var isPreCoreTrans = preCoreTransParent.ContainsKey(mod.PackageId);
             preCore.Add((
                 mod,
-                T("Pre-Core Patch", "底层补丁", "底層補丁", "コア前パッチ"),
+                T("Pre-Core Patch", "Harmony 系前置", "Harmony 系前置", "コア前パッチ"),
                 isHarmony
                     ? T("Base Harmony patcher (loads before Core)", "Harmony 基础补丁库（排在 Core 之前）", "Harmony 基礎補丁庫（排在 Core 之前）", "Harmony基盤（Coreより前）")
                     : isPreCoreTrans
-                        ? T("Follows Pre-Core parent mod", "紧随底层补丁本体之后", "緊隨底層補丁本體之後", "コア前パッチ本体の直後")
+                        ? T("Follows Pre-Core parent mod", "紧随 Harmony 系前置本体之后", "緊隨 Harmony 系前置本體之後", "コア前パッチ本体の直後")
                         : T("Loads before Core", "声明排在 Core 之前", "聲明排在 Core 之前", "Coreより前に読み込む")));
         }
 
@@ -893,9 +893,9 @@ internal static class AutoSortPrerequisites
             SortRuleKind.LoadAfter => T("loadAfter", "声明置后", "聲明置後", "loadAfter"),
             SortRuleKind.LoadBefore => T("loadBefore", "声明置前", "聲明置前", "loadBefore"),
             SortRuleKind.CommunityRule => T("Community Rule", "社区规则", "社區規則", "コミュニティルール"),
-            SortRuleKind.ImplicitCoreDlc => T("Implicit Core/DLC", "隐式本体/DLC", "隱式本體/DLC", "暗黙Core/DLC"),
-            SortRuleKind.ImplicitRjw => T("Implicit RJW", "隐式 RJW 置后", "隱式 RJW 置後", "暗黙RJW"),
-            _ => T("Implicit Translation", "隐式汉化配对", "隱式漢化配對", "暗黙翻訳ペア")
+            SortRuleKind.ImplicitCoreDlc => T("Implicit Core/DLC", "内置本体/DLC", "內置本體/DLC", "内蔵Core/DLC"),
+            SortRuleKind.ImplicitRjw => T("Implicit RJW", "内置 RJW 置后", "內置 RJW 置後", "内蔵RJW"),
+            _ => T("Implicit Translation", "内置汉化配对", "內置漢化配對", "内蔵翻訳ペア")
         };
 
         var indexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
