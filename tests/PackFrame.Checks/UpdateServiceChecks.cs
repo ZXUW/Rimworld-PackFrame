@@ -26,16 +26,19 @@ internal static class UpdateServiceChecks
 
         using var handler = new UpdateHttp();
         using var client = new HttpClient(handler);
-        handler.Respond = (_, _) => Task.FromResult(Json(Release(Asset())));
+        handler.Respond = (request, _) => request.RequestUri!.AbsoluteUri == UpdateService.LatestReleaseUrl
+            ? Task.FromResult(Json(Release(Asset())))
+            : Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
         var update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
         Require(update is { Tag: Tag, Name: "PackFrame 1.0.12", ReleaseNotes: "Fixes and improvements." } &&
                 update.PublishedAt == DateTimeOffset.Parse("2026-11-07T12:00:00Z") &&
                 update.Asset is { Name: LegacyName, Size: 13004008 } && update.Asset.Sha256 == Hash.ToLowerInvariant() &&
-                handler.Urls.SequenceEqual(new[] { UpdateService.LatestReleaseUrl }),
-            "checking GitHub reads release notes and a verified compatible asset without downloading it");
+                handler.Urls.SequenceEqual(new[] { UpdateService.GiteeLatestReleaseUrl, UpdateService.LatestReleaseUrl }),
+            "checking falls back from unavailable Gitee to GitHub and reads verified compatible asset without downloading it");
 
-        handler.Respond = (_, _) => Task.FromResult(Json(Release(Asset(), Asset("PackFrame-win-x64.zip"),
-            Asset("PackFrame-win-arm64.zip"))));
+        handler.Respond = (request, _) => request.RequestUri!.AbsoluteUri == UpdateService.LatestReleaseUrl
+            ? Task.FromResult(Json(Release(Asset(), Asset("PackFrame-win-x64.zip"), Asset("PackFrame-win-arm64.zip"))))
+            : Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
         update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
         Require(update?.Asset?.Name == "PackFrame-win-x64.zip",
             "canonical Windows assets take priority over legacy names independently of response order");
@@ -60,13 +63,17 @@ internal static class UpdateServiceChecks
         };
         foreach (var (reason, invalid) in invalidAssets)
         {
-            handler.Respond = (_, _) => Task.FromResult(Json(Release(invalid)));
+            handler.Respond = (request, _) => request.RequestUri!.AbsoluteUri == UpdateService.LatestReleaseUrl
+                ? Task.FromResult(Json(Release(invalid)))
+                : Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
             update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
             Require(update is not null && update.Asset is null,
                 "update discovery rejects " + reason + " while retaining the release page");
         }
 
-        handler.Respond = (_, _) => Task.FromResult(Json(Release(Asset(), Asset())));
+        handler.Respond = (request, _) => request.RequestUri!.AbsoluteUri == UpdateService.LatestReleaseUrl
+            ? Task.FromResult(Json(Release(Asset(), Asset())))
+            : Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
         update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
         Require(update?.Asset is null,
             "ambiguous duplicate release assets are not silently selected");
@@ -84,17 +91,16 @@ internal static class UpdateServiceChecks
         await ExpectFailure<InvalidDataException>(() => UpdateService.CheckAsync(client, "windows", Architecture.X64));
         handler.Respond = (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests));
         await ExpectFailure<HttpRequestException>(() => UpdateService.CheckAsync(client, "windows", Architecture.X64));
-        Require(true, "invalid metadata and GitHub rate limits remain visible failures rather than false latest-version claims");
+        Require(true, "invalid metadata and rate limits remain visible failures rather than false latest-version claims");
 
+        var newerTag = "v99.0.0";
         handler.Respond = (request, _) =>
         {
             var url = request.RequestUri!.AbsoluteUri;
-            if (url == UpdateService.LatestReleaseUrl)
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
             if (url == UpdateService.GiteeLatestReleaseUrl)
                 return Task.FromResult(Json(JsonSerializer.Serialize(new
                 {
-                    tag_name = Tag, name = "PackFrame 1.0.12", body = "Fixes and improvements.",
+                    tag_name = newerTag, name = "PackFrame 99.0.0", body = "Fixes and improvements.",
                     prerelease = false, created_at = "2026-11-07T12:00:00Z",
                     assets = new[]
                     {
@@ -102,7 +108,7 @@ internal static class UpdateServiceChecks
                         {
                             name = LegacyName,
                             browser_download_url = UpdateService.GiteeRepositoryUrl +
-                                "/releases/download/" + Tag + "/" + LegacyName
+                                "/releases/download/" + newerTag + "/" + LegacyName
                         }
                     }
                 })));
@@ -110,26 +116,52 @@ internal static class UpdateServiceChecks
                 return Task.FromResult(Json(JsonSerializer.Serialize(new[]
                 {
                     new { Name = "manifest.json", Size = 750, Sha256 = Hash,
-                        Version = "1.0.12", Commit = "abc" },
+                        Version = "99.0.0", Commit = "abc" },
                     new { Name = LegacyName, Size = 13004008, Sha256 = Hash,
-                        Version = "1.0.12", Commit = "abc" }
+                        Version = "99.0.0", Commit = "abc" }
                 })));
+            if (url == UpdateService.LatestReleaseUrl)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         };
-        var beforeFallback = handler.Urls.Count;
+        var beforeGiteePrimary = handler.Urls.Count;
         update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
-        Require(update is { Tag: Tag, Asset: { Name: LegacyName, Size: 13004008 } } &&
+        Require(update is { Tag: var gTag, Asset: { Name: LegacyName, Size: 13004008 } } &&
+                gTag == newerTag &&
                 update.Asset!.Sha256 == Hash.ToLowerInvariant() &&
                 update.Asset.Url.StartsWith(
                     UpdateService.GiteeRepositoryUrl + "/releases/download/",
                     StringComparison.Ordinal) &&
-                handler.Urls.Skip(beforeFallback).SequenceEqual(new[]
+                handler.Urls.Skip(beforeGiteePrimary).SequenceEqual(new[]
                 {
-                    UpdateService.LatestReleaseUrl,
                     UpdateService.GiteeLatestReleaseUrl,
                     UpdateService.GiteeManifestUrl
                 }),
-            "GitHub rate limits fall back to the repository manifest for a verified Windows asset");
+            "Gitee primary check returns newer verified Windows asset directly without hitting GitHub");
+
+        handler.Respond = (request, _) =>
+        {
+            var url = request.RequestUri!.AbsoluteUri;
+            if (url == UpdateService.GiteeLatestReleaseUrl)
+                return Task.FromResult(Json(JsonSerializer.Serialize(new
+                {
+                    tag_name = Tag, name = "PackFrame 1.0.12", body = "Lagging Gitee.",
+                    prerelease = false, created_at = "2026-11-07T12:00:00Z",
+                    assets = Array.Empty<object>()
+                })));
+            if (url == UpdateService.LatestReleaseUrl)
+                return Task.FromResult(Json(JsonSerializer.Serialize(new
+                {
+                    tag_name = newerTag, html_url = UpdateService.RepositoryUrl + "/releases/tag/" + newerTag,
+                    name = "PackFrame 99.0.0", body = "Newer GitHub.",
+                    published_at = "2026-11-08T12:00:00Z", draft = false, prerelease = false,
+                    assets = new[] { Asset(url: UpdateService.RepositoryUrl + "/releases/download/" + newerTag + "/" + LegacyName) }
+                })));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        };
+        update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
+        Require(update is { Tag: var ghNewer } && ghNewer == newerTag && update.Asset is not null,
+            "lagging Gitee release falls through to newer GitHub release instead of hiding updates");
 
         handler.Respond = (request, _) =>
         {
@@ -179,11 +211,23 @@ internal static class UpdateServiceChecks
         await ExpectFailure<OperationCanceledException>(() => UpdateService.CheckAsync(client, "windows", Architecture.X64, cancelled.Token));
         Require(handler.Urls.Count == before,
             "cancelled update checks make no request or mirror fallback");
-        handler.Respond = (_, _) => Task.FromCanceled<HttpResponseMessage>(new CancellationToken(true));
+        using var midCancel = new CancellationTokenSource();
+        handler.Respond = (_, _) =>
+        {
+            midCancel.Cancel();
+            return Task.FromCanceled<HttpResponseMessage>(midCancel.Token);
+        };
         before = handler.Urls.Count;
-        await ExpectFailure<OperationCanceledException>(() => UpdateService.CheckAsync(client, "windows", Architecture.X64));
+        await ExpectFailure<OperationCanceledException>(() => UpdateService.CheckAsync(client, "windows", Architecture.X64, midCancel.Token));
         Require(handler.Urls.Count == before + 1,
-            "cancellation during a request propagates without trying another update source");
+            "caller cancellation during a request propagates without trying another update source");
+
+        handler.Respond = (request, _) => request.RequestUri!.AbsoluteUri == UpdateService.GiteeLatestReleaseUrl
+            ? Task.FromCanceled<HttpResponseMessage>(new CancellationToken(true))
+            : Task.FromResult(Json(Release(Asset())));
+        update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
+        Require(update is { Tag: Tag, Asset: not null },
+            "internal Gitee timeout falls back cleanly to GitHub for overseas users");
     }
 
     private static object Asset(string name = LegacyName, string? url = null,

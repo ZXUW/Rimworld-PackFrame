@@ -48,8 +48,18 @@ internal sealed class CommunityRulesCache
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private volatile CommunityRulesSnapshot? _current;
 
+    private static HttpClient CreateHttpClient() =>
+        new(new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.None,
+            ConnectTimeout = TimeSpan.FromSeconds(4)
+        })
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+
     public static CommunityRulesCache Shared { get; } = new(
-        new HttpClient(),
+        CreateHttpClient(),
         Path.Combine(AppContext.BaseDirectory, "runtime", "rules")
     );
 
@@ -86,13 +96,15 @@ internal sealed class CommunityRulesCache
         try
         {
             var meta = ReadCacheMeta();
-            var candidates = new[] { GitHubRulesUrl, GiteeMirrorRulesUrl };
+            var candidates = new[] { GiteeMirrorRulesUrl, GitHubRulesUrl };
             Exception? lastError = null;
+            var baseline = LoadLocal();
+            var anyResponded = false;
 
             foreach (var url in candidates)
             {
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromSeconds(12));
+                timeout.CancelAfter(TimeSpan.FromSeconds(8));
                 try
                 {
                     using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -129,12 +141,12 @@ internal sealed class CommunityRulesCache
                     response.EnsureSuccessStatusCode();
                     var json = await ReadLimitedJsonAsync(response.Content, timeout.Token).ConfigureAwait(false);
                     var parsed = ParseSnapshot(json);
+                    anyResponded = true;
 
-                    // Keep the higher timestamp if a mirror lags behind bundled or cached data
-                    var baseline = LoadLocal();
+                    // If this mirror lags behind local data, try the next candidate instead of stopping early
                     if (parsed.Timestamp > 0 && baseline.Timestamp > parsed.Timestamp)
                     {
-                        return baseline;
+                        continue;
                     }
 
                     SaveCache(json, new CommunityRulesCacheEntry
@@ -158,12 +170,12 @@ internal sealed class CommunityRulesCache
                 }
             }
 
-            if (lastError is not null)
+            if (!anyResponded && lastError is not null)
             {
                 throw lastError;
             }
 
-            return LoadLocal();
+            return baseline;
         }
         finally
         {

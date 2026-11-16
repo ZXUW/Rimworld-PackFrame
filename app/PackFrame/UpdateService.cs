@@ -33,7 +33,13 @@ internal static class UpdateService
         "https://gitee.com/zxuw/Rimworld-PackFrame/raw/main/update/latest.json";
     internal const long MaximumArchiveSize = 1024L * 1024 * 1024;
     private const int MaximumMetadataSize = 4 * 1024 * 1024;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private static readonly HttpClient Http = new(new SocketsHttpHandler
+    {
+        ConnectTimeout = TimeSpan.FromSeconds(4)
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(15)
+    };
 
     public static string CurrentVersion
     {
@@ -60,41 +66,56 @@ internal static class UpdateService
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Exception? githubError = null;
+        UpdateInfo? gitee = null;
         try
         {
-            return await CheckGitHubAsync(client, platform, architecture, cancellationToken);
+            using var giteeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            giteeTimeout.CancelAfter(TimeSpan.FromSeconds(6));
+            gitee = await CheckGiteeAsync(client, platform, architecture, giteeTimeout.Token);
+            if (gitee is not null && IsNewer(gitee.Tag) &&
+                (gitee.Asset is not null || !string.Equals(platform, "windows", StringComparison.OrdinalIgnoreCase)))
+            {
+                return gitee;
+            }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
         catch (Exception exception) when (
-            exception is HttpRequestException or InvalidDataException or IOException)
+            exception is HttpRequestException or InvalidDataException or IOException or
+                JsonException or OperationCanceledException)
         {
-            githubError = exception;
         }
 
         try
         {
-            var gitee = await CheckGiteeAsync(client, platform, architecture, cancellationToken);
+            var github = await CheckGitHubAsync(client, platform, architecture, cancellationToken);
+            if (github is not null)
+            {
+                if (gitee is not null && IsNewer(gitee.Tag, github.Tag))
+                {
+                    return gitee;
+                }
+                return github;
+            }
             if (gitee is not null)
             {
                 return gitee;
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
-        catch when (githubError is not null)
+        catch (Exception exception) when (
+            exception is HttpRequestException or InvalidDataException or IOException or JsonException)
         {
-            throw githubError;
-        }
-
-        if (githubError is not null)
-        {
-            throw githubError;
+            if (gitee is not null)
+            {
+                return gitee;
+            }
+            throw;
         }
 
         return null;
@@ -180,9 +201,10 @@ internal static class UpdateService
         var release = document.RootElement;
         if (release.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Gitee release metadata is not an object.");
-        if (IsTrue(release, "prerelease")) return null;
+        if (IsTrue(release, "draft") || IsTrue(release, "prerelease")) return null;
         var tag = ReadString(release, "tag_name")?.Trim();
-        if (tag is null || !TryStableVersion(tag, out _)) return null;
+        if (tag is null || !TryStableVersion(tag, out _))
+            throw new InvalidDataException("Gitee release has an unsupported version tag.");
 
         var url = GiteeRepositoryUrl + "/releases/tag/" + Uri.EscapeDataString(tag);
         DateTimeOffset? published = null;

@@ -45,8 +45,18 @@ internal sealed class WorkshopMapCache
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private volatile WorkshopMapSnapshot? _current;
 
+    private static HttpClient CreateHttpClient() =>
+        new(new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.None,
+            ConnectTimeout = TimeSpan.FromSeconds(4)
+        })
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+
     public static WorkshopMapCache Shared { get; } = new(
-        new HttpClient(),
+        CreateHttpClient(),
         Path.Combine(AppContext.BaseDirectory, "runtime", "rules")
     );
 
@@ -106,13 +116,15 @@ internal sealed class WorkshopMapCache
         try
         {
             var meta = ReadCacheMeta();
-            var candidates = new[] { GitHubMapUrl, GiteeMirrorMapUrl };
+            var candidates = new[] { GiteeMirrorMapUrl, GitHubMapUrl };
             Exception? lastError = null;
+            var baseline = LoadLocal();
+            var anyResponded = false;
 
             foreach (var url in candidates)
             {
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromSeconds(15));
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
                 try
                 {
                     using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -149,11 +161,11 @@ internal sealed class WorkshopMapCache
                     response.EnsureSuccessStatusCode();
                     var gzBytes = await ReadLimitedBytesAsync(response.Content, timeout.Token).ConfigureAwait(false);
                     var parsed = ParseGzip(gzBytes);
+                    anyResponded = true;
 
-                    var baseline = LoadLocal();
                     if (parsed.Version > 0 && baseline.Version > parsed.Version)
                     {
-                        return baseline;
+                        continue;
                     }
 
                     SaveCache(gzBytes, new CommunityRulesCacheEntry
@@ -177,12 +189,12 @@ internal sealed class WorkshopMapCache
                 }
             }
 
-            if (lastError is not null)
+            if (!anyResponded && lastError is not null)
             {
                 throw lastError;
             }
 
-            return LoadLocal();
+            return baseline;
         }
         finally
         {

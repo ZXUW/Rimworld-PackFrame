@@ -48,22 +48,8 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Mirror main branch to Gitee (HTTPS token or SSH key if configured)
+      - name: Mirror main branch to Gitee
         env:
-          GITEE_USER: ${{ secrets.GITEE_USER }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_SSH_KEY: ${{ secrets.GITEE_SSH_KEY }}
         run: |
-          if [ -n "${GITEE_TOKEN}" ]; then
-            USER_NAME="${GITEE_USER:-zxuw}"
-            git push "https://${USER_NAME}:${GITEE_TOKEN}@gitee.com/zxuw/Rimworld-PackFrame.git" HEAD:main
-          elif [ -n "${GITEE_SSH_KEY}" ]; then
-            mkdir -p ~/.ssh
-            printf '%s\n' "${GITEE_SSH_KEY}" > ~/.ssh/gitee_key
-            chmod 600 ~/.ssh/gitee_key
-            ssh-keyscan -H gitee.com >> ~/.ssh/known_hosts 2>/dev/null
-            GIT_SSH_COMMAND="ssh -i ~/.ssh/gitee_key -o StrictHostKeyChecking=yes" git push "git@gitee.com:zxuw/Rimworld-PackFrame.git" HEAD:main
-            rm -f ~/.ssh/gitee_key
-          else
-            echo "GITEE_TOKEN / GITEE_SSH_KEY secret not set; skipping automatic Gitee push from GitHub Actions."
-          fi
+          [ -n "${GITEE_TOKEN}" ] && git push --force "https://zxuw:${GITEE_TOKEN}@gitee.com/zxuw/Rimworld-PackFrame.git" HEAD:main || echo "GITEE_TOKEN not set; skipped."

@@ -1,3 +1,6 @@
+using System.IO.Compression;
+using System.Net;
+using System.Text;
 using PackFrame;
 
 internal static class NoteChecks
@@ -310,23 +313,94 @@ internal static class NoteChecks
                     byPkg["ludeon.rimworld.odyssey"].WorkshopFileId is null,
                 "Scan prioritizes About.xml steamWorkshopUrl over GitHub downloadUrl, falls back to WorkshopMapCache, resolves DLC AppID, and leaves unknown mods buttonless");
 
-            // Implicit RJW rule check (standalone "rjw" in Name, PackageId, or Folder name; ignores substrings like "marjwana")
+            // Implicit RJW rule check (standalone "rjw" in Name, Alias/RowName, PackageId, or Folder name; ignores substrings like "marjwana")
             var rjwAddonById = new ModInfo("Events Addon", "A", @"C:\Mods\12345", "c0ffee.rjw.events", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
             var rjwAddonByName = new ModInfo("[RJW] Animations", "A", @"C:\Mods\23456", "author.animpack", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
             var rjwAddonByFolder = new ModInfo("Custom Addon", "A", @"C:\Mods\RJW_Extra_Content\", "author.custompack", "", null, ModSource.Local, "1.6", DateTime.MinValue);
+            var rjwAddonByAlias = new ModInfo("Mysterious Submod", "A", @"C:\Mods\99999", "author.mysterious", "", null, ModSource.Workshop, "1.6", DateTime.MinValue) { Alias = "[RJW] 汉化备注" };
             var falsePositiveSubstr = new ModInfo("Marjwana Plants", "A", @"C:\Mods\marjwanamod", "author.marjwanaplants", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
             var rjwCore = new ModInfo("RimJobWorld", "A", @"C:\Mods\rim.job.world", "rim.job.world", "", null, ModSource.Local, "1.6", DateTime.MinValue);
-            var rjwList = new List<ModInfo> { core, rjwAddonById, rjwAddonByName, rjwAddonByFolder, falsePositiveSubstr, rjwCore };
+            var rjwList = new List<ModInfo> { core, rjwAddonById, rjwAddonByName, rjwAddonByFolder, rjwAddonByAlias, falsePositiveSubstr, rjwCore };
             var rjwRules = AutoSortPrerequisites.CollectSortRules(rjwList, "zh", useCommunityRules: true);
             var rjwPlan = AutoSortPrerequisites.BuildTopologicalOrder(rjwList.Select(m => m.PackageId).ToList(), rjwList, rjwRules);
             int RjwPos(string id) => rjwPlan.OrderedPackageIds.ToList().FindIndex(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
-            Require(rjwRules.ImplicitRjwRuleCount == 3 &&
+            Require(rjwRules.ImplicitRjwRuleCount == 4 &&
                     !AutoSortPrerequisites.HasStandaloneRjwToken(falsePositiveSubstr) &&
                     RjwPos("author.marjwanaplants") < RjwPos("rim.job.world") &&
                     RjwPos("rim.job.world") < RjwPos("c0ffee.rjw.events") &&
                     RjwPos("rim.job.world") < RjwPos("author.animpack") &&
-                    RjwPos("rim.job.world") < RjwPos("author.custompack"),
-                "Implicit RJW rule places standalone 'rjw' mods (name/packageId/folder) after rim.job.world while ignoring partial substrings");
+                    RjwPos("rim.job.world") < RjwPos("author.custompack") &&
+                    RjwPos("rim.job.world") < RjwPos("author.mysterious"),
+                "Implicit RJW rule places standalone 'rjw' mods (name/alias/packageId/folder) after rim.job.world while ignoring partial substrings");
+
+            // Gitee-first + overseas fallback + stale mirror non-interception checks
+            var rulesCacheDir = Path.Combine(root, "rules-cache");
+            var requestedUrls = new List<string>();
+            using var mirrorHandler = new MirrorTestHandler((req, _) =>
+            {
+                var u = req.RequestUri!.AbsoluteUri;
+                requestedUrls.Add(u);
+                if (u == CommunityRulesCache.GiteeMirrorRulesUrl)
+                {
+                    // Stale Gitee mirror (timestamp 100 < bundled 500) must NOT block GitHub check
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("""{"timestamp":100,"rules":{"stale.mod":{"loadBottom":true}}}""", Encoding.UTF8, "application/json")
+                    });
+                }
+                if (u == CommunityRulesCache.GitHubRulesUrl)
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("""{"timestamp":900,"rules":{"fresh.mod":{"loadBottom":true}}}""", Encoding.UTF8, "application/json")
+                    });
+                }
+                if (u == WorkshopMapCache.GiteeMirrorMapUrl)
+                {
+                    // Overseas user cannot reach Gitee (timeout/403) -> falls back to GitHub
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+                }
+                if (u == WorkshopMapCache.GitHubMapUrl)
+                {
+                    using var gzOut = new MemoryStream();
+                    using (var gz = new GZipStream(gzOut, CompressionLevel.Fastest, leaveOpen: true))
+                    {
+                        gz.Write("""{"version":900,"mods":{"overseas.mod":123456}}"""u8);
+                    }
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new ByteArrayContent(gzOut.ToArray())
+                    });
+                }
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            });
+            using var mirrorClient = new HttpClient(mirrorHandler);
+            var testRulesCache = new CommunityRulesCache(
+                mirrorClient,
+                rulesCacheDir,
+                """{"timestamp":500,"rules":{"bundled.mod":{"loadBottom":true}}}""");
+            var refreshedRules = testRulesCache.RefreshAsync().GetAwaiter().GetResult();
+            Require(requestedUrls.SequenceEqual(new[] { CommunityRulesCache.GiteeMirrorRulesUrl, CommunityRulesCache.GitHubRulesUrl }) &&
+                    refreshedRules.Timestamp == 900 &&
+                    refreshedRules.Rules.ContainsKey("fresh.mod"),
+                "CommunityRulesCache tries Gitee first and falls through stale Gitee mirror to newer GitHub snapshot");
+
+            requestedUrls.Clear();
+            byte[] bundledMapGz;
+            using (var ms = new MemoryStream())
+            {
+                using (var gz = new GZipStream(ms, CompressionLevel.Fastest, leaveOpen: true))
+                {
+                    gz.Write("""{"version":500,"mods":{"bundled.mod":111}}"""u8);
+                }
+                bundledMapGz = ms.ToArray();
+            }
+            var testMapCache = new WorkshopMapCache(mirrorClient, rulesCacheDir, bundledMapGz);
+            var refreshedMap = testMapCache.RefreshAsync().GetAwaiter().GetResult();
+            Require(requestedUrls.SequenceEqual(new[] { WorkshopMapCache.GiteeMirrorMapUrl, WorkshopMapCache.GitHubMapUrl }) &&
+                    refreshedMap.Version == 900 &&
+                    testMapCache.TryGetWorkshopId("overseas.mod") == 123456UL,
+                "WorkshopMapCache tries Gitee first and falls back cleanly to GitHub when Gitee is unreachable");
         }
         finally
         {
@@ -339,5 +413,12 @@ internal static class NoteChecks
     {
         if (!value) throw new Exception("FAIL: " + name);
         Console.WriteLine("PASS: " + name);
+    }
+
+    private sealed class MirrorTestHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            respond(request, cancellationToken);
     }
 }

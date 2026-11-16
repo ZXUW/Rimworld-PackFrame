@@ -858,7 +858,9 @@ internal static class AutoSortPrerequisites
 
     public static bool HasStandaloneRjwToken(ModInfo mod)
     {
-        if (StandaloneRjwToken.IsMatch(mod.PackageId) || StandaloneRjwToken.IsMatch(mod.Name))
+        if (StandaloneRjwToken.IsMatch(mod.PackageId) ||
+            StandaloneRjwToken.IsMatch(mod.Name) ||
+            (!string.IsNullOrWhiteSpace(mod.RowName) && StandaloneRjwToken.IsMatch(mod.RowName)))
         {
             return true;
         }
