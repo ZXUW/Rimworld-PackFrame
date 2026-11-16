@@ -126,7 +126,7 @@ public static class ModpackService
     internal static readonly HttpClient DownloadHttp = CreateDownloadClient();
 
     private static readonly Regex WorkshopIdPattern = new(
-        @"[?&]id=(\d+)",
+        @"(?:CommunityFilePage/|filedetails/\?id=|[?&]id=)(\d+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled
     );
 

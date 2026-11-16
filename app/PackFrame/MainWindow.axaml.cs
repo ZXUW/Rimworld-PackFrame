@@ -64,6 +64,10 @@ public partial class MainWindow : Window
     private readonly Button _autoDetectGameButton;
     private readonly Button _browseButton;
     private readonly Button _paintModeButton;
+    private readonly Button _batchCategoryButton;
+    private readonly TextBox _noteAliasBox;
+    private readonly TextBox _noteCategoryBox;
+    private ModInfo? _detailMod;
     private readonly Button _undoButton;
     private readonly Button _redoButton;
     private readonly Button _launchButton;
@@ -111,6 +115,8 @@ public partial class MainWindow : Window
     private readonly Button _instanceActionButton2;
     private readonly Button _modpackButton1;
     private readonly Button _modpackButton2;
+    private readonly Button _autoSortButton1;
+    private readonly Button _autoSortButton2;
     private readonly ListBox _inactiveList;
     private readonly ListBox _activeList1;
     private readonly ListBox _activeList2;
@@ -241,6 +247,9 @@ public partial class MainWindow : Window
         _autoDetectGameButton = Find<Button>("AutoDetectGameButton");
         _browseButton = Find<Button>("BrowseButton");
         _paintModeButton = Find<Button>("PaintModeButton");
+        _batchCategoryButton = Find<Button>("BatchCategoryButton");
+        _noteAliasBox = Find<TextBox>("NoteAliasBox");
+        _noteCategoryBox = Find<TextBox>("NoteCategoryBox");
         _undoButton = Find<Button>("UndoButton");
         _redoButton = Find<Button>("RedoButton");
         _launchButton = Find<Button>("LaunchButton");
@@ -292,6 +301,8 @@ public partial class MainWindow : Window
         _instanceActionButton2 = Find<Button>("InstanceActionButton2");
         _modpackButton1 = Find<Button>("ModpackButton1");
         _modpackButton2 = Find<Button>("ModpackButton2");
+        _autoSortButton1 = Find<Button>("AutoSortButton1");
+        _autoSortButton2 = Find<Button>("AutoSortButton2");
         _instanceCombo1.ContainerPrepared += (_, args) =>
             RegisterInstanceContainer(
                 _instanceCombo1,
@@ -405,6 +416,10 @@ public partial class MainWindow : Window
             list.PointerExited += OnModListPointerExited;
             list.PointerCaptureLost += (_, _) =>
             {
+                if (_noteBatchIds.Count > 0)
+                {
+                    FinishNoteBatch();
+                }
                 if (_painting)
                 {
                     FinishPaint();
@@ -551,6 +566,13 @@ public partial class MainWindow : Window
                 try { await ModpackCatalogCache.Shared.RefreshAsync(indexUrl); }
                 catch (Exception exception) { AppLog.Error("Refresh modpack index on startup: " + indexUrl, exception); }
             });
+            _ = Task.Run(async () =>
+            {
+                try { await CommunityRulesCache.Shared.RefreshAsync(); }
+                catch (Exception exception) { AppLog.Error("Refresh community rules on startup", exception); }
+                try { await WorkshopMapCache.Shared.RefreshAsync(); }
+                catch (Exception exception) { AppLog.Error("Refresh workshop map on startup", exception); }
+            });
             Dispatcher.UIThread.Post(
                 () => _inactiveList.Focus(),
                 DispatcherPriority.Loaded
@@ -604,6 +626,10 @@ public partial class MainWindow : Window
             "更新を確認"
         );
         Find<Button>("LogButton").Content = Localization.LogButton(language);
+        _batchCategoryButton.Content = UpdateText(
+            "Batch category", "批量分类", "批次分類", "分類を一括");
+        _noteAliasBox.PlaceholderText = UpdateText("Note name", "备注名", "備註名", "メモ名");
+        _noteCategoryBox.PlaceholderText = UpdateText("Category", "分类", "分類", "分類");
         _qqGroupText.Text = OperationText.Choose(
             language,
             "QQ group: 960717872",
@@ -615,6 +641,9 @@ public partial class MainWindow : Window
         _syncConfigButton.Content = Localization.SyncConfig(language);
         _modpackButton1.Content = Localization.ModpacksButton(language);
         _modpackButton2.Content = Localization.ModpacksButton(language);
+        var autoSortLabel = UpdateText("Auto sort", "自动排序", "自動排序", "自動ソート");
+        _autoSortButton1.Content = autoSortLabel;
+        _autoSortButton2.Content = autoSortLabel;
         _nameLabel.Text = Localization.FieldName(language);
         _authorLabel.Text = Localization.FieldAuthor(language);
         _pathLabel.Text = Localization.FieldPath(language);
@@ -1701,7 +1730,7 @@ public partial class MainWindow : Window
         );
     }
 
-    private void ApplySortSuggestions(int column)
+    private void ApplySortSuggestions(int column, HashSet<string>? targetIds = null)
     {
         var instance = GetInstanceForColumn(column);
         if (instance is null || instance.IsDamaged)
@@ -1713,6 +1742,15 @@ public partial class MainWindow : Window
             ApplySteamCmdFilter(ResolveActive(instance), instance),
             column
         );
+        if (targetIds is not null)
+        {
+            active = active
+                .Select(mod => targetIds.Contains(mod.PackageId)
+                    ? mod
+                    : mod with { SortOrderAfterIds = new List<string>() })
+                .ToList();
+        }
+
         var order = ModListOperations.ApplySortSuggestions(
             instance.ActivePackageIds,
             active
@@ -2608,9 +2646,9 @@ public partial class MainWindow : Window
         active1 = ApplyProblemFilters(active1, _activeFilter1);
         active2 = ApplyProblemFilters(active2, _activeFilter2);
         var colorData = ModColorStore.Load(_packRoot);
-        inactive = ApplyModColors(inactive, colorData);
-        active1 = ApplyModColors(active1, colorData);
-        active2 = ApplyModColors(active2, colorData);
+        inactive = ApplyModNotes(ApplyModColors(inactive, colorData));
+        active1 = ApplyModNotes(ApplyModColors(active1, colorData));
+        active2 = ApplyModNotes(ApplyModColors(active2, colorData));
 
         _refreshing = true;
         ReplacePaneItems(_inactiveList, inactive, PaneInstanceScope(targetInstance));
@@ -2750,7 +2788,7 @@ public partial class MainWindow : Window
         var filter = inactive ? _inactiveFilter : firstColumn ? _activeFilter1 : _activeFilter2;
         var matches = PrepareSearchList(source, state);
         if (inactive) matches = SortInactive(matches);
-        var visible = ApplyModColors(ApplyProblemFilters(matches, filter), ModColorStore.Load(_packRoot));
+        var visible = ApplyModNotes(ApplyModColors(ApplyProblemFilters(matches, filter), ModColorStore.Load(_packRoot)));
         _refreshing = true;
         ReplacePaneItems(list, visible, _paneScopes.GetValueOrDefault(list), selectFirst: true);
         var first = list.SelectedItem as ModInfo;
@@ -3543,7 +3581,7 @@ public partial class MainWindow : Window
         inactive = SortInactive(inactive);
         var inactiveForSummary = inactive;
         inactive = ApplyProblemFilters(inactive, _inactiveFilter);
-        inactive = ApplyModColors(inactive, ModColorStore.Load(_packRoot));
+        inactive = ApplyModNotes(ApplyModColors(inactive, ModColorStore.Load(_packRoot)));
 
         _refreshing = true;
         ReplacePaneItems(_inactiveList, inactive, PaneInstanceScope(targetInstance));
@@ -4482,6 +4520,17 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_noteBatchMode && point.Properties.IsLeftButtonPressed)
+        {
+            var batchItem = FindListItem(list, e.Source);
+            if (batchItem?.DataContext is ModInfo batchMod)
+            {
+                BeginNoteBatch(list, batchMod, e);
+            }
+            e.Handled = true;
+            return;
+        }
+
         if (point.Properties.IsRightButtonPressed)
         {
             var contextItem = FindListItem(list, e.Source);
@@ -4693,6 +4742,11 @@ public partial class MainWindow : Window
         }
 
         var column = GetListColumn(list);
+        flyout.Items.Add(CreateMenuItem(
+            UpdateText("Note", "备注", "備註", "メモ"),
+            _packRoot is not null && selectedMods.Count > 0,
+            () => _ = ShowModNoteAsync(selectedMods[0])
+        ));
         flyout.Items.Add(CreateMenuItem(
             Localization.ColorMod(language),
             _packRoot is not null && selectedMods.Count > 0,
@@ -5151,6 +5205,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_noteBatchIds.Count > 0)
+        {
+            FinishNoteBatch();
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
+
         if (_painting)
         {
             FinishPaint();
@@ -5261,6 +5323,13 @@ public partial class MainWindow : Window
     {
         if (sender is not ListBox list)
         {
+            return;
+        }
+
+        if (_noteBatchIds.Count > 0)
+        {
+            NoteBatchAtPointer(e);
+            e.Handled = true;
             return;
         }
 
@@ -5865,6 +5934,200 @@ public partial class MainWindow : Window
     private async void OnModpack2Click(object? sender, RoutedEventArgs e)
     {
         await OpenModpacksAsync(1);
+    }
+
+    private async void OnAutoSort1Click(object? sender, RoutedEventArgs e)
+    {
+        await OpenAutoSortAsync(0);
+    }
+
+    private async void OnAutoSort2Click(object? sender, RoutedEventArgs e)
+    {
+        await OpenAutoSortAsync(1);
+    }
+
+    private async Task OpenAutoSortAsync(int paneIndex)
+    {
+        var instance = GetSelectedInstance(paneIndex);
+        if (instance is null || instance.IsDamaged)
+        {
+            return;
+        }
+
+        var column = paneIndex + 1;
+        ModInfo? ResolveInstalled(string packageId)
+        {
+            var mod = SelectModForInstance(packageId, instance);
+            return mod is not null && ModVisibility.IsVisible(mod, instance) ? mod : null;
+        }
+
+        var visibleInstalled = _allMods
+            .Where(mod => ModVisibility.IsVisible(mod, instance))
+            .ToList();
+        AutoSortScanSnapshot ScanCurrent(AutoSortScanOptions options)
+        {
+            var activeMods = ApplySteamCmdFilter(ResolveActive(instance), instance);
+            var scan = AutoSortPrerequisites.Scan(
+                activeMods,
+                ResolveInstalled,
+                visibleInstalled,
+                options.ConfirmedFuzzyDeps
+            );
+            var coreItems = AutoSortPrerequisites.ScanCorePrerequisites(activeMods, _config.Language);
+            var rulesResult = AutoSortPrerequisites.CollectSortRules(
+                activeMods,
+                _config.Language,
+                CommunityRulesCache.Shared.LoadLocal(),
+                options.UseCommunityRules,
+                options.CycleResolutions
+            );
+            var sortPlan = AutoSortPrerequisites.BuildTopologicalOrder(
+                instance.ActivePackageIds,
+                activeMods,
+                rulesResult
+            );
+            return new AutoSortScanSnapshot(scan, coreItems, rulesResult, sortPlan);
+        }
+
+        void EnablePrerequisites(IReadOnlyList<string> selectedIds)
+        {
+            if (selectedIds.Count == 0)
+            {
+                return;
+            }
+
+            var currentActive = ApplySteamCmdFilter(ResolveActive(instance), instance);
+            var updatedOrder = AutoSortPrerequisites.InsertPrerequisites(
+                instance.ActivePackageIds,
+                selectedIds,
+                currentActive,
+                ResolveInstalled,
+                visibleInstalled
+            );
+            if (ActiveIdsEqual(instance.ActivePackageIds, updatedOrder))
+            {
+                return;
+            }
+
+            var addedIds = selectedIds.ToList();
+            var snapshots = new List<InstanceSnapshot>
+            {
+                new(instance.FolderName, instance.ActivePackageIds.ToList())
+            };
+            try
+            {
+                InstanceStore.StageActiveMods(instance, updatedOrder);
+                PushUndo(snapshots, addedIds, column, column);
+                RefreshManager(false);
+                Dispatcher.UIThread.Post(() => SelectMovedMods(column, addedIds));
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("apply auto sort prerequisites", exception);
+            }
+        }
+
+        void ApplyCoreOrder(IReadOnlySet<string> selectedCoreIds)
+        {
+            if (selectedCoreIds.Count == 0)
+            {
+                return;
+            }
+
+            var currentActive = ApplySteamCmdFilter(ResolveActive(instance), instance);
+            var updatedOrder = AutoSortPrerequisites.ApplyCorePrerequisitesOrder(
+                instance.ActivePackageIds,
+                currentActive,
+                selectedCoreIds,
+                _config.Language
+            );
+            if (ActiveIdsEqual(instance.ActivePackageIds, updatedOrder))
+            {
+                return;
+            }
+
+            var movedIds = selectedCoreIds.ToList();
+            var snapshots = new List<InstanceSnapshot>
+            {
+                new(instance.FolderName, instance.ActivePackageIds.ToList())
+            };
+            try
+            {
+                InstanceStore.StageActiveMods(instance, updatedOrder);
+                PushUndo(snapshots, movedIds, column, column);
+                RefreshManager(false);
+                Dispatcher.UIThread.Post(() => SelectMovedMods(column, movedIds));
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("apply auto sort core prerequisites", exception);
+            }
+        }
+
+        void DisableConflictingMods(IReadOnlyList<string> removeIds)
+        {
+            if (removeIds.Count == 0)
+            {
+                return;
+            }
+
+            var removeSet = new HashSet<string>(removeIds, StringComparer.OrdinalIgnoreCase);
+            var updatedOrder = instance.ActivePackageIds
+                .Where(id => !removeSet.Contains(id))
+                .ToList();
+            if (ActiveIdsEqual(instance.ActivePackageIds, updatedOrder))
+            {
+                return;
+            }
+
+            var snapshots = new List<InstanceSnapshot>
+            {
+                new(instance.FolderName, instance.ActivePackageIds.ToList())
+            };
+            try
+            {
+                InstanceStore.StageActiveMods(instance, updatedOrder);
+                PushUndo(snapshots, removeIds.ToList(), column, 0);
+                RefreshManager(false);
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("disable conflicting mods in auto sort", exception);
+            }
+        }
+
+        void ApplySortedOrder(IReadOnlyList<string> orderedIds)
+        {
+            if (orderedIds.Count == 0 || ActiveIdsEqual(instance.ActivePackageIds, orderedIds))
+            {
+                return;
+            }
+
+            var snapshots = new List<InstanceSnapshot>
+            {
+                new(instance.FolderName, instance.ActivePackageIds.ToList())
+            };
+            try
+            {
+                InstanceStore.StageActiveMods(instance, orderedIds.ToList());
+                PushUndo(snapshots, new List<string>(), column, column);
+                RefreshManager(false);
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("apply auto sort topological order", exception);
+            }
+        }
+
+        var window = new AutoSortWindow(
+            ScanCurrent,
+            EnablePrerequisites,
+            DisableConflictingMods,
+            ApplyCoreOrder,
+            ApplySortedOrder,
+            _config.Language
+        );
+        await window.ShowDialog(this);
     }
 
     private async Task OpenModpacksAsync(int column)
@@ -6767,6 +7030,9 @@ public partial class MainWindow : Window
     {
         if (mod is null)
         {
+            _detailMod = null;
+            _noteAliasBox.Text = string.Empty;
+            _noteCategoryBox.Text = string.Empty;
             _nameValue.Text = string.Empty;
             _authorValue.Text = string.Empty;
             _pathValue.Text = string.Empty;
@@ -6781,6 +7047,14 @@ public partial class MainWindow : Window
         }
 
         _nameValue.Text = mod.Name;
+        FlushNoteEdits();
+        if (!ReferenceEquals(_detailMod, mod))
+        {
+            _detailMod = mod;
+            var note = ModNoteStore.Get(_packRoot, mod.PackageId);
+            _noteAliasBox.Text = note?.Alias ?? string.Empty;
+            _noteCategoryBox.Text = note?.Category ?? string.Empty;
+        }
         _authorValue.Text = mod.Author;
         _pathValue.Text = mod.Path;
         _packageValue.Text = mod.PackageId;

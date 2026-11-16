@@ -71,6 +71,59 @@ public sealed record ModInfo(
     }
 
     public bool IsLocal => Source == ModSource.Local;
+    private string? _alias;
+    private string? _category;
+    private bool _showOriginalName;
+
+    public string? Alias
+    {
+        get => _alias;
+        set
+        {
+            if (_alias == value) return;
+            _alias = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Alias)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasAlias)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RowName)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NameOpacity)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AliasOpacity)));
+        }
+    }
+
+    public string? Category
+    {
+        get => _category;
+        set
+        {
+            if (_category == value) return;
+            _category = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CategoryText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasCategory)));
+        }
+    }
+
+    public bool ShowOriginalName
+    {
+        set
+        {
+            if (_showOriginalName == value) return;
+            _showOriginalName = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RowName)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NameOpacity)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AliasOpacity)));
+        }
+    }
+
+    public bool HasAlias => !string.IsNullOrWhiteSpace(_alias);
+    public double AliasOpacity => _showOriginalName ? 0 : 1;
+    public double NameOpacity =>
+        _showOriginalName || string.IsNullOrWhiteSpace(_alias) ? 1 : 0;
+
+    public string RowName =>
+        _showOriginalName || string.IsNullOrWhiteSpace(_alias) ? Name : _alias!;
+    public string CategoryText => _category ?? string.Empty;
+    public bool HasCategory => !string.IsNullOrWhiteSpace(_category);
+
     public int? LoadOrder { get; init; }
     public double LoadOrderGutterWidth { get; init; }
     public bool HasLoadOrder => LoadOrder is > 0;
@@ -92,6 +145,9 @@ public sealed record ModInfo(
     public List<string> ForceLoadBefore { get; init; } = new();
     public List<string> IncompatibleWith { get; init; } = new();
     public List<string> ModDependencies { get; init; } = new();
+    public Dictionary<string, string> ModDependencyNames { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> ModDependencyUrls { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool IsTranslationMod { get; init; }
     public List<string> SortOrderAfterNames { get; init; } = new();
     public List<string> SortOrderAfterIds { get; init; } = new();
     public int BadgeColumn { get; init; }
@@ -419,11 +475,14 @@ public static class ModCatalog
                 }
             }
 
+            var (dependencyIds, dependencyNames, dependencyUrls) = ReadDependencies(root, currentVersion);
+            var trimmedName = name.Trim();
+            var trimmedId = packageId.Trim();
             return new ModInfo(
-                name.Trim(),
+                trimmedName,
                 author,
                 Path.GetFullPath(directory),
-                packageId.Trim(),
+                trimmedId,
                 description.Trim(),
                 preview,
                 source,
@@ -438,7 +497,10 @@ public static class ModCatalog
                 LoadBefore = ReadIdList(root, "loadBefore"),
                 ForceLoadBefore = ReadIdList(root, "forceLoadBefore"),
                 IncompatibleWith = ReadIdList(root, "incompatibleWith"),
-                ModDependencies = ReadDependencyIds(root, currentVersion),
+                ModDependencies = dependencyIds,
+                ModDependencyNames = dependencyNames,
+                ModDependencyUrls = dependencyUrls,
+                IsTranslationMod = DetectTranslationMod(directory, trimmedName, trimmedId),
                 Link = ReadLink(root)
             };
         }
@@ -459,12 +521,57 @@ public static class ModCatalog
             .ToList() ?? new List<string>();
     }
 
-    private static List<string> ReadDependencyIds(XElement root, string? currentVersion)
+    private static readonly string[] TranslationNameTokens =
+    {
+        "汉化", "漢化", "中文化", "翻译", "翻譯", "简中", "繁中", "简体", "繁体",
+        "translation", "localisation", "localization"
+    };
+
+    private static readonly string[] TranslationIdTokens =
+    {
+        "translation", "hanhua", ".chs", ".cht", "_chs", "_cht", ".zh", "_zh"
+    };
+
+    internal static bool DetectTranslationMod(string directory, string name, string packageId)
+    {
+        if (TranslationNameTokens.Any(t => name.Contains(t, StringComparison.OrdinalIgnoreCase)) ||
+            TranslationIdTokens.Any(t => packageId.Contains(t, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (!Directory.Exists(directory)) return false;
+        try
+        {
+            var dirs = new List<string> { directory };
+            dirs.AddRange(Directory.EnumerateDirectories(directory));
+            var hasLanguages = dirs.Any(d => Directory.Exists(Path.Combine(d, "Languages")));
+            if (!hasLanguages) return false;
+            var hasContent = dirs.Any(d =>
+                Directory.Exists(Path.Combine(d, "Defs")) ||
+                Directory.Exists(Path.Combine(d, "Assemblies")) ||
+                Directory.Exists(Path.Combine(d, "Textures")) ||
+                Directory.Exists(Path.Combine(d, "Sounds")));
+            return !hasContent;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static (List<string> Ids, Dictionary<string, string> Names, Dictionary<string, string> Urls) ReadDependencies(
+        XElement root,
+        string? currentVersion)
     {
         var result = new List<string>();
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var urls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         AddDependencyIds(
             root.Elements().FirstOrDefault(element => element.Name.LocalName == "modDependencies"),
-            result
+            result,
+            names,
+            urls
         );
 
         var byVersion = root.Elements()
@@ -480,17 +587,21 @@ public static class ModCatalog
                     return name.Equals("v" + current, StringComparison.OrdinalIgnoreCase) ||
                         name.Equals(current, StringComparison.OrdinalIgnoreCase);
                 });
-                AddDependencyIds(matchingVersion, result);
+                AddDependencyIds(matchingVersion, result, names, urls);
             }
         }
 
-        return result
+        return (result
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .ToList(), names, urls);
     }
 
-    private static void AddDependencyIds(XElement? container, List<string> result)
+    private static void AddDependencyIds(
+        XElement? container,
+        List<string> result,
+        Dictionary<string, string> names,
+        Dictionary<string, string> urls)
     {
         if (container is null)
         {
@@ -511,8 +622,41 @@ public static class ModCatalog
             if (!string.IsNullOrWhiteSpace(packageId))
             {
                 result.Add(packageId);
+                var displayName = item.Elements()
+                    .FirstOrDefault(element => element.Name.LocalName == "displayName")
+                    ?.Value.Trim();
+                if (!string.IsNullOrWhiteSpace(displayName))
+                {
+                    names[packageId] = displayName;
+                }
+
+                var url = ReadBestDependencyUrl(item);
+                if (!string.IsNullOrWhiteSpace(url))
+                {
+                    urls[packageId] = url;
+                }
             }
         }
+    }
+
+    private static string? ReadBestDependencyUrl(XElement item)
+    {
+        string? firstNonEmpty = null;
+        foreach (var tag in new[] { "steamWorkshopUrl", "url", "downloadUrl" })
+        {
+            foreach (var element in item.Elements().Where(e => e.Name.LocalName == tag))
+            {
+                var val = element.Value.Trim();
+                if (string.IsNullOrWhiteSpace(val)) continue;
+                firstNonEmpty ??= val;
+                if (ModpackService.ParseWorkshopId(val) is not null)
+                {
+                    return val;
+                }
+            }
+        }
+
+        return firstNonEmpty;
     }
 
     private static string ReadLink(XElement root)

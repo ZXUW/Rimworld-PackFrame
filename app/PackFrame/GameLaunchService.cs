@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32;
@@ -78,6 +79,10 @@ internal static class GameLaunchService
             InstanceStore.NormalizeConfigForLaunch(instance);
             var startedAt = DateTime.UtcNow;
             string? steam = FindSteamExecutable(game.GamePath);
+            LogDiagnostics(game, steam);
+            AppLog.Info(steam is null
+                ? $"Launch mode: direct; executable={game.ExecutablePath}; game={game.GamePath}"
+                : $"Launch mode: steam; steam={steam}; game={game.GamePath}");
             if (steam != null)
             {
                 var existing = GetRunningGameProcessIds();
@@ -131,7 +136,7 @@ internal static class GameLaunchService
                 var steamRoot = current.Parent;
                 if (steamRoot is null)
                 {
-                    return null;
+                    break;
                 }
 
                 var steamExecutable = Path.Combine(steamRoot.FullName, "steam.exe");
@@ -144,7 +149,7 @@ internal static class GameLaunchService
                     return steamExecutable;
                 }
 
-                return null;
+                break;
             }
         }
         catch (Exception exception)
@@ -154,6 +159,51 @@ internal static class GameLaunchService
 
         // A second library lives on another drive, so steam.exe is not next to it.
         return FindRegisteredSteam(gamePath, windows);
+    }
+
+    private static void LogDiagnostics(RimWorldInstallation game, string? steam)
+    {
+        try
+        {
+            var data = string.IsNullOrWhiteSpace(game.GamePath)
+                ? null
+                : Path.Combine(game.GamePath, "Data");
+            var dlc = data is not null && Directory.Exists(data)
+                ? string.Join(",", Directory.EnumerateDirectories(data)
+                    .Select(Path.GetFileName)
+                    .Where(name => name is "Royalty" or "Ideology" or "Biotech" or "Anomaly" or "Odyssey"))
+                : "none";
+            var manifest = "n/a";
+            if (!string.IsNullOrWhiteSpace(game.GamePath))
+            {
+                var directory = Path.GetFullPath(game.GamePath);
+                while (directory is not null &&
+                       !Path.GetFileName(directory).Equals("steamapps", StringComparison.OrdinalIgnoreCase))
+                {
+                    directory = Path.GetDirectoryName(directory);
+                }
+
+                manifest = directory is null
+                    ? "no-library"
+                    : File.Exists(Path.Combine(directory, "appmanifest_294100.acf")) ? "ok" : "missing";
+            }
+
+            var registered = "none";
+            if (OperatingSystem.IsWindows())
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
+                registered = key?.GetValue("SteamExe") as string ?? "none";
+            }
+
+            AppLog.Info(
+                $"Diagnostics: packframe={UpdateService.CurrentVersion}; game={game.GamePath}; " +
+                $"version={game.Version}; steam={steam ?? "not found"}; dlc={dlc}; " +
+                $"manifest={manifest}; registry={registered}");
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Write launch diagnostics", exception);
+        }
     }
 
     private static string? FindRegisteredSteam(string gamePath, bool windows)

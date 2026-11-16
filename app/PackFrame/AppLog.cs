@@ -26,7 +26,13 @@ internal static class AppLog
         catch (UnauthorizedAccessException) { }
     }
 
-    public static void Error(string operation, Exception exception)
+    public static void Info(string message) =>
+        Write($"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
+
+    public static void Error(string operation, Exception exception) =>
+        Write($"{DateTimeOffset.Now:O} {operation}{Environment.NewLine}{exception}{Environment.NewLine}");
+
+    private static void Write(string text)
     {
         try
         {
@@ -34,7 +40,7 @@ internal static class AppLog
             {
                 if (File.Exists(LogPath) && new FileInfo(LogPath).Length > MaxBytes)
                     File.Move(LogPath, LogPath + ".1", overwrite: true);
-                File.AppendAllText(LogPath, $"{DateTimeOffset.Now:O} {operation}{Environment.NewLine}{exception}{Environment.NewLine}");
+                File.AppendAllText(LogPath, text);
             }
         }
         catch (IOException) { }

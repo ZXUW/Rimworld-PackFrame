@@ -9,7 +9,7 @@
     <AssemblyTitle>Rimworld PackFrame</AssemblyTitle>
     <Product>Rimworld PackFrame</Product>
     <Description>Rimworld PackFrame modpack launcher.</Description>
-    <Version>1.0.15</Version>
+    <Version>1.0.18</Version>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationIcon>Assets\PackFrame.ico</ApplicationIcon>
   </PropertyGroup>
@@ -18,6 +18,8 @@
     <AvaloniaResource Include="Assets\PackFrame.ico" />
     <EmbeddedResource Include="Assets\CC-BY-4.0.txt" />
     <EmbeddedResource Include="Assets\ModpackCatalog.json" LogicalName="PackFrame.Assets.ModpackCatalog.json" />
+    <EmbeddedResource Include="Assets\CommunityRules.json" LogicalName="PackFrame.Assets.CommunityRules.json" />
+    <EmbeddedResource Include="Assets\WorkshopMap.json.gz" LogicalName="PackFrame.Assets.WorkshopMap.json.gz" />
     <InternalsVisibleTo Include="PackFrame.Checks" />
     <PackageReference Include="Avalonia" Version="12.1.4" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />

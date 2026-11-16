@@ -10,6 +10,7 @@ namespace PackFrame;
 [JsonSerializable(typeof(System.Collections.Generic.Dictionary<string, bool>))]
 [JsonSerializable(typeof(InstanceMetadata))]
 [JsonSerializable(typeof(ModColorData))]
+[JsonSerializable(typeof(ModNoteData))]
 [JsonSerializable(typeof(ModFullNameDocument))]
 [JsonSerializable(typeof(ModpackIndex))]
 [JsonSerializable(typeof(ModpackCatalogDocument))]
@@ -19,6 +20,7 @@ namespace PackFrame;
 [JsonSerializable(typeof(PreparedAppUpdate))]
 [JsonSerializable(typeof(AppUpdatePlan))]
 [JsonSerializable(typeof(AppUpdateResult))]
+[JsonSerializable(typeof(CommunityRulesCacheEntry))]
 internal partial class PackFrameJsonContext : JsonSerializerContext
 {
 }

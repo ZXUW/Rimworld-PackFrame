@@ -66,6 +66,33 @@ public partial class MainWindow
             if (beforeEdges.TryGetValue(mod.PackageId, out var predecessors)) AddRequiredAfter(predecessors);
             var incompatible = conflicts.TryGetValue(mod.PackageId, out var conflictIds)
                 ? conflictIds.Select(id => active[positions[id]].Name).ToList() : new List<string>();
+            var isOneToManySatisfied = false;
+            if (mod.IsTranslationMod)
+            {
+                var nonBaseDeps = mod.ModDependencies
+                    .Where(d => !string.Equals(d, mod.PackageId, StringComparison.OrdinalIgnoreCase) &&
+                                !AutoSortPrerequisites.IsCommonBaseId(d))
+                    .ToList();
+                var nonBaseAfter = mod.LoadAfter
+                    .Concat(mod.ForceLoadAfter)
+                    .Where(d => !string.Equals(d, mod.PackageId, StringComparison.OrdinalIgnoreCase) &&
+                                !AutoSortPrerequisites.IsCommonBaseId(d))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var isOneToMany = nonBaseDeps.Count > 1 || (nonBaseDeps.Count >= 1 && nonBaseAfter.Count > 1);
+                if (isOneToMany)
+                {
+                    isOneToManySatisfied = nonBaseDeps.Concat(nonBaseAfter).Any(d =>
+                    {
+                        if (positions.ContainsKey(d)) return true;
+                        mod.ModDependencyNames.TryGetValue(d, out var disp);
+                        mod.ModDependencyUrls.TryGetValue(d, out var u);
+                        var resolved = AutoSortPrerequisites.ResolveDependency(
+                            d, disp, u, active, id => _modsById.TryGetValue(id, out var m) ? m : null);
+                        return resolved is not null && positions.ContainsKey(resolved.PackageId);
+                    });
+                }
+            }
             foreach (var id in mod.ModDependencies)
             {
                 if (string.Equals(id, mod.PackageId, StringComparison.OrdinalIgnoreCase)) continue;
@@ -74,7 +101,20 @@ public partial class MainWindow
                     if (targetIndex > i) AddAfterName(id, active[targetIndex].Name);
                     continue;
                 }
-                var name = _modsById.TryGetValue(id, out var installed) ? installed.Name : id;
+                mod.ModDependencyNames.TryGetValue(id, out var depDisplay);
+                mod.ModDependencyUrls.TryGetValue(id, out var depUrl);
+                var resolvedActive = AutoSortPrerequisites.ResolveDependency(
+                    id, depDisplay, depUrl, active, _ => null);
+                if (resolvedActive is not null &&
+                    positions.TryGetValue(resolvedActive.PackageId, out var resolvedIndex))
+                {
+                    if (resolvedIndex > i) AddAfterName(resolvedActive.PackageId, active[resolvedIndex].Name);
+                    continue;
+                }
+                if (isOneToManySatisfied && !AutoSortPrerequisites.IsCommonBaseId(id)) continue;
+                var resolvedInstalled = AutoSortPrerequisites.ResolveDependency(
+                    id, depDisplay, depUrl, _allMods, k => _modsById.TryGetValue(k, out var m) ? m : null);
+                var name = resolvedInstalled?.Name ?? depDisplay ?? id;
                 if (string.IsNullOrWhiteSpace(name)) name = id;
                 if (missingSeen.Add(name)) missingNames.Add(name);
             }
