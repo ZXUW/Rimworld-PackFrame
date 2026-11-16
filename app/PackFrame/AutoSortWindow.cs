@@ -874,10 +874,14 @@ internal sealed class AutoSortWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = T(
-                $"Sources: modDependencies {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · Community {r.CommunityRuleCount} · Implicit Core/DLC {r.ImplicitCoreDlcRuleCount} · Implicit Translation {r.ImplicitTranslationRuleCount}",
-                $"规则构成：前置依赖 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · 社区规则 {r.CommunityRuleCount} · 隐式本体/DLC {r.ImplicitCoreDlcRuleCount} · 隐式汉化配对 {r.ImplicitTranslationRuleCount}",
-                $"規則構成：前置依賴 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · 社區規則 {r.CommunityRuleCount} · 隱式本體/DLC {r.ImplicitCoreDlcRuleCount} · 隱式漢化配對 {r.ImplicitTranslationRuleCount}",
-                $"内訳：前提依存 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · コミュニティ {r.CommunityRuleCount} · 暗黙Core/DLC {r.ImplicitCoreDlcRuleCount} · 暗黙翻訳ペア {r.ImplicitTranslationRuleCount}"),
+                $"Sources: modDependencies {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · Community {r.CommunityRuleCount} · Implicit Core/DLC {r.ImplicitCoreDlcRuleCount} · Implicit Translation {r.ImplicitTranslationRuleCount}" +
+                (r.ImplicitRjwRuleCount > 0 ? $" · Implicit RJW {r.ImplicitRjwRuleCount}" : string.Empty),
+                $"规则构成：前置依赖 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · 社区规则 {r.CommunityRuleCount} · 隐式本体/DLC {r.ImplicitCoreDlcRuleCount} · 隐式汉化配对 {r.ImplicitTranslationRuleCount}" +
+                (r.ImplicitRjwRuleCount > 0 ? $" · 隐式 RJW 置后 {r.ImplicitRjwRuleCount}" : string.Empty),
+                $"規則構成：前置依賴 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · 社區規則 {r.CommunityRuleCount} · 隱式本體/DLC {r.ImplicitCoreDlcRuleCount} · 隱式漢化配對 {r.ImplicitTranslationRuleCount}" +
+                (r.ImplicitRjwRuleCount > 0 ? $" · 隱式 RJW 置後 {r.ImplicitRjwRuleCount}" : string.Empty),
+                $"内訳：前提依存 {r.DependencyRuleCount} · loadAfter {r.LoadAfterRuleCount} · loadBefore {r.LoadBeforeRuleCount} · コミュニティ {r.CommunityRuleCount} · 暗黙Core/DLC {r.ImplicitCoreDlcRuleCount} · 暗黙翻訳ペア {r.ImplicitTranslationRuleCount}" +
+                (r.ImplicitRjwRuleCount > 0 ? $" · 暗黙RJW {r.ImplicitRjwRuleCount}" : string.Empty)),
             TextWrapping = TextWrapping.Wrap,
             Foreground = ThemeService.MutedTextBrush
         });

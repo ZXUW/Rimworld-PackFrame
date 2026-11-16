@@ -43,7 +43,8 @@ public enum SortRuleKind
     LoadBefore,
     CommunityRule,
     ImplicitCoreDlc,
-    ImplicitTranslation
+    ImplicitTranslation,
+    ImplicitRjw
 }
 
 public sealed record CollectedSortRule(
@@ -106,7 +107,8 @@ public sealed record CollectedRulesResult(
     int LoadBeforeRuleCount,
     int CommunityRuleCount,
     int ImplicitCoreDlcRuleCount,
-    int ImplicitTranslationRuleCount
+    int ImplicitTranslationRuleCount,
+    int ImplicitRjwRuleCount
 );
 
 internal static class AutoSortPrerequisites
@@ -842,6 +844,38 @@ internal static class AutoSortPrerequisites
         @"(\s*[-_—–·:：]?\s*(简体中文|繁體中文|繁体中文|中文汉化|汉化包|汉化补丁|汉化|漢化|中文化|本地化|语言包|chinese\s*translation|chinese\s*pack|simplified\s*chinese|traditional\s*chinese|zh[-_ ]?cn|zh[-_ ]?hans|chs|cht))+$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly HashSet<string> RjwBasePackageIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "rim.job.world",
+        "safe.job.world"
+    };
+
+    private static readonly Regex StandaloneRjwToken = new(
+        @"(?<![A-Za-z0-9])rjw(?![A-Za-z0-9])",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    public static bool IsRjwBaseId(string packageId) =>
+        RjwBasePackageIds.Contains(StripIdSuffix(packageId));
+
+    public static bool HasStandaloneRjwToken(ModInfo mod)
+    {
+        if (StandaloneRjwToken.IsMatch(mod.PackageId) || StandaloneRjwToken.IsMatch(mod.Name))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(mod.Path))
+        {
+            var folderName = Path.GetFileName(mod.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (StandaloneRjwToken.IsMatch(folderName))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static CollectedRulesResult CollectSortRules(
         IReadOnlyList<ModInfo> activeMods,
         string? language,
@@ -859,6 +893,7 @@ internal static class AutoSortPrerequisites
             SortRuleKind.LoadBefore => T("loadBefore", "声明置前", "聲明置前", "loadBefore"),
             SortRuleKind.CommunityRule => T("Community Rule", "社区规则", "社區規則", "コミュニティルール"),
             SortRuleKind.ImplicitCoreDlc => T("Implicit Core/DLC", "隐式本体/DLC", "隱式本體/DLC", "暗黙Core/DLC"),
+            SortRuleKind.ImplicitRjw => T("Implicit RJW", "隐式 RJW 置后", "隱式 RJW 置後", "暗黙RJW"),
             _ => T("Implicit Translation", "隐式汉化配对", "隱式漢化配對", "暗黙翻訳ペア")
         };
 
@@ -1061,6 +1096,30 @@ internal static class AutoSortPrerequisites
             }
         }
 
+        // 4. Implicit RJW rule: any mod whose name, packageId, or folder name has standalone "rjw" loads after active RJW base
+        var activeRjwBases = activeMods.Where(m => IsRjwBaseId(m.PackageId)).ToList();
+        if (activeRjwBases.Count > 0)
+        {
+            foreach (var mod in activeMods)
+            {
+                if (IsRjwBaseId(mod.PackageId) || preCoreSet.Contains(mod.PackageId) || !HasStandaloneRjwToken(mod))
+                {
+                    continue;
+                }
+
+                foreach (var rjwBase in activeRjwBases)
+                {
+                    var revKey = $"{mod.PackageId.ToLowerInvariant()}\0{rjwBase.PackageId.ToLowerInvariant()}";
+                    if (edgeKinds.TryGetValue(revKey, out var rev) && rev.Kind < SortRuleKind.ImplicitRjw)
+                    {
+                        continue;
+                    }
+
+                    AddEdge(rjwBase.PackageId, mod.PackageId, SortRuleKind.ImplicitRjw);
+                }
+            }
+        }
+
         // Build raw rule records (before user cycle-resolution overrides)
         CollectedSortRule MakeRule((string BeforeId, string AfterId, SortRuleKind Kind) e)
         {
@@ -1175,7 +1234,8 @@ internal static class AutoSortPrerequisites
             rules.Count(r => r.Kind == SortRuleKind.LoadBefore),
             rules.Count(r => r.Kind == SortRuleKind.CommunityRule),
             rules.Count(r => r.Kind == SortRuleKind.ImplicitCoreDlc),
-            rules.Count(r => r.Kind == SortRuleKind.ImplicitTranslation));
+            rules.Count(r => r.Kind == SortRuleKind.ImplicitTranslation),
+            rules.Count(r => r.Kind == SortRuleKind.ImplicitRjw));
     }
 
     public static string MakePairKey(string id1, string id2)

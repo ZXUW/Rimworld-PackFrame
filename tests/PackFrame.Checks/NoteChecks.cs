@@ -309,6 +309,24 @@ internal static class NoteChecks
                     byPkg["ludeon.rimworld.odyssey"].SteamStoreAppId == 3022790U &&
                     byPkg["ludeon.rimworld.odyssey"].WorkshopFileId is null,
                 "Scan prioritizes About.xml steamWorkshopUrl over GitHub downloadUrl, falls back to WorkshopMapCache, resolves DLC AppID, and leaves unknown mods buttonless");
+
+            // Implicit RJW rule check (standalone "rjw" in Name, PackageId, or Folder name; ignores substrings like "marjwana")
+            var rjwAddonById = new ModInfo("Events Addon", "A", @"C:\Mods\12345", "c0ffee.rjw.events", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
+            var rjwAddonByName = new ModInfo("[RJW] Animations", "A", @"C:\Mods\23456", "author.animpack", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
+            var rjwAddonByFolder = new ModInfo("Custom Addon", "A", @"C:\Mods\RJW_Extra_Content\", "author.custompack", "", null, ModSource.Local, "1.6", DateTime.MinValue);
+            var falsePositiveSubstr = new ModInfo("Marjwana Plants", "A", @"C:\Mods\marjwanamod", "author.marjwanaplants", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
+            var rjwCore = new ModInfo("RimJobWorld", "A", @"C:\Mods\rim.job.world", "rim.job.world", "", null, ModSource.Local, "1.6", DateTime.MinValue);
+            var rjwList = new List<ModInfo> { core, rjwAddonById, rjwAddonByName, rjwAddonByFolder, falsePositiveSubstr, rjwCore };
+            var rjwRules = AutoSortPrerequisites.CollectSortRules(rjwList, "zh", useCommunityRules: true);
+            var rjwPlan = AutoSortPrerequisites.BuildTopologicalOrder(rjwList.Select(m => m.PackageId).ToList(), rjwList, rjwRules);
+            int RjwPos(string id) => rjwPlan.OrderedPackageIds.ToList().FindIndex(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
+            Require(rjwRules.ImplicitRjwRuleCount == 3 &&
+                    !AutoSortPrerequisites.HasStandaloneRjwToken(falsePositiveSubstr) &&
+                    RjwPos("author.marjwanaplants") < RjwPos("rim.job.world") &&
+                    RjwPos("rim.job.world") < RjwPos("c0ffee.rjw.events") &&
+                    RjwPos("rim.job.world") < RjwPos("author.animpack") &&
+                    RjwPos("rim.job.world") < RjwPos("author.custompack"),
+                "Implicit RJW rule places standalone 'rjw' mods (name/packageId/folder) after rim.job.world while ignoring partial substrings");
         }
         finally
         {

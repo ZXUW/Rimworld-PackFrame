@@ -36,6 +36,7 @@ public partial class MainWindow
         if (active.Count == 0) return active;
         var beforeEdges = ModOrderRules.ReverseBefore(active);
         var conflicts = ModOrderRules.Conflicts(active);
+        var activeRjwBases = active.Where(m => AutoSortPrerequisites.IsRjwBaseId(m.PackageId)).Select(m => m.PackageId).ToList();
         var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < active.Count; i++) positions[active[i].PackageId] = i;
         var result = new List<ModInfo>(active.Count);
@@ -64,6 +65,13 @@ public partial class MainWindow
             AddRequiredAfter(mod.ForceLoadAfter);
             AddRequiredAfter(mod.LoadAfter);
             if (beforeEdges.TryGetValue(mod.PackageId, out var predecessors)) AddRequiredAfter(predecessors);
+            if (activeRjwBases.Count > 0 &&
+                !AutoSortPrerequisites.IsRjwBaseId(mod.PackageId) &&
+                AutoSortPrerequisites.HasStandaloneRjwToken(mod))
+            {
+                var explicitBeforeRjw = new HashSet<string>(mod.LoadBefore.Concat(mod.ForceLoadBefore), StringComparer.OrdinalIgnoreCase);
+                AddRequiredAfter(activeRjwBases.Where(id => !explicitBeforeRjw.Contains(id)));
+            }
             var incompatible = conflicts.TryGetValue(mod.PackageId, out var conflictIds)
                 ? conflictIds.Select(id => active[positions[id]].Name).ToList() : new List<string>();
             var isOneToManySatisfied = false;
