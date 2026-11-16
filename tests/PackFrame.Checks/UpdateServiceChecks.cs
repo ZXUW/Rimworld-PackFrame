@@ -100,15 +100,17 @@ internal static class UpdateServiceChecks
                     {
                         new
                         {
-                            name = "manifest.json",
+                            name = LegacyName,
                             browser_download_url = UpdateService.GiteeRepositoryUrl +
-                                "/releases/download/" + Tag + "/manifest.json"
+                                "/releases/download/" + Tag + "/" + LegacyName
                         }
                     }
                 })));
-            if (url.EndsWith("/manifest.json", StringComparison.OrdinalIgnoreCase))
+            if (url == UpdateService.GiteeManifestUrl)
                 return Task.FromResult(Json(JsonSerializer.Serialize(new[]
                 {
+                    new { Name = "manifest.json", Size = 750, Sha256 = Hash,
+                        Version = "1.0.12", Commit = "abc" },
                     new { Name = LegacyName, Size = 13004008, Sha256 = Hash,
                         Version = "1.0.12", Commit = "abc" }
                 })));
@@ -125,9 +127,40 @@ internal static class UpdateServiceChecks
                 {
                     UpdateService.LatestReleaseUrl,
                     UpdateService.GiteeLatestReleaseUrl,
-                    UpdateService.GiteeRepositoryUrl + "/releases/download/" + Tag + "/manifest.json"
+                    UpdateService.GiteeManifestUrl
                 }),
-            "GitHub rate limits fall back to the Gitee manifest for a verified Windows asset");
+            "GitHub rate limits fall back to the repository manifest for a verified Windows asset");
+
+        handler.Respond = (request, _) =>
+        {
+            var url = request.RequestUri!.AbsoluteUri;
+            if (url == UpdateService.LatestReleaseUrl)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+            if (url == UpdateService.GiteeLatestReleaseUrl)
+                return Task.FromResult(Json(JsonSerializer.Serialize(new
+                {
+                    tag_name = Tag, prerelease = false,
+                    assets = new[]
+                    {
+                        new
+                        {
+                            name = LegacyName,
+                            browser_download_url = UpdateService.GiteeRepositoryUrl +
+                                "/releases/download/" + Tag + "/" + LegacyName
+                        }
+                    }
+                })));
+            if (url == UpdateService.GiteeManifestUrl)
+                return Task.FromResult(Json(JsonSerializer.Serialize(new[]
+                {
+                    new { Name = LegacyName, Size = 13004008, Sha256 = Hash,
+                        Version = "1.0.11", Commit = "abc" }
+                })));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        };
+        update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
+        Require(update is { Tag: Tag, Asset: null },
+            "a manifest for a different version never vouches for other release assets");
 
         handler.Respond = (request, _) => request.RequestUri!.AbsoluteUri == UpdateService.LatestReleaseUrl
             ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden))
@@ -138,7 +171,7 @@ internal static class UpdateServiceChecks
             })));
         update = await UpdateService.CheckAsync(client, "windows", Architecture.X64);
         Require(update is { Tag: Tag, Asset: null },
-            "Gitee releases without a manifest keep the release page but offer no in-app package");
+            "Gitee releases without assets keep the release page but offer no in-app package");
 
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();

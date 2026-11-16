@@ -103,6 +103,8 @@ Windows 的兼容更新包可在程序内下载，下载后仍需单独点击“
 
 更新使用已发布的 GitHub Release，不会拉取或执行 `main` 分支源码，也不需要用户安装 Git。维护者发布高于当前程序集版本的新版本及兼容的 ZIP 资产后，现有安装才能发现更新。
 
+GitHub 不可用时会退到 Gitee 的 Release。Gitee 接口不提供资产哈希，所以校验值写在仓库的 `update/latest.json`（随版本提交），Release 里只放用户要下载的 ZIP。发版时更新该文件：`Version` 必须与 tag 一致（不带 `v`），`Name` 必须与 Release 资产同名，否则该平台不会提供自动更新。
+
 ## 备份与恢复
 
 - 完整备份：关闭游戏后复制整个 `instance/`；需要保留软件设置时同时备份 `packframe.json`。

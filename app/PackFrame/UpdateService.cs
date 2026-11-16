@@ -28,6 +28,9 @@ internal static class UpdateService
     internal const string GiteeRepositoryUrl = "https://gitee.com/zxuw/Rimworld-PackFrame";
     internal const string GiteeLatestReleaseUrl =
         "https://gitee.com/api/v5/repos/zxuw/Rimworld-PackFrame/releases/latest";
+    // Release assets are what users download; the checksum list lives in the repo instead.
+    internal const string GiteeManifestUrl =
+        "https://gitee.com/zxuw/Rimworld-PackFrame/raw/main/update/latest.json";
     internal const long MaximumArchiveSize = 1024L * 1024 * 1024;
     private const int MaximumMetadataSize = 4 * 1024 * 1024;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -38,7 +41,7 @@ internal static class UpdateService
         {
             var version = typeof(UpdateService).Assembly.GetName().Version;
             return version is null
-                ? "1.0.15"
+                ? "1.0.18"
                 : $"{version.Major}.{version.Minor}.{Math.Max(0, version.Build)}";
         }
     }
@@ -194,7 +197,7 @@ internal static class UpdateService
             ReadString(release, "name"), published);
     }
 
-    // Gitee has no per-asset digest, so the release carries a manifest.json with sizes and hashes.
+    // Gitee has no per-asset digest, so update/latest.json in the repo carries sizes and hashes.
     private static async Task<UpdateAsset?> SelectGiteeAssetAsync(
         HttpClient client,
         JsonElement release,
@@ -204,18 +207,16 @@ internal static class UpdateService
     {
         if (!release.TryGetProperty("assets", out var assets) ||
             assets.ValueKind != JsonValueKind.Array) return null;
-        string? manifestUrl = null;
+        var released = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in assets.EnumerateArray())
         {
-            if (item.ValueKind != JsonValueKind.Object ||
-                !string.Equals(ReadString(item, "name"), "manifest.json",
-                    StringComparison.OrdinalIgnoreCase)) continue;
-            var candidate = ReadString(item, "browser_download_url");
-            if (IsGiteeAssetUrl(candidate, tag, "manifest.json")) manifestUrl = candidate;
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            var name = ReadString(item, "name");
+            if (name is not null) released.Add(name);
         }
 
-        if (manifestUrl is null) return null;
-        using var response = await client.GetAsync(manifestUrl, cancellationToken);
+        if (released.Count == 0) return null;
+        using var response = await client.GetAsync(GiteeManifestUrl, cancellationToken);
         if (!response.IsSuccessStatusCode) return null;
         var json = await ReadLimitedAsync(response, cancellationToken);
         using var document = JsonDocument.Parse(json);
@@ -227,8 +228,10 @@ internal static class UpdateService
         foreach (var item in document.RootElement.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
+            if (!string.Equals(ReadString(item, "Version"), tag.TrimStart('v', 'V'),
+                    StringComparison.OrdinalIgnoreCase)) continue;
             var name = ReadString(item, "Name");
-            var rank = name is null
+            var rank = name is null || !released.Contains(name)
                 ? -1
                 : names.FindIndex(expected =>
                     string.Equals(expected, name, StringComparison.OrdinalIgnoreCase));
