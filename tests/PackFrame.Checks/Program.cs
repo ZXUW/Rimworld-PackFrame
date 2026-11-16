@@ -171,6 +171,16 @@ try
     Check(ModListOperations.InsertSelection(Array.Empty<string>(), new[] { "a" }, 99)
         .SequenceEqual(new[] { "a" }), "insertion handles empty target and out-of-range index");
     Check(originalOrder.SequenceEqual(new[] { "a", "b", "c", "d", "e" }), "reordering does not mutate original snapshot");
+    Check(ModListOperations.NudgeSelection(originalOrder, new[] { "b", "d" }, -1)
+        .SequenceEqual(new[] { "b", "a", "d", "c", "e" }), "Alt+Up nudges noncontiguous selection up one slot");
+    Check(ModListOperations.NudgeSelection(originalOrder, new[] { "a", "c" }, -1)
+        .SequenceEqual(new[] { "a", "c", "b", "d", "e" }), "Alt+Up pins top-clamped items while advancing trailing selection");
+    Check(ModListOperations.NudgeSelection(originalOrder, new[] { "b", "c" }, 1)
+        .SequenceEqual(new[] { "a", "d", "b", "c", "e" }), "Alt+Down nudges contiguous block down one slot");
+    Check(ModListOperations.NudgeSelection(originalOrder, new[] { "c", "e" }, 1)
+        .SequenceEqual(new[] { "a", "b", "d", "c", "e" }), "Alt+Down pins bottom-clamped items while advancing leading selection");
+    Check(ModListOperations.NudgeSelection(new[] { "a", "ghost", "b", "c" }, new[] { "b" }, -1, new[] { "a", "b", "c" })
+        .SequenceEqual(new[] { "b", "ghost", "a", "c" }), "Alt+Up/Down steps across visible rows while preserving hidden/missing slots");
     var sortA = new ModInfo("A", "", "", "a", "", null, ModSource.Local, "", DateTime.MinValue)
     {
         SortOrderAfterIds = new() { "b" }

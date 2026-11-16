@@ -48,6 +48,50 @@ internal static class ModListOperations
         }).ToList();
     }
 
+    public static List<string> NudgeSelection(
+        IReadOnlyList<string> original,
+        IReadOnlyCollection<string> selectedIds,
+        int direction,
+        IReadOnlyCollection<string>? visibleIds = null)
+    {
+        var updated = original.ToList();
+        if (direction == 0 || updated.Count < 2 || selectedIds.Count == 0) return updated;
+
+        var selected = new HashSet<string>(selectedIds, StringComparer.OrdinalIgnoreCase);
+        var visible = visibleIds is null
+            ? null
+            : new HashSet<string>(visibleIds, StringComparer.OrdinalIgnoreCase);
+        bool IsMovable(string id) => !string.IsNullOrWhiteSpace(id) && (visible is null || visible.Contains(id));
+
+        var slots = new List<int>();
+        for (var i = 0; i < updated.Count; i++)
+            if (IsMovable(updated[i])) slots.Add(i);
+        if (slots.Count < 2) return updated;
+
+        if (direction < 0)
+        {
+            for (var s = 1; s < slots.Count; s++)
+            {
+                var curr = slots[s];
+                var prev = slots[s - 1];
+                if (selected.Contains(updated[curr]) && !selected.Contains(updated[prev]))
+                    (updated[prev], updated[curr]) = (updated[curr], updated[prev]);
+            }
+        }
+        else
+        {
+            for (var s = slots.Count - 2; s >= 0; s--)
+            {
+                var curr = slots[s];
+                var next = slots[s + 1];
+                if (selected.Contains(updated[curr]) && !selected.Contains(updated[next]))
+                    (updated[curr], updated[next]) = (updated[next], updated[curr]);
+            }
+        }
+
+        return updated;
+    }
+
     public static List<string> InsertSelection(IReadOnlyList<string> original,
         IReadOnlyList<string> selectedIds, int targetIndex)
     {

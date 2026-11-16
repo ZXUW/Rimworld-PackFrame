@@ -836,7 +836,35 @@ public partial class MainWindow : Window
 
         var control = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                       e.KeyModifiers.HasFlag(KeyModifiers.Meta);
-        if (!control && (e.Key == Key.Up || e.Key == Key.Down))
+        var alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+        if (!control && alt &&
+            (e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Left || e.Key == Key.Right))
+        {
+            var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+            if (focused is TextBox || focused is ComboBox)
+            {
+                return;
+            }
+
+            var list = GetCommandList();
+            if (list is not null)
+            {
+                if (e.Key == Key.Up || e.Key == Key.Down)
+                {
+                    NudgeSelectedMods(list, e.Key == Key.Up ? -1 : 1);
+                }
+                else
+                {
+                    MoveSelectedModsHorizontal(list, e.Key == Key.Left ? -1 : 1);
+                }
+
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (!control && !alt && (e.Key == Key.Up || e.Key == Key.Down))
         {
             var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
             if (focused is TextBox || focused is ComboBox)
@@ -5593,6 +5621,101 @@ public partial class MainWindow : Window
         }
 
         MoveMods(new DragPayload(sourceColumn, mods), 0, 0);
+    }
+
+    private void NudgeSelectedMods(ListBox list, int direction)
+    {
+        if (_customDragActive || _painting) return;
+        var column = GetListColumn(list);
+        if (column == 0) return;
+
+        var instance = GetInstanceForColumn(column);
+        if (instance is null || instance.IsDamaged) return;
+
+        var selectedMods = GetSelectedMods(list);
+        if (selectedMods.Count == 0) return;
+
+        var selectedIds = selectedMods.Select(mod => mod.PackageId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var visibleIds = list.Items.OfType<ModInfo>().Select(mod => mod.PackageId).ToList();
+        var original = instance.ActivePackageIds.ToList();
+        var updated = ModListOperations.NudgeSelection(original, selectedIds, direction, visibleIds);
+        if (ActiveIdsEqual(original, updated)) return;
+
+        try
+        {
+            InstanceStore.StageActiveMods(instance, updated);
+            PushUndo(
+                new List<InstanceSnapshot> { new(instance.FolderName, original) },
+                selectedIds,
+                column,
+                column
+            );
+            RefreshManager(false);
+            var items = list.Items.OfType<ModInfo>().ToList();
+            var selectedSet = new HashSet<string>(selectedIds, StringComparer.OrdinalIgnoreCase);
+            var edge = direction < 0
+                ? items.FirstOrDefault(mod => selectedSet.Contains(mod.PackageId))
+                : items.LastOrDefault(mod => selectedSet.Contains(mod.PackageId));
+            if (edge is not null)
+            {
+                InvalidatePaneScrollRestore(list);
+                list.ScrollIntoView(edge);
+            }
+            list.Focus();
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Nudge selected mods", exception);
+        }
+    }
+
+    private void MoveSelectedModsHorizontal(ListBox sourceList, int direction)
+    {
+        if (_customDragActive || _painting) return;
+        var sourceColumn = GetListColumn(sourceList);
+        var mods = GetSelectedMods(sourceList);
+        if (mods.Count == 0) return;
+
+        var targetColumn = (sourceColumn, direction) switch
+        {
+            (0, > 0) => _config.ShowSecondaryPane && _lastEnableColumn == 2 ? 2 : 1,
+            (1, < 0) => 0,
+            (1, > 0) when _config.ShowSecondaryPane => 2,
+            (2, < 0) => 1,
+            _ => -1
+        };
+        if (targetColumn < 0) return;
+
+        var payload = new DragPayload(sourceColumn, mods);
+        if (targetColumn > 0)
+        {
+            var targetInstance = GetInstanceForColumn(targetColumn);
+            var sourceInstance = GetInstanceForColumn(sourceColumn);
+            if (targetInstance is null || targetInstance.IsDamaged) return;
+            if (IsSameInstance(sourceInstance, targetInstance))
+            {
+                if (targetColumn == 1 && sourceColumn == 2)
+                {
+                    MoveMods(payload, 0, 0);
+                }
+                return;
+            }
+
+            var unavailable = UnavailableForInstance(payload, targetInstance);
+            if (unavailable.Count > 0)
+            {
+                ShowToast(BlockedText(unavailable));
+                return;
+            }
+
+            MoveMods(payload, targetColumn, targetInstance.ActivePackageIds.Count);
+            return;
+        }
+
+        MoveMods(payload, 0, 0);
     }
 
     private ManagedInstance? GetInstanceForColumn(int column)
