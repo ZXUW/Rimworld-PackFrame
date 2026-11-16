@@ -846,8 +846,7 @@ internal static class AutoSortPrerequisites
 
     private static readonly HashSet<string> RjwBasePackageIds = new(StringComparer.OrdinalIgnoreCase)
     {
-        "rim.job.world",
-        "safe.job.world"
+        "rim.job.world"
     };
 
     private static readonly Regex StandaloneRjwToken = new(
