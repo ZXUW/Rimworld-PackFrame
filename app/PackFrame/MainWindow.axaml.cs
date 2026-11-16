@@ -1129,7 +1129,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (entry.ModIds.Any(id =>
+        if (!entry.AllowMissingMods && entry.ModIds.Any(id =>
                 !_modsById.TryGetValue(id, out var mod) ||
                 !Directory.Exists(mod.Path)))
         {
@@ -1146,7 +1146,8 @@ public partial class MainWindow : Window
                 redoSnapshots,
                 entry.ModIds,
                 entry.SourceColumn,
-                entry.TargetColumn
+                entry.TargetColumn,
+                AllowMissingMods: entry.AllowMissingMods
             ));
             while (_redoHistory.Count > 10)
             {
@@ -1206,7 +1207,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (entry.ModIds.Any(id =>
+        if (!entry.AllowMissingMods && entry.ModIds.Any(id =>
                 !_modsById.TryGetValue(id, out var mod) ||
                 !Directory.Exists(mod.Path)))
         {
@@ -1223,7 +1224,8 @@ public partial class MainWindow : Window
                 undoSnapshots,
                 entry.ModIds,
                 entry.SourceColumn,
-                entry.TargetColumn
+                entry.TargetColumn,
+                AllowMissingMods: entry.AllowMissingMods
             ));
             while (_undoHistory.Count > 10)
             {
@@ -1272,7 +1274,8 @@ public partial class MainWindow : Window
         int SourceColumn,
         int TargetColumn,
         Dictionary<string, string?>? ColorBefore = null,
-        Dictionary<string, string?>? ColorAfter = null
+        Dictionary<string, string?>? ColorAfter = null,
+        bool AllowMissingMods = false
     );
     private void UpdateProblemSummary(
         TextBlock? sortText,
@@ -4256,7 +4259,7 @@ public partial class MainWindow : Window
     private void UpdateSaveState()
     {
         var hasPending = InstanceStore.HasPendingMods;
-        var hasMissing = _missingMods1.Count > 0 || _missingMods2.Count > 0;
+        var hasMissing = _missingMods1.Count > 0 || (_config.ShowSecondaryPane && _missingMods2.Count > 0);
         _saveButton.IsEnabled = hasPending || hasMissing;
         _saveButton.Content = hasPending
             ? Localization.Save(_config.Language) + " *"
@@ -4274,7 +4277,8 @@ public partial class MainWindow : Window
             StringComparer.OrdinalIgnoreCase
         );
         var savedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var column = 0; column < 2; column++)
+        var maxColumn = _config.ShowSecondaryPane ? 2 : 1;
+        for (var column = 0; column < maxColumn; column++)
         {
             var instance = GetSelectedInstance(column);
             if (instance is null || instance.IsDamaged || string.IsNullOrWhiteSpace(instance.DirectoryPath))
@@ -4296,6 +4300,67 @@ public partial class MainWindow : Window
         }
     }
 
+    private void PruneMissingActiveModsWithUndo()
+    {
+        if (_modsById.Count == 0)
+        {
+            return;
+        }
+
+        var snapshots = new List<InstanceSnapshot>();
+        var prunedIds = new List<string>();
+        var seenFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var primaryColumn = _lastEnableColumn;
+        var columns = _config.ShowSecondaryPane ? new[] { 0, 1 } : new[] { 0 };
+        foreach (var col in columns)
+        {
+            var instance = GetSelectedInstance(col);
+            if (instance is null || instance.IsDamaged || instance.IsScratch ||
+                !seenFolders.Add(instance.FolderName))
+            {
+                continue;
+            }
+
+            var original = instance.ActivePackageIds.ToList();
+            var active = original
+                .Where(id => _modsById.ContainsKey(id.Trim()))
+                .ToList();
+            if (ActiveIdsEqual(original, active))
+            {
+                continue;
+            }
+
+            snapshots.Add(new InstanceSnapshot(instance.FolderName, original));
+            foreach (var removed in original.Where(id => !_modsById.ContainsKey(id.Trim())))
+            {
+                prunedIds.Add(removed);
+            }
+
+            primaryColumn = col + 1;
+            InstanceStore.StageActiveMods(instance, active);
+        }
+
+        if (snapshots.Count == 0)
+        {
+            return;
+        }
+
+        _redoHistory.Clear();
+        _undoHistory.Add(new UndoEntry(
+            snapshots,
+            prunedIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            primaryColumn,
+            primaryColumn,
+            AllowMissingMods: true
+        ));
+        while (_undoHistory.Count > 10)
+        {
+            _undoHistory.RemoveAt(0);
+        }
+
+        UpdateUndoButton();
+    }
+
     private void OnSaveClick(object? sender, RoutedEventArgs e)
     {
         SaveChanges();
@@ -4306,6 +4371,7 @@ public partial class MainWindow : Window
         try
         {
             SaveModFullNameLists();
+            PruneMissingActiveModsWithUndo();
             InstanceStore.SavePendingMods();
             RefreshManager(false);
             ShowToast(Localization.Saved(_config.Language));
