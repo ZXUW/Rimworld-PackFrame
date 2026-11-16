@@ -55,7 +55,7 @@ internal static class AppUpdateService
     public static PreparedAppUpdate? FindPrepared(UpdateInfo update, string? programDirectory = null)
     {
         if (update.Asset is null) return null;
-        var program = Path.GetFullPath(programDirectory ?? AppContext.BaseDirectory);
+        var program = ResolveProgramDirectory(programDirectory);
         var stage = CacheDirectory(program, update.Tag, update.Asset.Sha256);
         try
         {
@@ -83,11 +83,11 @@ internal static class AppUpdateService
         cancellationToken.ThrowIfCancellationRequested();
         var cached = FindPrepared(update, programDirectory);
         if (cached is not null) return cached;
-        var program = Path.GetFullPath(programDirectory ?? AppContext.BaseDirectory);
-        EnsureNoLinks(program);
+        var program = ResolveProgramDirectory(programDirectory);
+        EnsureNoLinks(program, program);
         var finalStage = CacheDirectory(program, update.Tag, asset.Sha256);
         var temporary = finalStage + ".preparing-" + Guid.NewGuid().ToString("N");
-        EnsureNoLinks(temporary);
+        EnsureNoLinks(temporary, program);
         Directory.CreateDirectory(temporary);
         try
         {
@@ -131,7 +131,7 @@ internal static class AppUpdateService
             {
                 var winner = FindPrepared(update, program);
                 if (winner is not null) return winner;
-                EnsureNoLinks(finalStage);
+                EnsureNoLinks(finalStage, program);
                 var invalid = finalStage + ".invalid-" + Guid.NewGuid().ToString("N");
                 Directory.Move(finalStage, invalid);
                 try { Directory.Move(temporary, finalStage); }
@@ -140,19 +140,19 @@ internal static class AppUpdateService
                     if (!Directory.Exists(finalStage)) Directory.Move(invalid, finalStage);
                     throw;
                 }
-                finally { DeleteOwnedDirectory(invalid); }
+                finally { DeleteOwnedDirectory(invalid, program); }
             }
             else Directory.Move(temporary, finalStage);
             return prepared;
         }
-        finally { DeleteOwnedDirectory(temporary); }
+        finally { DeleteOwnedDirectory(temporary, program); }
     }
 
     public static AppUpdateHandoff CreateHandoff(PreparedAppUpdate update)
     {
         if (!CanInstall) throw new PlatformNotSupportedException("In-app installation is currently available on Windows x64.");
         ValidatePrepared(update);
-        var program = Path.GetFullPath(AppContext.BaseDirectory);
+        var program = ResolveProgramDirectory(null);
         if (!SamePath(update.ProgramDirectory, program)) throw new InvalidDataException("The update belongs to another installation.");
         var directory = Path.Combine(UpdateRoot(program), "handoff-" + Guid.NewGuid().ToString("N"));
         var helper = Path.Combine(directory, "helper");
@@ -187,14 +187,14 @@ internal static class AppUpdateService
         catch
         {
             if (plan is not null) new AppUpdateHandoff(plan).Cancel();
-            DeleteOwnedDirectory(directory);
+            DeleteOwnedDirectory(directory, program);
             throw;
         }
     }
 
     public static AppUpdateResult? TakeLastResult(string? programDirectory = null)
     {
-        var path = Path.Combine(UpdateRoot(Path.GetFullPath(programDirectory ?? AppContext.BaseDirectory)), "result.json");
+        var path = Path.Combine(UpdateRoot(ResolveProgramDirectory(programDirectory)), "result.json");
         try
         {
             if (!File.Exists(path) || new FileInfo(path).Length > 65536) return null;
@@ -235,8 +235,9 @@ internal static class AppUpdateService
     internal static async Task<bool> ApplyWhenReadyAsync(AppUpdatePlan plan, Func<bool> parentExited,
         Action restart, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
-        EnsureUnder(UpdateRoot(plan.Update.ProgramDirectory), plan.HandoffDirectory);
-        EnsureNoLinks(plan.HandoffDirectory);
+        var program = ResolveProgramDirectory(plan.Update.ProgramDirectory);
+        EnsureUnder(UpdateRoot(program), plan.HandoffDirectory);
+        EnsureNoLinks(plan.HandoffDirectory, program);
         var timer = Stopwatch.StartNew();
         while (true)
         {
@@ -287,9 +288,9 @@ internal static class AppUpdateService
         Action<int>? beforeReplace = null)
     {
         ValidatePrepared(update);
-        var program = Path.GetFullPath(update.ProgramDirectory);
+        var program = ResolveProgramDirectory(update.ProgramDirectory);
         EnsureUnder(UpdateRoot(program), backupDirectory);
-        EnsureNoLinks(backupDirectory);
+        EnsureNoLinks(backupDirectory, program);
         Directory.CreateDirectory(UpdateRoot(program));
         using var updateLock = new FileStream(Path.Combine(UpdateRoot(program), "update.lock"),
             FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
@@ -301,7 +302,7 @@ internal static class AppUpdateService
             {
                 var target = PayloadPath(program, file.Path);
                 var source = PayloadPath(Path.Combine(update.StageDirectory, "payload"), file.Path);
-                EnsureNoLinks(target);
+                EnsureNoLinks(target, program);
                 var backup = File.Exists(target) ? PayloadPath(backupDirectory, file.Path) : null;
                 if (backup is not null)
                 {
@@ -393,9 +394,9 @@ internal static class AppUpdateService
 
     private static void ValidatePrepared(PreparedAppUpdate update)
     {
-        var program = Path.GetFullPath(update.ProgramDirectory);
+        var program = ResolveProgramDirectory(update.ProgramDirectory);
         EnsureUnder(Path.Combine(UpdateRoot(program), "cache"), update.StageDirectory);
-        EnsureNoLinks(update.StageDirectory);
+        EnsureNoLinks(update.StageDirectory, program);
         if (update.Files is null || update.Files.Count is < 1 or > 10000 ||
             update.Files.Any(file => file is null || string.IsNullOrWhiteSpace(file.Path) ||
                 file.Length < 0 || file.Length > MaximumExpandedBytes ||
@@ -408,7 +409,7 @@ internal static class AppUpdateService
             if (IsProtected(file.Path) || !IsProgramPayload(file.Path) || !names.Add(NormalizeRelative(file.Path)))
                 throw new InvalidDataException("The prepared update contains a protected or duplicate path.");
             var source = PayloadPath(Path.Combine(update.StageDirectory, "payload"), file.Path);
-            EnsureNoLinks(source);
+            EnsureNoLinks(source, program);
             if (!File.Exists(source) || new FileInfo(source).Length != file.Length ||
                 !string.Equals(Hash(source), file.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("The prepared update was changed or is incomplete.");
@@ -417,14 +418,15 @@ internal static class AppUpdateService
 
     private static void ValidatePlan(AppUpdatePlan plan, string path, string helperDirectory)
     {
+        var program = ResolveProgramDirectory(plan.Update.ProgramDirectory);
         var handoff = Path.GetFullPath(plan.HandoffDirectory);
-        EnsureUnder(UpdateRoot(plan.Update.ProgramDirectory), handoff);
+        EnsureUnder(UpdateRoot(program), handoff);
         if (!SamePath(Path.Combine(handoff, "plan.json"), path) ||
             !SamePath(Path.Combine(handoff, "helper"), helperDirectory) ||
-            !SamePath(plan.RestartExecutable, Path.Combine(plan.Update.ProgramDirectory, "packframe.exe")) ||
+            !SamePath(plan.RestartExecutable, Path.Combine(program, "packframe.exe")) ||
             plan.CommitToken.Length != 32 || plan.ParentId <= 0)
             throw new InvalidDataException("The update handoff is invalid.");
-        EnsureNoLinks(handoff);
+        EnsureNoLinks(handoff, program);
         ValidatePrepared(plan.Update);
     }
 
@@ -433,14 +435,14 @@ internal static class AppUpdateService
         foreach (var source in Directory.EnumerateFiles(program))
         {
             if (IsProtected(Path.GetFileName(source)) || !IsProgramPayload(Path.GetFileName(source))) continue;
-            EnsureNoLinks(source);
+            EnsureNoLinks(source, program);
             File.Copy(source, Path.Combine(helper, Path.GetFileName(source)));
         }
         var runtimes = Path.Combine(program, "runtimes");
         if (!Directory.Exists(runtimes)) return;
         foreach (var source in Directory.EnumerateFiles(runtimes, "*", SearchOption.AllDirectories))
         {
-            EnsureNoLinks(source);
+            EnsureNoLinks(source, program);
             var target = PayloadPath(helper, Path.GetRelativePath(program, source));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(source, target);
@@ -567,12 +569,28 @@ internal static class AppUpdateService
         if (!Path.GetFullPath(path).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("An update path escapes its expected directory.");
     }
-    private static void EnsureNoLinks(string path)
+    private static string ResolveProgramDirectory(string? programDirectory)
     {
-        for (var item = Path.GetFullPath(path); item is not null; item = Path.GetDirectoryName(item))
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(programDirectory ?? AppContext.BaseDirectory));
+        if ((File.Exists(full) || Directory.Exists(full)) &&
+            (File.GetAttributes(full) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("Application updates cannot follow filesystem links: " + full);
+        return full;
+    }
+
+    // Check links at and inside stopAt; OS ancestor symlinks (e.g. macOS /var -> /private/var) are outside app control.
+    private static void EnsureNoLinks(string path, string stopAt)
+    {
+        var boundary = Path.TrimEndingDirectorySeparator(Path.GetFullPath(stopAt));
+        for (var item = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+             item is not null;
+             item = Path.GetDirectoryName(item))
+        {
             if ((File.Exists(item) || Directory.Exists(item)) &&
                 (File.GetAttributes(item) & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidDataException("Application updates cannot follow filesystem links: " + item);
+            if (SamePath(item, boundary)) break;
+        }
     }
     private static string UpdateRoot(string program) => Path.Combine(program, "runtime", "app-updates");
     private static string CacheDirectory(string program, string tag, string hash) =>
@@ -585,11 +603,11 @@ internal static class AppUpdateService
     private static bool SamePath(string first, string second) => string.Equals(
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(first)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(second)),
         StringComparison.OrdinalIgnoreCase);
-    private static void DeleteOwnedDirectory(string path)
+    private static void DeleteOwnedDirectory(string path, string stopAt)
     {
         try
         {
-            EnsureNoLinks(path);
+            EnsureNoLinks(path, stopAt);
             if (Directory.Exists(path)) Directory.Delete(path, true);
         }
         catch (IOException) { }
