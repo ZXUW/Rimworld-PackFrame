@@ -639,8 +639,7 @@ public partial class MainWindow : Window
             "更新を確認"
         );
         Find<Button>("LogButton").Content = Localization.LogButton(language);
-        _batchCategoryButton.Content = UpdateText(
-            "Batch category", "批量分类", "批次分類", "分類を一括");
+        UpdateBatchCategoryButtonVisual();
         _noteAliasBox.PlaceholderText = UpdateText("Note name", "备注名", "備註名", "メモ名");
         _noteCategoryBox.PlaceholderText = UpdateText("Category", "分类", "分類", "分類");
         _qqGroupText.Text = OperationText.Choose(
@@ -726,7 +725,16 @@ public partial class MainWindow : Window
 
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.IsRightButtonPressed && (_paintMode || _noteBatchMode))
+        {
+            if (_paintMode) SetPaintMode(false);
+            if (_noteBatchMode) SetNoteBatchMode(false);
+            e.Handled = true;
+            return;
+        }
+
+        if (props.IsLeftButtonPressed)
         {
             var list = FindModListAt(e.Source);
             _pressedSnapshotList = list;
@@ -844,6 +852,14 @@ public partial class MainWindow : Window
     {
         if (e.Handled)
         {
+            return;
+        }
+
+        if (e.Key == Key.Escape && (_paintMode || _noteBatchMode))
+        {
+            if (_paintMode) SetPaintMode(false);
+            if (_noteBatchMode) SetNoteBatchMode(false);
+            e.Handled = true;
             return;
         }
 
@@ -4941,6 +4957,8 @@ public partial class MainWindow : Window
             {
                 ThemeService.Apply(selectedHex, selectedLight);
                 UpdateProblemFilterVisuals();
+                UpdatePaintButtonVisual();
+                UpdateBatchCategoryButtonVisual();
                 _config.BackgroundColor = selectedHex;
                 _config.Save();
             };

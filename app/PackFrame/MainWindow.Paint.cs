@@ -14,6 +14,7 @@ public partial class MainWindow
     private async void OnPaintModeClick(object? sender, RoutedEventArgs e)
     {
         if (_paintMode) { SetPaintMode(false); return; }
+        if (_noteBatchMode) SetNoteBatchMode(false);
         var choice = await ChoosePaintColorAsync();
         if (choice is null) return;
         _paintEraser = choice.Clear;

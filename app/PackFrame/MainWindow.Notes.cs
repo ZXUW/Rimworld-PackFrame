@@ -101,6 +101,8 @@ public partial class MainWindow
             return;
         }
 
+        if (_paintMode) SetPaintMode(false);
+
         if (_packRoot is null) return;
         var dialog = new BatchCategoryWindow(
             ModNoteStore.Categories(_packRoot),
@@ -121,6 +123,11 @@ public partial class MainWindow
         }
 
         _noteBatchMode = active;
+        UpdateBatchCategoryButtonVisual();
+    }
+
+    private void UpdateBatchCategoryButtonVisual()
+    {
         _batchCategoryButton.Content = _noteBatchMode
             ? (_noteBatchClear
                 ? UpdateText("Clear category", "清除分类", "清除分類", "分類をクリア")
