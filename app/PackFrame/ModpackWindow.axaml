@@ -223,7 +223,7 @@
                                     Padding="24,8">
                                 <Button.Flyout>
                                     <Flyout Placement="Top">
-                                        <StackPanel Spacing="8" MaxWidth="380">
+                                        <StackPanel Spacing="8" Width="280">
                                             <Button x:Name="WorkshopOnlyButton"
                                                     Theme="{StaticResource FlatButton}"
                                                     MinHeight="54"

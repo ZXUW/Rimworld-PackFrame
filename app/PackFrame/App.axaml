@@ -37,7 +37,7 @@
                 <Setter Property="Background" Value="{DynamicResource ItemSelectedBrush}" />
             </Style>
         </ControlTheme>        <ControlTheme x:Key="FlatButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource SecondaryBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SecondaryBrush}" />
             <Setter Property="Foreground" Value="#FFFFFF" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="18,8" />
@@ -77,7 +77,7 @@
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Background="{DynamicResource AppBackgroundBrush}"
-                            BorderBrush="{StaticResource SecondaryBrush}"
+                            BorderBrush="{DynamicResource SecondaryBrush}"
                             BorderThickness="1">
                         <Track Name="PART_Track"
                                Orientation="Vertical"
@@ -162,7 +162,7 @@
             <Setter Property="FontWeight" Value="Normal" />
         </Style>
         <Style Selector="Border.field">
-            <Setter Property="Background" Value="{StaticResource SecondaryBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SecondaryBrush}" />
         </Style>
         <Style Selector="Border.field.invalid">
             <Setter Property="Background" Value="#8F3434" />
@@ -221,7 +221,7 @@
             <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}" />
         </Style>
         <Style Selector="ComboBox">
-            <Setter Property="Background" Value="{StaticResource SecondaryBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SecondaryBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="CornerRadius" Value="0" />
@@ -229,6 +229,56 @@
             <Setter Property="MinHeight" Value="28" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="ComboBox /template/ Border#PopupBorder">
+            <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="ComboBox /template/ ScrollViewer">
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="ComboBoxItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+        </Style>
+        <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ItemSelectedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+        </Style>
+        <Style Selector="ComboBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+        </Style>
+        <Style Selector="FlyoutPresenter">
+            <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+        </Style>
+        <Style Selector="FlyoutPresenter /template/ ScrollViewer">
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="MenuFlyoutPresenter">
+            <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="MenuFlyoutPresenter /template/ ScrollViewer">
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}" />
         </Style>
         <Style Selector="Button.footerlink">
             <Setter Property="Background" Value="Transparent" />
