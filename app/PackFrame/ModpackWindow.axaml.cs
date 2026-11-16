@@ -651,8 +651,21 @@ public partial class ModpackWindow : Window
 
     private async Task InstallFromLinkAsync(bool useSteamCmd, bool skipModsDownload = false)
     {
+        if (_selectedPack is null)
+        {
+            return;
+        }
+
         var link = Find<TextBox>("LinkBox").Text?.Trim();
-        if (ModpackService.ParseWorkshopId(link) is null)
+        var hasOtherSources =
+            (_selectedPack.Mods?.Count ?? 0) > 0 ||
+            (_selectedPack.PackageIds?.Count ?? 0) > 0 ||
+            ModpackService.ParseWorkshopId(_selectedPack.WorkshopCollectionId) is not null ||
+            ModpackService.ParseWorkshopId(_selectedPack.WorkshopUrl) is not null ||
+            !string.IsNullOrWhiteSpace(_selectedPack.ModsArchive) ||
+            !string.IsNullOrWhiteSpace(_selectedPack.ModsArchiveR2) ||
+            (!string.IsNullOrWhiteSpace(_selectedPack.ConfigBaseUrl) && _selectedPack.ConfigFiles.Count > 0);
+        if (ModpackService.ParseWorkshopId(link) is null && !hasOtherSources)
         {
             Find<TextBlock>("StatusText").Text =
                 Localization.ModpackLinkInvalid(_language);
@@ -775,7 +788,28 @@ public partial class ModpackWindow : Window
         var retry = false;
         try
         {
-            var pack = await ReadPackForOperationAsync(cancellation.Token);
+            var initialSkippedStages = new List<string>();
+            ModpackDefinition pack;
+            try
+            {
+                pack = await ReadPackForOperationAsync(cancellation.Token);
+            }
+            catch (Exception exception) when (!cancellation.Token.IsCancellationRequested && _selectedPack is not null)
+            {
+                AppLog.Error("Refresh modpack details before install", exception);
+                pack = _selectedPack;
+                initialSkippedStages.Add(ModpackService.FormatSkippedStage(
+                    _language,
+                    T(
+                        "Refresh modpack details (used cached details)",
+                        "刷新合集详情（已使用本地缓存详情）",
+                        "重新整理合集詳情（已使用本機快取詳情）",
+                        "パック詳細の更新（キャッシュを使用）"
+                    ),
+                    exception.Message
+                ));
+            }
+
             stagingRoot = Path.Combine(_packRoot, "runtime", StagingFolder(pack.Id));
             var modsRoot = Path.Combine(stagingRoot, "Mods");
             _archiveDownloadControl = new ArchiveDownloadControl();
@@ -802,7 +836,9 @@ public partial class ModpackWindow : Window
                 },
                 cancellation.Token,
                 _language,
-                _archiveDownloadControl
+                _archiveDownloadControl,
+                continueOnStageFailure: true,
+                initialSkippedStages: initialSkippedStages
             );
             if (!_closed)
             {

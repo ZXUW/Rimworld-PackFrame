@@ -6178,8 +6178,13 @@ public partial class MainWindow : Window
             UpdateEnableTargetBorders();
             ClearUndoHistory();
             var pending = result.UnresolvedWorkshopCount;
+            var missingCount = (column == 0 ? _missingMods1 : _missingMods2).Count;
+            var skipped = result.SkippedStages;
+            var hasSkipped = skipped is { Count: > 0 };
             var completion = new CompletionWindow(
-                Localization.CompletionTitle(_config.Language),
+                hasSkipped
+                    ? Localization.CompletionTitleWithSkipped(_config.Language)
+                    : Localization.CompletionTitle(_config.Language),
                 pending > 0
                     ? Localization.ModpackCreatedPending(
                         _config.Language,
@@ -6192,9 +6197,11 @@ public partial class MainWindow : Window
                         result.Name,
                         result.PackageIds.Count
                     ),
-                pending > 0 ? Localization.ViewMissingMods(_config.Language) : null,
+                pending > 0 || missingCount > 0 ? Localization.ViewMissingMods(_config.Language) : null,
                 Localization.OpenInstanceFolder(_config.Language),
-                Localization.CloseButton(_config.Language)
+                Localization.CloseButton(_config.Language),
+                hasSkipped ? Localization.ModpackSkippedStagesHeader(_config.Language, skipped!.Count) : null,
+                skipped
             );
             var choice = await completion.ShowDialog<CompletionChoice>(this);
             if (choice == CompletionChoice.MissingMods)

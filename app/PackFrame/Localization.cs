@@ -1835,6 +1835,28 @@ public static class Localization
         };
     }
 
+    public static string CompletionTitleWithSkipped(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "安装完成（部分阶段已跳过）",
+            TraditionalChinese => "安裝完成（部分階段已略過）",
+            Japanese => "インストール完了（一部スキップ）",
+            _ => "Installation complete (with skipped stages)"
+        };
+    }
+
+    public static string ModpackSkippedStagesHeader(string? language, int count)
+    {
+        return language switch
+        {
+            SimplifiedChinese => $"以下 {count} 个阶段失败并已跳过：",
+            TraditionalChinese => $"以下 {count} 個階段失敗並已略過：",
+            Japanese => $"次の {count} 件のステージが失敗したためスキップされました:",
+            _ => $"The following {count} stage(s) failed and were skipped:"
+        };
+    }
+
     public static string ViewMissingMods(string? language)
     {
         return language switch

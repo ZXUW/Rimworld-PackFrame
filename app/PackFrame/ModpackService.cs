@@ -107,7 +107,8 @@ public sealed record ModpackInstallResult(
     IReadOnlyList<string>? ReplacedModFolders = null,
     string? ModsArchiveName = null,
     IReadOnlyDictionary<string, string>? AppliedOverlays = null,
-    bool SparseMods = false
+    bool SparseMods = false,
+    IReadOnlyList<string>? SkippedStages = null
 );
 
 public static class ModpackService
@@ -379,13 +380,26 @@ public static class ModpackService
         ArchiveDownloadControl? archiveDownloadControl = null,
         string? existingModsRoot = null,
         string? installedArchiveName = null,
-        IReadOnlyDictionary<string, string>? recordedOverlays = null
+        IReadOnlyDictionary<string, string>? recordedOverlays = null,
+        bool continueOnStageFailure = false,
+        IEnumerable<string>? initialSkippedStages = null
     )
     {
         if (string.IsNullOrWhiteSpace(game.GamePath))
         {
             throw new InvalidOperationException("RimWorld game path is not set.");
         }
+
+        var skippedStages = initialSkippedStages is null
+            ? new List<string>()
+            : new List<string>(initialSkippedStages.Where(item => !string.IsNullOrWhiteSpace(item)));
+        void RecordSkipped(string stage, Exception exception)
+        {
+            AppLog.Error("Skipped modpack stage: " + stage, exception);
+            skippedStages.Add(FormatSkippedStage(language, stage, exception.Message));
+        }
+        bool ShouldSkip(Exception exception) =>
+            continueOnStageFailure && !cancellationToken.IsCancellationRequested;
 
         Directory.CreateDirectory(modsRoot);
         var modsArchiveExtracted = false;
@@ -417,6 +431,9 @@ public static class ModpackService
         else if (!skipModsDownload && archiveUri is not null)
         {
             var archivePath = GetDownloadCachePath(archiveUri, pack.Revision, downloadCacheDirectory);
+            var archiveDownloaded = false;
+            try
+            {
                 status?.Invoke(OperationText.Download(language));
                 if (useR2)
                 {
@@ -496,55 +513,134 @@ public static class ModpackService
                         language
                     );
                 }
-                status?.Invoke(OperationText.Extract(language));
-                await Task.Run(
-                    () => ExtractModsArchive(
-                        archivePath,
-                        modsRoot,
-                        status,
+                archiveDownloaded = true;
+            }
+            catch (Exception exception) when (ShouldSkip(exception))
+            {
+                RecordSkipped(
+                    OperationText.Choose(
                         language,
-                        cancellationToken
+                        "Download local mods archive",
+                        "下载本地模组压缩包",
+                        "下載本機模組壓縮包",
+                        "ローカル MOD アーカイブのダウンロード"
                     ),
-                    cancellationToken
+                    exception
                 );
-                status?.Invoke(OperationText.Install(language));
-                downloadedArchivePath = archivePath;
-                modsArchiveExtracted = true;
+            }
+
+            if (archiveDownloaded)
+            {
+                try
+                {
+                    status?.Invoke(OperationText.Extract(language));
+                    await Task.Run(
+                        () => ExtractModsArchive(
+                            archivePath,
+                            modsRoot,
+                            status,
+                            language,
+                            cancellationToken
+                        ),
+                        cancellationToken
+                    );
+                    status?.Invoke(OperationText.Install(language));
+                    downloadedArchivePath = archivePath;
+                    modsArchiveExtracted = true;
+                }
+                catch (Exception exception) when (ShouldSkip(exception))
+                {
+                    TryDeleteDirectory(modsRoot);
+                    Directory.CreateDirectory(modsRoot);
+                    RecordSkipped(
+                        OperationText.Choose(
+                            language,
+                            "Extract local mods archive",
+                            "解压本地模组压缩包",
+                            "解壓本機模組壓縮包",
+                            "ローカル MOD アーカイブの展開"
+                        ),
+                        exception
+                    );
+                }
+            }
         }
 
-        if (!skipModsDownload && (modsArchiveExtracted || reuseBase))
+        if (!skipModsDownload && (modsArchiveExtracted || reuseBase || continueOnStageFailure))
         {
             var overlaySourceRoot = reuseBase ? existingModsRoot! : modsRoot;
-            var applied = await ApplyLocalModOverlaysAsync(
-                pack,
-                overlaySourceRoot,
-                modsRoot,
-                new[] { ossArchiveUri, r2ArchiveUri },
-                downloadCacheDirectory,
-                recordedOverlays ?? new Dictionary<string, string>(),
-                reuseBase,
-                downloadedOverlayPaths,
-                replacedModFolders,
-                status,
-                language,
-                cancellationToken
-            );
-            appliedOverlays = applied;
+            try
+            {
+                var applied = await ApplyLocalModOverlaysAsync(
+                    pack,
+                    overlaySourceRoot,
+                    modsRoot,
+                    new[] { ossArchiveUri, r2ArchiveUri },
+                    downloadCacheDirectory,
+                    recordedOverlays ?? new Dictionary<string, string>(),
+                    reuseBase,
+                    downloadedOverlayPaths,
+                    replacedModFolders,
+                    status,
+                    language,
+                    cancellationToken,
+                    continueOnStageFailure ? skippedStages : null
+                );
+                appliedOverlays = applied;
+            }
+            catch (Exception exception) when (ShouldSkip(exception))
+            {
+                RecordSkipped(
+                    OperationText.Choose(
+                        language,
+                        "Local mod overlays",
+                        "本地模组覆盖包",
+                        "本機模組覆蓋包",
+                        "ローカル MOD 上書きパッケージ"
+                    ),
+                    exception
+                );
+            }
         }
 
         var stagingRoot = Path.GetDirectoryName(modsRoot);
         string? configSourcePath = null;
+        var appliedConfigFiles = new List<string>(pack.ConfigFiles);
         if (!string.IsNullOrWhiteSpace(stagingRoot) &&
             pack.ConfigFiles.Count > 0 &&
             !string.IsNullOrWhiteSpace(pack.ConfigBaseUrl))
         {
-            configSourcePath = Path.Combine(stagingRoot, "Config");
-            await DownloadConfigAsync(
-                pack,
-                configSourcePath,
-                status,
-                cancellationToken, language
-            );
+            var candidateConfigPath = Path.Combine(stagingRoot, "Config");
+            try
+            {
+                appliedConfigFiles = await DownloadConfigAsync(
+                    pack,
+                    candidateConfigPath,
+                    status,
+                    cancellationToken,
+                    language,
+                    continueOnStageFailure ? skippedStages : null
+                );
+                if (appliedConfigFiles.Count > 0)
+                {
+                    configSourcePath = candidateConfigPath;
+                }
+            }
+            catch (Exception exception) when (ShouldSkip(exception))
+            {
+                appliedConfigFiles.Clear();
+                TryDeleteDirectory(candidateConfigPath);
+                RecordSkipped(
+                    OperationText.Choose(
+                        language,
+                        "Download configuration files",
+                        "下载配置文件",
+                        "下載設定檔",
+                        "設定ファイルのダウンロード"
+                    ),
+                    exception
+                );
+            }
         }
 
         var packageIds = new List<string>();
@@ -567,13 +663,30 @@ public static class ModpackService
                     continue;
                 }
 
-                var installedIds = await InstallGithubModAsync(
-                    mod,
-                    modsRoot,
-                    cancellationToken
-                );
-                githubCount++;
-                AddPackageId(packageId, installedIds, packageIds, resolvedPackageIds);
+                try
+                {
+                    var installedIds = await InstallGithubModAsync(
+                        mod,
+                        modsRoot,
+                        cancellationToken
+                    );
+                    githubCount++;
+                    AddPackageId(packageId, installedIds, packageIds, resolvedPackageIds);
+                }
+                catch (Exception exception) when (ShouldSkip(exception))
+                {
+                    var label = mod.Name ?? mod.Repo ?? packageId ?? "GitHub";
+                    RecordSkipped(
+                        OperationText.Choose(
+                            language,
+                            $"GitHub mod ({label})",
+                            $"下载 GitHub 模组（{label}）",
+                            $"下載 GitHub 模組（{label}）",
+                            $"GitHub MOD（{label}）"
+                        ),
+                        exception
+                    );
+                }
                 continue;
             }
 
@@ -597,8 +710,26 @@ public static class ModpackService
                     continue;
                 }
 
-                var installedIds = InstallLocalMod(mod, modsRoot, game, packRoot);
-                AddPackageId(packageId, installedIds, packageIds, resolvedPackageIds);
+                try
+                {
+                    var installedIds = InstallLocalMod(mod, modsRoot, game, packRoot);
+                    AddPackageId(packageId, installedIds, packageIds, resolvedPackageIds);
+                }
+                catch (Exception exception) when (ShouldSkip(exception))
+                {
+                    AddPackageId(packageId, Array.Empty<string>(), packageIds, resolvedPackageIds);
+                    var label = mod.Name ?? packageId ?? mod.Path ?? "Local";
+                    RecordSkipped(
+                        OperationText.Choose(
+                            language,
+                            $"Local mod ({label})",
+                            $"复制本地模组（{label}）",
+                            $"複製本機模組（{label}）",
+                            $"ローカル MOD（{label}）"
+                        ),
+                        exception
+                    );
+                }
                 continue;
             }
 
@@ -608,9 +739,27 @@ public static class ModpackService
                     ParseWorkshopId(mod.WorkshopUrl);
                 if (id is null)
                 {
-                    throw new InvalidOperationException(
+                    var missingId = new InvalidOperationException(
                         $"Workshop mod '{mod.Name ?? mod.PackageId ?? "unknown"}' has no valid id."
                     );
+                    if (ShouldSkip(missingId))
+                    {
+                        AddPackageId(packageId, Array.Empty<string>(), packageIds, resolvedPackageIds);
+                        var label = mod.Name ?? mod.PackageId ?? "unknown";
+                        RecordSkipped(
+                            OperationText.Choose(
+                                language,
+                                $"Workshop mod ({label})",
+                                $"解析创意工坊模组（{label}）",
+                                $"解析創意工坊模組（{label}）",
+                                $"ワークショップ MOD（{label}）"
+                            ),
+                            missingId
+                        );
+                        continue;
+                    }
+
+                    throw missingId;
                 }
 
                 AddUnique(workshopIds, id.Value);
@@ -642,63 +791,186 @@ public static class ModpackService
             ParseWorkshopId(pack.WorkshopUrl);
         if (collectionId is not null)
         {
-            status?.Invoke(OperationText.ResolveCollection(language));
-            await AddWorkshopTargetAsync(
-                collectionId.Value,
-                workshopIds,
-                collectionIds,
-                cancellationToken
-            );
+            try
+            {
+                status?.Invoke(OperationText.ResolveCollection(language));
+                await AddWorkshopTargetAsync(
+                    collectionId.Value,
+                    workshopIds,
+                    collectionIds,
+                    cancellationToken
+                );
+            }
+            catch (Exception exception) when (ShouldSkip(exception))
+            {
+                RecordSkipped(
+                    OperationText.Choose(
+                        language,
+                        $"Resolve Steam Workshop collection ({collectionId.Value})",
+                        $"解析创意工坊合集（{collectionId.Value}）",
+                        $"解析創意工坊合集（{collectionId.Value}）",
+                        $"ワークショップコレクションの解析（{collectionId.Value}）"
+                    ),
+                    exception
+                );
+            }
         }
 
         var linkId = ParseWorkshopId(workshopLink);
         if (!string.IsNullOrWhiteSpace(workshopLink) && linkId is null)
         {
-            throw new InvalidOperationException("Workshop link is invalid.");
+            var invalidLink = new InvalidOperationException("Workshop link is invalid.");
+            if (ShouldSkip(invalidLink))
+            {
+                RecordSkipped(
+                    OperationText.Choose(
+                        language,
+                        "Workshop link",
+                        "创意工坊链接",
+                        "創意工坊連結",
+                        "ワークショップリンク"
+                    ),
+                    invalidLink
+                );
+            }
+            else
+            {
+                throw invalidLink;
+            }
         }
         if (linkId is not null)
         {
-            status?.Invoke(OperationText.ResolveCollection(language));
-            await AddWorkshopTargetAsync(
-                linkId.Value,
-                workshopIds,
-                collectionIds,
-                cancellationToken
-            );
+            try
+            {
+                status?.Invoke(OperationText.ResolveCollection(language));
+                await AddWorkshopTargetAsync(
+                    linkId.Value,
+                    workshopIds,
+                    collectionIds,
+                    cancellationToken
+                );
+            }
+            catch (Exception exception) when (ShouldSkip(exception))
+            {
+                RecordSkipped(
+                    OperationText.Choose(
+                        language,
+                        $"Resolve Steam Workshop link ({linkId.Value})",
+                        $"解析创意工坊链接（{linkId.Value}）",
+                        $"解析創意工坊連結（{linkId.Value}）",
+                        $"ワークショップリンクの解析（{linkId.Value}）"
+                    ),
+                    exception
+                );
+            }
         }
 
         if (workshopIds.Count > 0)
         {
             if (useSteamCmd)
             {
-                var steamCmd = await SteamCmdClient.EnsureAsync(
-                    packRoot,
-                    status,
-                    cancellationToken, language
-                );
-                await SteamCmdClient.DownloadWorkshopAsync(
-                    steamCmd,
-                    modsRoot,
-                    workshopIds,
-                    status,
-                    cancellationToken, language
-                );
+                string? steamCmd = null;
+                try
+                {
+                    steamCmd = await SteamCmdClient.EnsureAsync(
+                        packRoot,
+                        status,
+                        cancellationToken, language
+                    );
+                }
+                catch (Exception exception) when (ShouldSkip(exception))
+                {
+                    RecordSkipped(
+                        OperationText.Choose(
+                            language,
+                            "Prepare SteamCMD",
+                            "准备 SteamCMD",
+                            "準備 SteamCMD",
+                            "SteamCMD の準備"
+                        ),
+                        exception
+                    );
+                }
+
+                if (steamCmd is not null)
+                {
+                    try
+                    {
+                        var steamCmdFailures = continueOnStageFailure ? new List<string>() : null;
+                        await SteamCmdClient.DownloadWorkshopAsync(
+                            steamCmd,
+                            modsRoot,
+                            workshopIds,
+                            status,
+                            cancellationToken, language,
+                            steamCmdFailures
+                        );
+                        if (steamCmdFailures is { Count: > 0 })
+                        {
+                            var preview = string.Join(", ", steamCmdFailures.Take(5));
+                            if (steamCmdFailures.Count > 5)
+                            {
+                                preview += $" (+{steamCmdFailures.Count - 5})";
+                            }
+                            skippedStages.Add(FormatSkippedStage(
+                                language,
+                                OperationText.Choose(
+                                    language,
+                                    $"SteamCMD Workshop download ({steamCmdFailures.Count} failed)",
+                                    $"SteamCMD 下载工坊模组（{steamCmdFailures.Count} 项失败）",
+                                    $"SteamCMD 下載工坊模組（{steamCmdFailures.Count} 項失敗）",
+                                    $"SteamCMD ワークショップダウンロード（{steamCmdFailures.Count} 件失敗）"
+                                ),
+                                preview
+                            ));
+                        }
+                    }
+                    catch (Exception exception) when (ShouldSkip(exception))
+                    {
+                        RecordSkipped(
+                            OperationText.Choose(
+                                language,
+                                "SteamCMD Workshop download",
+                                "SteamCMD 下载工坊模组",
+                                "SteamCMD 下載工坊模組",
+                                "SteamCMD ワークショップダウンロード"
+                            ),
+                            exception
+                        );
+                    }
+                }
             }
             else
             {
-                var gamePath = game.GamePath;
-                var subscription = await Task.Run(() =>
+                try
                 {
-                    var success = SteamWorkshopClient.SubscribeMany(
-                        gamePath,
-                        workshopIds,
-                        out var error
+                    var gamePath = game.GamePath;
+                    var subscription = await Task.Run(() =>
+                    {
+                        var success = SteamWorkshopClient.SubscribeMany(
+                            gamePath,
+                            workshopIds,
+                            out var error
+                        );
+                        return (success, error);
+                    }, cancellationToken);
+                    if (!subscription.success)
+                    {
+                        throw new InvalidOperationException(subscription.error);
+                    }
+                }
+                catch (Exception exception) when (ShouldSkip(exception))
+                {
+                    RecordSkipped(
+                        OperationText.Choose(
+                            language,
+                            "Subscribe Steam Workshop mods",
+                            "订阅 Steam 创意工坊模组",
+                            "訂閱 Steam 創意工坊模組",
+                            "Steam ワークショップ MOD の購読"
+                        ),
+                        exception
                     );
-                    return (success, error);
-                }, cancellationToken);
-                if (!subscription.success)
-                {
-                    throw new InvalidOperationException(subscription.error);
                 }
             }
         }
@@ -758,6 +1030,9 @@ public static class ModpackService
         var name = string.IsNullOrWhiteSpace(pack.Name)
             ? "Modpack"
             : pack.Name.Trim();
+        var recordedArchiveName = reuseBase
+            ? installedArchiveName ?? archiveName
+            : (modsArchiveExtracted ? archiveName : null);
         return new ModpackInstallResult(
             name,
             packageIds,
@@ -772,19 +1047,37 @@ public static class ModpackService
             pack.ConfigFiles,
             useSteamCmd, pack.PackSource, pack.Revision, pack.Version,
             replacedModFolders,
-            reuseBase ? installedArchiveName ?? archiveName : archiveName,
+            recordedArchiveName,
             appliedOverlays,
-            reuseBase
+            reuseBase,
+            skippedStages
         );
     }
 
-    public static async Task DownloadConfigToAsync(
+    internal static string FormatSkippedStage(string? language, string stage, string? reason)
+    {
+        var clean = (reason ?? string.Empty).Trim();
+        var newline = clean.IndexOfAny(new[] { '\r', '\n' });
+        if (newline >= 0) clean = clean[..newline].Trim();
+        if (clean.Length > 140) clean = clean[..140] + "...";
+        if (clean.Length == 0) return stage;
+        return OperationText.Choose(
+            language,
+            $"{stage}: {clean}",
+            $"{stage}：{clean}",
+            $"{stage}：{clean}",
+            $"{stage}：{clean}"
+        );
+    }
+
+    public static async Task<List<string>> DownloadConfigToAsync(
         string configBaseUrl,
         IReadOnlyList<string> configFiles,
         string targetConfigDirectory,
         Action<string>? status = null,
         CancellationToken cancellationToken = default,
-        string? language = null
+        string? language = null,
+        List<string>? skippedStages = null
     )
     {
         if (string.IsNullOrWhiteSpace(configBaseUrl) || configFiles.Count == 0)
@@ -792,6 +1085,7 @@ public static class ModpackService
             throw new InvalidOperationException("This instance has no config source.");
         }
 
+        var downloaded = new List<string>();
         var staging = Path.Combine(Path.GetTempPath(), "packframe-config-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
         try
@@ -799,32 +1093,72 @@ public static class ModpackService
             var baseUrl = configBaseUrl.TrimEnd('/');
             foreach (var file in configFiles)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var name = Path.GetFileName(file);
-                if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
-                    throw new InvalidDataException("Invalid config file name.");
-                status?.Invoke(OperationText.Config(language, name));
-                var url = baseUrl + "/" + Uri.EscapeDataString(name);
-                var destination = Path.Combine(staging, name);
-                await DownloadAsync(new Uri(url), destination, null, cancellationToken, resume: false);
-                if (Path.GetExtension(name).Equals(".xml", StringComparison.OrdinalIgnoreCase))
-                    XDocument.Load(destination);
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
+                        throw new InvalidDataException("Invalid config file name.");
+                    status?.Invoke(OperationText.Config(language, name));
+                    var url = baseUrl + "/" + Uri.EscapeDataString(name);
+                    var destination = Path.Combine(staging, name);
+                    await DownloadAsync(new Uri(url), destination, null, cancellationToken, resume: false);
+                    if (Path.GetExtension(name).Equals(".xml", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var doc = XDocument.Load(destination);
+                        if (name.Equals("ModsConfig.xml", StringComparison.OrdinalIgnoreCase) &&
+                            (doc.Root?.Name.LocalName != "ModsConfigData" ||
+                             !doc.Root.Elements().Any(element => element.Name.LocalName == "activeMods")))
+                        {
+                            throw new InvalidDataException("Invalid ModsConfig.xml structure.");
+                        }
+                    }
+                    downloaded.Add(name);
+                }
+                catch (Exception exception) when (
+                    skippedStages is not null && !cancellationToken.IsCancellationRequested)
+                {
+                    if (!string.IsNullOrWhiteSpace(name) && name is not ("." or ".."))
+                    {
+                        TryDeleteFile(Path.Combine(staging, name));
+                    }
+                    var label = string.IsNullOrWhiteSpace(name) ? (file ?? "config") : name;
+                    AppLog.Error("Download config file: " + label, exception);
+                    skippedStages.Add(FormatSkippedStage(
+                        language,
+                        OperationText.Choose(
+                            language,
+                            $"Config file ({label})",
+                            $"下载配置文件（{label}）",
+                            $"下載設定檔（{label}）",
+                            $"設定ファイル（{label}）"
+                        ),
+                        exception.Message
+                    ));
+                }
             }
             cancellationToken.ThrowIfCancellationRequested();
-            // Once commit starts, finish or roll back rather than interrupting it.
-            await Task.Run(() => FileTransactions.ApplyFiles(staging, targetConfigDirectory));
+            if (downloaded.Count > 0)
+            {
+                // Once commit starts, finish or roll back rather than interrupting it.
+                await Task.Run(() => FileTransactions.ApplyFiles(staging, targetConfigDirectory));
+            }
+            return downloaded;
         }
         finally { FileTransactions.TryDeleteDirectory(staging); }
     }
 
-    private static async Task DownloadConfigAsync(
+    private static Task<List<string>> DownloadConfigAsync(
         ModpackDefinition pack,
         string configRoot,
         Action<string>? status,
-        CancellationToken cancellationToken, string? language
+        CancellationToken cancellationToken,
+        string? language,
+        List<string>? skippedStages = null
     )
     {
-        await DownloadConfigToAsync(pack.ConfigBaseUrl!, pack.ConfigFiles,
-            configRoot, status, cancellationToken, language);
+        return DownloadConfigToAsync(pack.ConfigBaseUrl!, pack.ConfigFiles,
+            configRoot, status, cancellationToken, language, skippedStages);
     }
 
     public static ulong? ParseWorkshopId(string? value)
@@ -1240,7 +1574,8 @@ public static class ModpackService
         List<string> replacedModFolders,
         Action<string>? status,
         string? language,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        List<string>? skippedStages = null
     )
     {
         var recorded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -1276,12 +1611,15 @@ public static class ModpackService
                 packageIds.Add(packageId);
             }
         }
-        foreach (var directory in Directory.EnumerateDirectories(sourceModsRoot))
+        if (Directory.Exists(sourceModsRoot))
         {
-            var packageId = ModCatalog.ReadPackageId(directory);
-            if (!string.IsNullOrWhiteSpace(packageId))
+            foreach (var directory in Directory.EnumerateDirectories(sourceModsRoot))
             {
-                packageIds.Add(packageId);
+                var packageId = ModCatalog.ReadPackageId(directory);
+                if (!string.IsNullOrWhiteSpace(packageId))
+                {
+                    packageIds.Add(packageId);
+                }
             }
         }
 
@@ -1289,139 +1627,170 @@ public static class ModpackService
         foreach (var packageId in packageIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            recorded.TryGetValue(packageId, out var recordedName);
-            var recordedVersion = string.IsNullOrWhiteSpace(recordedName)
-                ? 0
-                : OverlayVersion(recordedName, packageId);
-            var found = await FindOverlayAsync(
-                overlayBases,
-                packageId,
-                recordedName,
-                recordedVersion,
-                cancellationToken
-            );
-            if (found is null)
-            {
-                continue;
-            }
-            var overlayUri = found.Value.Uri;
-            var overlayName = found.Value.Name;
-            if (reuseAppliedOverlays &&
-                !string.IsNullOrWhiteSpace(recordedName) &&
-                string.Equals(recordedName, overlayName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            status?.Invoke(OperationText.DownloadOverlay(language, packageId));
-            var overlayPath = GetDownloadCachePath(
-                overlayUri,
-                pack.Revision,
-                downloadCacheDirectory
-            );
-            await DownloadAsync(
-                overlayUri,
-                overlayPath,
-                status,
-                cancellationToken,
-                language
-            );
-            downloadedOverlayPaths.Add(overlayPath);
-
-            var extractRoot = Path.Combine(
-                Path.GetTempPath(),
-                "PackFrame",
-                "overlay-" + Guid.NewGuid().ToString("N")
-            );
             try
             {
-                Directory.CreateDirectory(extractRoot);
-                await Task.Run(
-                    () => ExtractModsArchive(
-                        overlayPath,
-                        extractRoot,
-                        status,
-                        language,
-                        cancellationToken
-                    ),
+                recorded.TryGetValue(packageId, out var recordedName);
+                var recordedVersion = string.IsNullOrWhiteSpace(recordedName)
+                    ? 0
+                    : OverlayVersion(recordedName, packageId);
+                var found = await FindOverlayAsync(
+                    overlayBases,
+                    packageId,
+                    recordedName,
+                    recordedVersion,
                     cancellationToken
                 );
-                var overlayModRoot = FindOverlayModRoot(extractRoot)
-                    ?? throw new InvalidDataException(
-                        $"Overlay archive for {packageId} contains no RimWorld mod."
-                    );
-                var overlayPackageId = ModCatalog.ReadPackageId(overlayModRoot);
-                if (!string.IsNullOrWhiteSpace(overlayPackageId) &&
-                    !string.Equals(
-                        overlayPackageId,
-                        packageId,
-                        StringComparison.OrdinalIgnoreCase
-                    ))
+                if (found is null)
                 {
-                    throw new InvalidDataException(
-                        $"Overlay packageId {overlayPackageId} does not match {packageId}."
-                    );
+                    continue;
+                }
+                var overlayUri = found.Value.Uri;
+                var overlayName = found.Value.Name;
+                if (reuseAppliedOverlays &&
+                    !string.IsNullOrWhiteSpace(recordedName) &&
+                    string.Equals(recordedName, overlayName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
                 }
 
-                var existing = Directory
-                    .EnumerateDirectories(sourceModsRoot)
-                    .Where(directory => string.Equals(
-                        ModCatalog.ReadPackageId(directory),
-                        packageId,
-                        StringComparison.OrdinalIgnoreCase
-                    ))
-                    .ToList();
-                var folderName = existing.Count > 0
-                    ? Path.GetFileName(existing[0])
-                    : Path.GetFileName(overlayModRoot);
-                if (string.IsNullOrWhiteSpace(folderName))
-                {
-                    folderName = packageId;
-                }
-
-                var target = Path.Combine(targetModsRoot, folderName);
-                var unique = 1;
-                while ((Directory.Exists(target) || File.Exists(target)) &&
-                       !existing.Any(path => string.Equals(
-                           Path.GetFullPath(path),
-                           Path.GetFullPath(target),
-                           StringComparison.OrdinalIgnoreCase
-                       )))
-                {
-                    target = Path.Combine(targetModsRoot, folderName + "-" + unique);
-                    unique++;
-                }
-
-                var sameRoot = string.Equals(
-                    Path.GetFullPath(sourceModsRoot),
-                    Path.GetFullPath(targetModsRoot),
-                    StringComparison.OrdinalIgnoreCase
+                status?.Invoke(OperationText.DownloadOverlay(language, packageId));
+                var overlayPath = GetDownloadCachePath(
+                    overlayUri,
+                    pack.Revision,
+                    downloadCacheDirectory
                 );
-                if (sameRoot)
+                await DownloadAsync(
+                    overlayUri,
+                    overlayPath,
+                    status,
+                    cancellationToken,
+                    language
+                );
+                downloadedOverlayPaths.Add(overlayPath);
+
+                var extractRoot = Path.Combine(
+                    Path.GetTempPath(),
+                    "PackFrame",
+                    "overlay-" + Guid.NewGuid().ToString("N")
+                );
+                try
                 {
-                    foreach (var directory in existing)
+                    Directory.CreateDirectory(extractRoot);
+                    await Task.Run(
+                        () => ExtractModsArchive(
+                            overlayPath,
+                            extractRoot,
+                            status,
+                            language,
+                            cancellationToken
+                        ),
+                        cancellationToken
+                    );
+                    var overlayModRoot = FindOverlayModRoot(extractRoot)
+                        ?? throw new InvalidDataException(
+                            $"Overlay archive for {packageId} contains no RimWorld mod."
+                        );
+                    var overlayPackageId = ModCatalog.ReadPackageId(overlayModRoot);
+                    if (!string.IsNullOrWhiteSpace(overlayPackageId) &&
+                        !string.Equals(
+                            overlayPackageId,
+                            packageId,
+                            StringComparison.OrdinalIgnoreCase
+                        ))
                     {
-                        if (Directory.Exists(directory))
+                        throw new InvalidDataException(
+                            $"Overlay packageId {overlayPackageId} does not match {packageId}."
+                        );
+                    }
+
+                    var existing = Directory.Exists(sourceModsRoot)
+                        ? Directory
+                            .EnumerateDirectories(sourceModsRoot)
+                            .Where(directory => string.Equals(
+                                ModCatalog.ReadPackageId(directory),
+                                packageId,
+                                StringComparison.OrdinalIgnoreCase
+                            ))
+                            .ToList()
+                        : new List<string>();
+                    var folderName = existing.Count > 0
+                        ? Path.GetFileName(existing[0])
+                        : Path.GetFileName(overlayModRoot);
+                    if (string.IsNullOrWhiteSpace(folderName))
+                    {
+                        folderName = packageId;
+                    }
+
+                    var target = Path.Combine(targetModsRoot, folderName);
+                    var unique = 1;
+                    while ((Directory.Exists(target) || File.Exists(target)) &&
+                           !existing.Any(path => string.Equals(
+                               Path.GetFullPath(path),
+                               Path.GetFullPath(target),
+                               StringComparison.OrdinalIgnoreCase
+                           )))
+                    {
+                        target = Path.Combine(targetModsRoot, folderName + "-" + unique);
+                        unique++;
+                    }
+
+                    var sameRoot = string.Equals(
+                        Path.GetFullPath(sourceModsRoot),
+                        Path.GetFullPath(targetModsRoot),
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                    var temporaryTarget = target + ".overlay-" + Guid.NewGuid().ToString("N");
+                    try
+                    {
+                        CopyDirectory(overlayModRoot, temporaryTarget);
+                        if (sameRoot)
                         {
-                            Directory.Delete(directory, true);
+                            foreach (var directory in existing)
+                            {
+                                if (Directory.Exists(directory))
+                                {
+                                    Directory.Delete(directory, true);
+                                }
+                            }
                         }
+                        if (Directory.Exists(target))
+                        {
+                            Directory.Delete(target, true);
+                        }
+                        Directory.Move(temporaryTarget, target);
+                    }
+                    finally
+                    {
+                        TryDeleteDirectory(temporaryTarget);
+                    }
+
+                    applied[packageId] = overlayName;
+                    var relative = "Mods/" + Path.GetFileName(target);
+                    if (!replacedModFolders.Contains(relative, StringComparer.OrdinalIgnoreCase))
+                    {
+                        replacedModFolders.Add(relative);
                     }
                 }
-                if (Directory.Exists(target))
+                finally
                 {
-                    Directory.Delete(target, true);
-                }
-                CopyDirectory(overlayModRoot, target);
-                applied[packageId] = overlayName;
-                var relative = "Mods/" + Path.GetFileName(target);
-                if (!replacedModFolders.Contains(relative, StringComparer.OrdinalIgnoreCase))
-                {
-                    replacedModFolders.Add(relative);
+                    TryDeleteDirectory(extractRoot);
                 }
             }
-            finally
+            catch (Exception exception) when (
+                skippedStages is not null && !cancellationToken.IsCancellationRequested)
             {
-                TryDeleteDirectory(extractRoot);
+                AppLog.Error("Apply local mod overlay: " + packageId, exception);
+                skippedStages.Add(FormatSkippedStage(
+                    language,
+                    OperationText.Choose(
+                        language,
+                        $"Local mod overlay ({packageId})",
+                        $"本地模组覆盖包（{packageId}）",
+                        $"本機模組覆蓋包（{packageId}）",
+                        $"ローカル MOD 上書きパッケージ（{packageId}）"
+                    ),
+                    exception.Message
+                ));
             }
         }
 

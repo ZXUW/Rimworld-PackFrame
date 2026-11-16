@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -23,13 +26,22 @@ public partial class CompletionWindow : Window
         string message,
         string? missingText,
         string openFolderText,
-        string closeText
+        string closeText,
+        string? skippedHeader = null,
+        IReadOnlyList<string>? skippedStages = null
     )
         : this()
     {
         Title = "Rimworld PackFrame - " + title;
         this.FindControl<TextBlock>("TitleText")!.Text = title;
         this.FindControl<TextBlock>("MessageText")!.Text = message;
+        if (skippedStages is { Count: > 0 })
+        {
+            this.FindControl<Border>("SkippedPanel")!.IsVisible = true;
+            this.FindControl<TextBlock>("SkippedHeaderText")!.Text = skippedHeader ?? string.Empty;
+            this.FindControl<SelectableTextBlock>("SkippedListText")!.Text =
+                string.Join(Environment.NewLine, skippedStages.Select(item => "• " + item));
+        }
         var missing = this.FindControl<Button>("MissingButton")!;
         missing.Content = missingText;
         missing.IsVisible = !string.IsNullOrWhiteSpace(missingText);

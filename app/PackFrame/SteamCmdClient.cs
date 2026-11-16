@@ -154,7 +154,8 @@ internal static class SteamCmdClient
         string modsRoot,
         IReadOnlyList<ulong> workshopIds,
         Action<string>? status = null,
-        CancellationToken cancellationToken = default, string? language = null
+        CancellationToken cancellationToken = default, string? language = null,
+        List<string>? skippedFailures = null
     )
     {
         if (workshopIds.Count == 0)
@@ -190,8 +191,9 @@ internal static class SteamCmdClient
             const int batchSize = 20;
             for (var offset = 0; offset < workshopIds.Count; offset += batchSize)
             {
+                var batch = workshopIds.Skip(offset).Take(batchSize).ToList();
                 var args = new List<string> { "+login", "anonymous" };
-                foreach (var id in workshopIds.Skip(offset).Take(batchSize))
+                foreach (var id in batch)
                 {
                     args.Add("+workshop_download_item");
                     args.Add(RimWorldAppId.ToString());
@@ -221,6 +223,13 @@ internal static class SteamCmdClient
                             cancellationToken
                         );
                     }
+                    catch (Exception exception) when (
+                        skippedFailures is not null && !cancellationToken.IsCancellationRequested)
+                    {
+                        AppLog.Error("SteamCMD workshop batch download", exception);
+                        skippedFailures.Add($"batch {offset / batchSize + 1}: {FirstLine(exception.Message)}");
+                        break;
+                    }
                 }
             }
         }
@@ -242,6 +251,12 @@ internal static class SteamCmdClient
             var source = Path.Combine(cacheRoot, id.ToString());
             if (!Directory.Exists(source))
             {
+                if (skippedFailures is not null)
+                {
+                    skippedFailures.Add(id.ToString());
+                    continue;
+                }
+
                 throw new InvalidOperationException(
                     $"SteamCMD did not download Workshop item {id}."
                 );
@@ -249,29 +264,44 @@ internal static class SteamCmdClient
 
             var target = Path.Combine(modsRoot, id.ToString());
             var temporary = target + ".copy-" + Guid.NewGuid().ToString("N");
-            CopyDirectory(source, temporary);
             try
             {
+                CopyDirectory(source, temporary);
                 if (Directory.Exists(target))
                 {
                     Directory.Delete(target, true);
                 }
 
                 Directory.Move(temporary, target);
+                installed.Add(target);
             }
-            catch
+            catch (Exception exception)
             {
                 if (Directory.Exists(temporary))
                 {
                     Directory.Delete(temporary, true);
                 }
 
+                if (skippedFailures is not null && !cancellationToken.IsCancellationRequested)
+                {
+                    AppLog.Error($"Copy SteamCMD Workshop item {id}", exception);
+                    skippedFailures.Add($"{id} ({FirstLine(exception.Message)})");
+                    continue;
+                }
+
                 throw;
             }
-            installed.Add(target);
         }
 
         return installed;
+    }
+
+    private static string FirstLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "error";
+        var line = text.AsSpan().Trim();
+        var newline = line.IndexOfAny('\r', '\n');
+        return (newline >= 0 ? line[..newline] : line).Trim().ToString();
     }
 
     private static async Task<string> RunAsync(

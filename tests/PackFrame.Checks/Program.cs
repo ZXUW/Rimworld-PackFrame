@@ -400,6 +400,7 @@ Check(launch.ArgumentList.SequenceEqual(new[] { "-logfile", Path.Combine(saveFol
     await CatalogChecks.Run(root);
     await DetailsCacheChecks.Run(root);
     await PublishingChecks.Run(root);
+    await ModpackInstallSkipChecks.Run(root);
     CoverChecks.Run(root);
     var ownedCollections = new[]
     {
