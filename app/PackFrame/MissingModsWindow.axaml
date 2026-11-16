@@ -47,7 +47,7 @@
 
         <Border Grid.Row="2"
                 Margin="0,12,0,0"
-                BorderBrush="{StaticResource SecondaryBrush}"
+                BorderBrush="{DynamicResource SecondaryBrush}"
                 BorderThickness="1">
             <Grid RowDefinitions="Auto,*">
                 <Border Background="{DynamicResource SecondaryBrush}" Padding="12,9">

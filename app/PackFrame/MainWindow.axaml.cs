@@ -366,7 +366,7 @@ public partial class MainWindow : Window
 
         _undoToastTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromSeconds(1)
+            Interval = TimeSpan.FromSeconds(2)
         };
         _undoToastTimer.Tick += (_, _) =>
         {

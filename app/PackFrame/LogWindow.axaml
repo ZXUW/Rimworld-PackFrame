@@ -10,7 +10,7 @@
         Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
     <Grid Margin="16" RowDefinitions="*,Auto">
-        <Border BorderBrush="{StaticResource SecondaryBrush}"
+        <Border BorderBrush="{DynamicResource SecondaryBrush}"
                 BorderThickness="1"
                 Padding="12">
             <ScrollViewer x:Name="LogScroll"

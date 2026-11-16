@@ -4,6 +4,7 @@
              RequestedThemeVariant="Dark">
     <Application.Resources>
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="#20354A" />
+        <SolidColorBrush x:Key="ToastBackgroundBrush" Color="#E620354A" />
         <SolidColorBrush x:Key="SecondaryBrush" Color="#455364" />
         <SolidColorBrush x:Key="PrimaryTextBrush" Color="#EAF1F8" />
         <SolidColorBrush x:Key="SecondaryTextBrush" Color="#C3D4E4" />

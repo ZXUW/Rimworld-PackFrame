@@ -20,8 +20,11 @@ internal static class ThemeService
         ("brown", "#2B2421", null)
     };
 
-    public static SolidColorBrush BackgroundBrush { get; private set; } =
+    public static SolidColorBrush BackgroundBrush { get; } =
         new(Color.Parse(DefaultBackground));
+
+    public static SolidColorBrush ToastBackgroundBrush { get; } =
+        new(Color.Parse("#E620354A"));
 
     public static SolidColorBrush SecondaryBrush { get; } =
         new(Color.Parse("#455364"));
@@ -45,7 +48,8 @@ internal static class ThemeService
     {
         var value = Normalize(hex);
         var background = Color.Parse(value);
-        BackgroundBrush = new SolidColorBrush(background);
+        BackgroundBrush.Color = background;
+        ToastBackgroundBrush.Color = Color.FromArgb(230, background.R, background.G, background.B);
         if (string.IsNullOrWhiteSpace(lightHex))
         {
             lightHex = BackgroundPresets
@@ -64,13 +68,90 @@ internal static class ThemeService
             Mix(background, textBase, 0.27);
         if (Application.Current is { } application)
         {
-            application.Resources["AppBackgroundBrush"] = BackgroundBrush;
+            UpdateResource(application, "AppBackgroundBrush", BackgroundBrush);
+            UpdateResource(application, "ToastBackgroundBrush", ToastBackgroundBrush);
             UpdateResource(application, "SecondaryBrush", SecondaryBrush);
             UpdateResource(application, "PrimaryTextBrush", PrimaryTextBrush);
             UpdateResource(application, "SecondaryTextBrush", SecondaryTextBrush);
             UpdateResource(application, "MutedTextBrush", MutedTextBrush);
             UpdateResource(application, "ItemHoverBrush", HoverBrush);
             UpdateResource(application, "ItemSelectedBrush", SelectedBrush);
+
+            foreach (var key in new[]
+                     {
+                         "ComboBoxDropDownBackground",
+                         "FlyoutPresenterBackground",
+                         "MenuFlyoutPresenterBackground"
+                     })
+            {
+                SetBrushResource(application, key, BackgroundBrush);
+            }
+
+            foreach (var key in new[]
+                     {
+                         "ComboBoxBackground",
+                         "ComboBoxBorderBrush",
+                         "ComboBoxDropDownBorderBrush",
+                         "FlyoutBorderThemeBrush",
+                         "MenuFlyoutPresenterBorderBrush"
+                     })
+            {
+                SetBrushResource(application, key, SecondaryBrush);
+            }
+
+            foreach (var key in new[]
+                     {
+                         "ComboBoxBackgroundPointerOver",
+                         "ComboBoxBackgroundPressed",
+                         "ComboBoxItemBackgroundPointerOver",
+                         "ComboBoxItemBackgroundPressed",
+                         "ComboBoxItemBackgroundSelectedPointerOver",
+                         "ComboBoxItemBackgroundSelectedPressed",
+                         "MenuFlyoutItemBackgroundPointerOver",
+                         "MenuFlyoutItemBackgroundPressed"
+                     })
+            {
+                SetBrushResource(application, key, HoverBrush);
+            }
+
+            foreach (var key in new[]
+                     {
+                         "ComboBoxItemBackgroundSelected"
+                     })
+            {
+                SetBrushResource(application, key, SelectedBrush);
+            }
+
+            foreach (var key in new[]
+                     {
+                         "ComboBoxForeground",
+                         "ComboBoxForegroundFocused",
+                         "ComboBoxForegroundFocusedPressed",
+                         "ComboBoxItemForeground",
+                         "ComboBoxItemForegroundPointerOver",
+                         "ComboBoxItemForegroundPressed",
+                         "ComboBoxItemForegroundSelected",
+                         "ComboBoxItemForegroundSelectedPointerOver",
+                         "ComboBoxItemForegroundSelectedPressed",
+                         "MenuFlyoutItemForeground",
+                         "MenuFlyoutItemForegroundPointerOver",
+                         "MenuFlyoutItemForegroundPressed"
+                     })
+            {
+                SetBrushResource(application, key, PrimaryTextBrush);
+            }
+        }
+    }
+
+    private static void SetBrushResource(Application application, string key, SolidColorBrush brush)
+    {
+        if (application.Resources.TryGetValue(key, out var raw) && raw is SolidColorBrush existing)
+        {
+            existing.Color = brush.Color;
+        }
+        else
+        {
+            application.Resources[key] = brush;
         }
     }
 
