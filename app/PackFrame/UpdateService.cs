@@ -47,7 +47,7 @@ internal static class UpdateService
         {
             var version = typeof(UpdateService).Assembly.GetName().Version;
             return version is null
-                ? "1.0.16"
+                ? "1.0.17"
                 : $"{version.Major}.{version.Minor}.{Math.Max(0, version.Build)}";
         }
     }

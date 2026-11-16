@@ -328,23 +328,23 @@
                                 BorderBrush="{StaticResource SecondaryBrush}"
                                 BorderThickness="0,1,0,0"
                                 Padding="4,4,4,2">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock x:Name="InactiveProblemV"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnInactiveProblemVClick" />
-                                <TextBlock x:Name="InactiveProblemR"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnInactiveProblemRClick" />
-                                <TextBlock x:Name="InactiveLocalCount"
-                                           Text="L: 0"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnInactiveLocalCountClick" />
+                             <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnInactiveProblemVClick">
+                                    <TextBlock x:Name="InactiveProblemV"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnInactiveProblemRClick">
+                                    <TextBlock x:Name="InactiveProblemR"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnInactiveLocalCountClick">
+                                    <TextBlock x:Name="InactiveLocalCount"
+                                               Text="L: 0"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
                             </StackPanel>
                         </Border>                    </Grid>
                 </Border>
@@ -481,28 +481,28 @@
                                 BorderBrush="{StaticResource SecondaryBrush}"
                                 BorderThickness="0,1,0,0"
                                 Padding="4,4,4,2">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock x:Name="ActiveProblemS1"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnActiveProblemS1Click" />
-                                <TextBlock x:Name="ActiveProblemV1"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnActiveProblemV1Click" />
-                                <TextBlock x:Name="ActiveProblemR1"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnActiveProblemR1Click" />
-                                <TextBlock x:Name="ActiveLocalCount1"
-                                           Text="L: 0"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnActiveLocalCount1Click" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnActiveProblemS1Click">
+                                    <TextBlock x:Name="ActiveProblemS1"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnActiveProblemV1Click">
+                                    <TextBlock x:Name="ActiveProblemV1"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnActiveProblemR1Click">
+                                    <TextBlock x:Name="ActiveProblemR1"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnActiveLocalCount1Click">
+                                    <TextBlock x:Name="ActiveLocalCount1"
+                                               Text="L: 0"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
                                 <Button x:Name="ActiveMissing1"
                                         Classes="footerlink"
                                         IsVisible="False"
@@ -638,28 +638,28 @@
                                 BorderBrush="{StaticResource SecondaryBrush}"
                                 BorderThickness="0,1,0,0"
                                 Padding="4,4,4,2">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock x:Name="ActiveProblemS2"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnActiveProblemS2Click" />
-                                <TextBlock x:Name="ActiveProblemV2"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnActiveProblemV2Click" />
-                                <TextBlock x:Name="ActiveProblemR2"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnActiveProblemR2Click" />
-                                <TextBlock x:Name="ActiveLocalCount2"
-                                           Text="L: 0"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           TextWrapping="NoWrap"
-                                           Cursor="Hand"
-                                           PointerPressed="OnActiveLocalCount2Click" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnActiveProblemS2Click">
+                                    <TextBlock x:Name="ActiveProblemS2"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnActiveProblemV2Click">
+                                    <TextBlock x:Name="ActiveProblemV2"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnActiveProblemR2Click">
+                                    <TextBlock x:Name="ActiveProblemR2"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                                <Border Padding="4,0" Cursor="Hand" PointerPressed="OnActiveLocalCount2Click">
+                                    <TextBlock x:Name="ActiveLocalCount2"
+                                               Text="L: 0"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
                                 <Button x:Name="ActiveMissing2"
                                         Classes="footerlink"
                                         IsVisible="False"

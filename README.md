@@ -1,18 +1,28 @@
 # Rimworld PackFrame
 
-基于 Avalonia 12 和 .NET 10 的 RimWorld 模组与整合包管理器。支持多实例、模组列表编辑、配置同步、工坊/GitHub 整合包安装与分享。
+Avalonia 12 写得环世界整合包管理器。优点就是多实例共存（比MO2还方便）、自动排序、便携化、我自己做的整合包安装。
 
-## 快速开始
+## 快速开始（我写的）
 
-1. 将发布包解压到可写目录，保留完整目录结构。
-2. Windows 本地目录版双击根目录 `Rimworld PackFrame.exe`；它会启动 `app/PackFrame/bin/Release/net10.0/packframe.exe`。单独发布版运行其 `packframe` 可执行文件。
-3. 首次启动选择语言，自动检测或手动选择 RimWorld 游戏目录。
-4. 在实例菜单中新建、复制或导入实例，也可以打开整合包窗口安装整合包。
+1. 点右边的release，最新的Windows64，下载，随便哪个路径（空间要大一点，本地mod会放实例本身里），解压。
+2. 双击根目录 `Rimworld PackFrame.exe`。
+3. 首次启动选择语言，自动检测 RimWorld 游戏目录。
+4. 在实例菜单中新建、复制或导入实例，也可以打开合集窗口安装整合包。
 5. 编辑启用列表后点击“保存”，再启动游戏。Steam 工坊内容需要等待 Steam 完成下载。
 
-支持 English、简体中文、繁體中文、日本語。
+支持 中英简繁和家乡话。
 
-## 主窗口功能
+## 功能（我写的）
+
+- 打开之后点那个在右侧展开，能打开另一列列表，点击可以切换启动的列表，两个列表之间拖mod是复制模组。
+- 不同实例在列表顶部下拉栏切换，推荐一上来就把官方路径复制备份一下，本地mod也搬到复制出来的实例根路径下（\ProfileX\Mods没有Mods文件夹自己创）
+- 自动排序功能不会调整大多数mod的排序，不用怕随便点，
+- 有分类和涂色功能，再点一次取消工具选择，清除标记的工具也是在里面选。
+- 有撤销功能，随便乱点就完事了，点坏了加群告诉我。
+- 左边详情栏有备注和直接填的分类栏。
+- 合集页面点进去选一个，然后翻到最下面，点正版，然后等本地Tweak、config下载（修补模组和模组配置），最后是软件自动订阅创意工坊模组，这一步如果卡住可以自己去订阅那个合集。
+
+## 功能（ai写的可以跳过）
 
 - 左侧显示模组预览图、名称、作者、路径、Package ID 和简介。
 - 最多三列列表：未启用模组、两个可选择实例的已启用列表；未启用列标明启用目标，目标栏的标题区域高亮。新用户默认显示一个已启用列表；点击其标题上的“在右侧打开”可增加同一实例的第二个视图，再从右栏选择其他实例。右栏可单独关闭，布局选择会保存。
@@ -30,7 +40,7 @@
 
 启动前会将磁盘配置中的 `activeMods` / `knownExpansions` 包名规范化为小写，以兼容旧配置；仅在需要修改时写入，并在同目录保留 `ModsConfig.xml.before-normalize-*.bak`。发现/浏览实例不会修改配置。
 
-## 实例与数据目录
+## 实例与数据目录（ai写的可以跳过）
 
 ```text
 PackFrame/
@@ -62,7 +72,7 @@ PackFrame/
 
 损坏的实例显示 `⚠`，悬停实例选择框可查看原因；其他实例仍可使用。损坏实例禁止列表编辑和启动，菜单保留打开目录、导入恢复、删除（普通实例）入口。修复文件后点击刷新重新加载。
 
-## 游戏启动与隔离
+## 游戏启动与隔离（ai写的可以跳过）
 
 普通实例按以下方式启动：
 
@@ -78,22 +88,7 @@ PackFrame/
 
 配置和存档隔离不等于游戏二进制及工坊版本隔离。Steam 仍可能自动更新工坊模组；需要固定游戏与模组版本时，应另行保留完整副本。
 
-## 整合包安装、同步与发布
-
-- 整合包窗口读取 GitHub 或自定义 URL 的索引和整合包定义。
-- 内置合集列表随程序发布；打开窗口先显示已缓存或内置的列表，再在后台检查更新。支持 ETag / Last-Modified 条件请求，未变化时复用本地内容；收到新内容后校验 JSON 与 SHA256 并原子保存到程序目录的 `runtime/catalog/`。断网或更新失败仍可浏览本地列表。自定义仓库的缓存按 URL 隔离，不会显示内置列表；合集详情与安装文件仍按需联网获取。
-- 仓库来源选择会保留。维护发行版时，同步更新 `app/PackFrame/Assets/ModpackCatalog.json`，以提供近期的首次离线列表。
-- 合集详情首次读取后缓存到程序目录的 `runtime/pack-details/`；返回已读取的合集会立即显示详情，同一窗口内不会重复下载。重新打开时先显示缓存并在后台校验；“刷新”可主动重新读取。安装、应用配置和检查更新仍会获取最新的合集定义。
-- 支持工坊订阅、SteamCMD 下载、GitHub 模组与本地模组压缩包。
-- 安装后建立新实例，保存来源绑定，以便后续同步配置。
-- 安装先在隐藏临时实例完成并校验，成功后才发布为 `profileN`；失败时清理临时实例并保留 `runtime/install-*` 下载内容。安装过程中复制模组需要额外磁盘空间。
-- 配置同步先下载全部文件并解析 XML，再应用；应用失败尝试回滚，回滚失败保留备份并报告路径。
-- 导出/发布流程支持工坊合集与 GitHub 仓库；发布所需 Steam 登录或 GitHub token 按窗口提示提供。
-- GitHub 仓库内容通过一次 Git commit 更新，基于原有 tree 保留无关文件，分支并发变更时拒绝非快进覆盖。大型模组包仍单独上传 Release，Release 资产与分支提交不属于同一事务；空仓库可能需要额外的初始化提交。
-- 发布读取仓库的默认分支（包括 `master`）。大包复用 `packframe-mods` Release，并以内容 SHA256 命名资产；相同内容复用已上传资产，提交成功后清理此 Release 中旧的受管资产。旧版生成的 `packframe-mods-*` 历史 Release 不自动删除，以免破坏历史下载链接。
-- 分享前检查配置文件中的账号、密钥等私人信息，并确认附带模组文件允许再分发。
-
-## 程序更新
+## 程序更新（ai写的可以跳过，每次打开记得的话点左下角更新就完事了）
 
 点击主窗口的“检查更新”读取 GitHub 上已发布的正式版本。检查本身不会下载、安装或重启程序；发现新版后先显示版本和更新说明。
 
@@ -105,65 +100,12 @@ Windows 的兼容更新包可在程序内下载，下载后仍需单独点击“
 
 GitHub 不可用时会退到 Gitee 的 Release。Gitee 接口不提供资产哈希，所以校验值写在仓库的 `update/latest.json`（随版本提交），Release 里只放用户要下载的 ZIP。发版时更新该文件：`Version` 必须与 tag 一致（不带 `v`），`Name` 必须与 Release 资产同名，否则该平台不会提供自动更新。
 
-## 备份与恢复
+## 文件管理（我写的）
 
-- 完整备份：关闭游戏后复制整个 `instance/`；需要保留软件设置时同时备份 `packframe.json`。
-- 单实例备份：用实例菜单导出 ZIP；导出会跳过缓存路径和临时链接清单。
-- 恢复：通过实例菜单导入 ZIP，选择新建或覆盖。覆盖 ZIP 会替换整个实例数据，列表文件只替换排序。
-- 故障排查：查看 `packframe.log` 与实例 `player.log`。若提示回滚失败，先保留提示的备份目录。
+- 实例文件夹 Instance：里面相当于Ludeon Studios\RimWorld by Ludeon Studios里的格式，有Saves和Mods。
+- 实例Mods文件夹的启用是通过在你游戏根目录Mods文件夹创建符号链接实现的。
+- 故障排查： `packframe.log` 在主界面日志按钮打开，与实例 `player.log` 在实例栏下方点那个三个点，点打开，再退一层文件夹（游戏需要退出，是从官方路径复制过来的。）
 
-## 平台状态
-
-| 平台 | 实现与验证范围 |
-|---|---|
-| Windows x64 | 本地构建与自动回归检查通过；Windows 目录链接使用 junction |
-| Linux | 路径检测、启动、符号链接和 SteamCMD 平台包已有实现；游戏与 GUI 流程仍需实机验证 |
-| macOS | 使用 `open -W -n` 等待新游戏实例；提供对应 SteamCMD 包；游戏与 GUI 流程仍需实机验证 |
-
-SteamCMD 仍依赖 Valve 的平台运行环境，Apple Silicon 上的 Intel 组件可能需要 Rosetta。macOS 正式分发需另外制作 `.app` 并处理签名/公证。
-
-## 开发与验证
-
-需要 .NET 10 SDK。
-
-```powershell
-dotnet run --project app/PackFrame
-dotnet build app/PackFrame -c Release
-dotnet run --project tests/PackFrame.Checks -c Release
-```
-
-构建到默认目录前先关闭该目录下运行的程序，以免二进制被占用。可使用 `--artifacts-path <临时目录>` 隔离构建输出。
-
-检查使用临时目录，不操作玩家实例；覆盖元数据、配置更新回滚、真实目录链接、颜色缓存、列表插入与预览、加载顺序编号、筛选后选择恢复、双实例撤销/重做、启动参数和安装落盘。GUI 拖拽、多选和平台游戏启动的手动检查见 [测试说明](tests/PackFrame.Checks/README.md)。
-
-`.github/workflows/build.yml` 在 Windows、Linux、macOS 上构建并运行这些检查；上传仓库后由 GitHub Actions 执行，构建检查不代替 GUI/游戏实机验证。
-
-关键代码：
-
-| 文件 | 职责 |
-|---|---|
-| `MainWindow.axaml` / `MainWindow.axaml.cs` | 主窗口布局、交互与界面状态 |
-| `MainWindow.Paint.cs` / `MainWindow.DragDrop.cs` / `MainWindow.FilterSort.cs` | 已拆出的涂色、拖拽滚动、搜索与排序逻辑；其余界面协调仍在主文件 |
-| `MainWindow.Panes.cs` / `MainWindow.Selection.cs` | 双栏布局、目标与拖拽提示、各栏选择及滚动恢复 |
-| `GameLaunchService.cs` | 启动参数、进程监控与退出后的处理 |
-| `ModpackInstanceInstaller.cs` | 将安装结果写入新实例 |
-| `ModListOperations.cs` | 列表插入及撤销/重做快照恢复 |
-| `InstanceStore.cs` | 实例发现、导入导出与配置保存 |
-| `ModCatalog.cs` | 模组扫描与元数据解析 |
-| `ModLinkService.cs` | 临时模组链接及恢复 |
-| `ModpackService.cs` | 下载、整合包解析与配置同步 |
-| `FileTransactions.cs` / `AppLog.cs` | 文件替换、回滚与错误日志 |
-
-发布示例：
-
-```powershell
-dotnet publish app/PackFrame -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-dotnet publish app/PackFrame -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-dotnet publish app/PackFrame -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-dotnet publish app/PackFrame -c Release -r osx-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-```
-
-发行 ZIP 需要从对应发布产物重新打包；本地 `dotnet build` 不会自动更新已有 ZIP。
 ## 许可证
 
 - 代码：[MIT](LICENSE)

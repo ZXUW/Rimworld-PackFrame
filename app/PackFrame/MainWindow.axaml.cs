@@ -24,13 +24,26 @@ public partial class MainWindow : Window
 {
     private static readonly SolidColorBrush TextBrush = ThemeService.PrimaryTextBrush;
     private static readonly SolidColorBrush SecondaryBorderBrush = ThemeService.SecondaryBrush;
+    private static readonly SolidColorBrush FilterLinePenBrush = new(Color.Parse("#0D1117"));
     private static readonly TextDecorationCollection StrikethroughDecorations = new()
     {
-        new TextDecoration { Location = TextDecorationLocation.Strikethrough }
+        new TextDecoration
+        {
+            Location = TextDecorationLocation.Strikethrough,
+            Stroke = FilterLinePenBrush,
+            StrokeThickness = 2,
+            StrokeThicknessUnit = TextDecorationUnit.Pixel
+        }
     };
     private static readonly TextDecorationCollection UnderlineDecorations = new()
     {
-        new TextDecoration { Location = TextDecorationLocation.Underline }
+        new TextDecoration
+        {
+            Location = TextDecorationLocation.Underline,
+            Stroke = FilterLinePenBrush,
+            StrokeThickness = 2,
+            StrokeThicknessUnit = TextDecorationUnit.Pixel
+        }
     };
     private static readonly DropShadowEffect TextOutlineEffect = new()
     {
@@ -864,7 +877,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!control && !alt && (e.Key == Key.Up || e.Key == Key.Down))
+        if (!control && !alt && (e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Left || e.Key == Key.Right))
         {
             var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
             if (focused is TextBox || focused is ComboBox)
@@ -875,11 +888,19 @@ public partial class MainWindow : Window
             var list = GetCommandList();
             if (list is not null)
             {
-                MoveModSelection(
-                    list,
-                    e.Key == Key.Up ? -1 : 1,
-                    e.KeyModifiers.HasFlag(KeyModifiers.Shift)
-                );
+                if (e.Key == Key.Up || e.Key == Key.Down)
+                {
+                    MoveModSelection(
+                        list,
+                        e.Key == Key.Up ? -1 : 1,
+                        e.KeyModifiers.HasFlag(KeyModifiers.Shift)
+                    );
+                }
+                else
+                {
+                    SwitchPaneAligned(list, e.Key == Key.Left ? -1 : 1);
+                }
+
                 e.Handled = true;
             }
 
@@ -1992,17 +2013,28 @@ public partial class MainWindow : Window
 
     private void UpdateProblemFilterVisuals()
     {
-        _inactiveProblemV.TextDecorations = ProblemDecoration(_inactiveFilter.Version);
-        _inactiveProblemR.TextDecorations = ProblemDecoration(_inactiveFilter.Duplicate);
-        _inactiveLocalCount.TextDecorations = ProblemDecoration(_inactiveFilter.Local);
-        _activeProblemS1.TextDecorations = ProblemDecoration(_activeFilter1.Sort);
-        _activeProblemV1.TextDecorations = ProblemDecoration(_activeFilter1.Version);
-        _activeProblemR1.TextDecorations = ProblemDecoration(_activeFilter1.Duplicate);
-        _activeLocalCount1.TextDecorations = ProblemDecoration(_activeFilter1.Local);
-        _activeProblemS2.TextDecorations = ProblemDecoration(_activeFilter2.Sort);
-        _activeProblemV2.TextDecorations = ProblemDecoration(_activeFilter2.Version);
-        _activeProblemR2.TextDecorations = ProblemDecoration(_activeFilter2.Duplicate);
-        _activeLocalCount2.TextDecorations = ProblemDecoration(_activeFilter2.Local);
+        ApplyProblemFilterVisual(_inactiveProblemV, _inactiveFilter.Version);
+        ApplyProblemFilterVisual(_inactiveProblemR, _inactiveFilter.Duplicate);
+        ApplyProblemFilterVisual(_inactiveLocalCount, _inactiveFilter.Local);
+        ApplyProblemFilterVisual(_activeProblemS1, _activeFilter1.Sort);
+        ApplyProblemFilterVisual(_activeProblemV1, _activeFilter1.Version);
+        ApplyProblemFilterVisual(_activeProblemR1, _activeFilter1.Duplicate);
+        ApplyProblemFilterVisual(_activeLocalCount1, _activeFilter1.Local);
+        ApplyProblemFilterVisual(_activeProblemS2, _activeFilter2.Sort);
+        ApplyProblemFilterVisual(_activeProblemV2, _activeFilter2.Version);
+        ApplyProblemFilterVisual(_activeProblemR2, _activeFilter2.Duplicate);
+        ApplyProblemFilterVisual(_activeLocalCount2, _activeFilter2.Local);
+    }
+
+    private static void ApplyProblemFilterVisual(TextBlock label, ProblemFilterMode mode)
+    {
+        label.TextDecorations = ProblemDecoration(mode);
+        if (label.Parent is Border pill)
+        {
+            pill.Background = mode == ProblemFilterMode.Off
+                ? Brushes.Transparent
+                : ThemeService.SelectedBrush;
+        }
     }
 
     private static TextDecorationCollection? ProblemDecoration(ProblemFilterMode mode)
@@ -3987,7 +4019,7 @@ public partial class MainWindow : Window
         return null;
     }
 
-    private void SelectMovedMods(int targetColumn, IReadOnlyCollection<string> selectedIds)
+    private void SelectMovedMods(int targetColumn, IReadOnlyCollection<string> selectedIds, Vector? preserveOffset = null)
     {
         var list = GetModListForColumn(targetColumn);
         if (list is null || !list.IsEffectivelyVisible)
@@ -3995,7 +4027,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        InvalidatePaneScrollRestore(list);
+        if (preserveOffset is null)
+        {
+            InvalidatePaneScrollRestore(list);
+        }
 
         var selectedSet = new HashSet<string>(selectedIds, StringComparer.OrdinalIgnoreCase);
         var items = list.Items.Cast<ModInfo>().ToList();
@@ -4006,6 +4041,12 @@ public partial class MainWindow : Window
         }
 
         SetPaneInteractionContext(list);
+
+        var autoScroll = list.AutoScrollToSelectedItem;
+        if (preserveOffset is not null)
+        {
+            list.AutoScrollToSelectedItem = false;
+        }
 
         _refreshing = true;
         list.SelectedItems!.Clear();
@@ -4026,6 +4067,11 @@ public partial class MainWindow : Window
         finally
         {
             selection.EndBatchUpdate();
+            if (preserveOffset is { } saved)
+            {
+                list.AutoScrollToSelectedItem = autoScroll;
+                SetListScrollOffset(list, saved);
+            }
         }
 
         SetPaneAnchor(list, items.IndexOf(moved[0]));
@@ -4894,6 +4940,7 @@ public partial class MainWindow : Window
             item.Click += (_, _) =>
             {
                 ThemeService.Apply(selectedHex, selectedLight);
+                UpdateProblemFilterVisuals();
                 _config.BackgroundColor = selectedHex;
                 _config.Save();
             };
@@ -5672,6 +5719,107 @@ public partial class MainWindow : Window
         }
     }
 
+    private int GetAdjacentColumn(int sourceColumn, int direction) =>
+        (sourceColumn, direction) switch
+        {
+            (0, > 0) => 1,
+            (1, < 0) => 0,
+            (1, > 0) when _config.ShowSecondaryPane => 2,
+            (2, < 0) => 1,
+            _ => -1
+        };
+
+    private double GetAlignedTargetY(ListBox sourceList, ListBox targetList)
+    {
+        var anchorIndex = GetPaneRangeEnd(sourceList);
+        if (anchorIndex < 0)
+        {
+            anchorIndex = sourceList.SelectedIndex;
+        }
+
+        if (anchorIndex >= 0 &&
+            sourceList.ContainerFromIndex(anchorIndex) is ListBoxItem item &&
+            item.TranslatePoint(new Point(0, item.Bounds.Height / 2), targetList) is { } mapped)
+        {
+            return Math.Clamp(mapped.Y, 1, Math.Max(1, targetList.Bounds.Height - 1));
+        }
+
+        var sourceOffset = GetListScrollOffset(sourceList);
+        var approxRowHeight = sourceList.GetRealizedContainers()
+            .OfType<ListBoxItem>()
+            .Select(c => c.Bounds.Height)
+            .FirstOrDefault(h => h > 0);
+        if (approxRowHeight <= 0) approxRowHeight = 24;
+
+        var localY = anchorIndex >= 0
+            ? (anchorIndex * approxRowHeight + approxRowHeight / 2) - sourceOffset.Y
+            : sourceList.Bounds.Height / 2;
+        var clampedSourceY = Math.Clamp(localY, 1, Math.Max(1, sourceList.Bounds.Height - 1));
+        if (sourceList.TranslatePoint(new Point(0, clampedSourceY), targetList) is { } fallback)
+        {
+            return Math.Clamp(fallback.Y, 1, Math.Max(1, targetList.Bounds.Height - 1));
+        }
+
+        return Math.Clamp(clampedSourceY, 1, Math.Max(1, targetList.Bounds.Height - 1));
+    }
+
+    private static int GetNearestRowIndexAtY(ListBox target, double y)
+    {
+        if (target.ItemCount == 0) return -1;
+        var bestIndex = -1;
+        var bestDistance = double.MaxValue;
+        foreach (var container in target.GetRealizedContainers().OfType<ListBoxItem>())
+        {
+            var idx = target.IndexFromContainer(container);
+            if (idx < 0 || container.TranslatePoint(new Point(0, 0), target) is not { } top)
+            {
+                continue;
+            }
+
+            var center = top.Y + container.Bounds.Height / 2;
+            var dist = Math.Abs(center - y);
+            if (dist < bestDistance)
+            {
+                bestDistance = dist;
+                bestIndex = idx;
+            }
+        }
+
+        return bestIndex >= 0 ? bestIndex : Math.Clamp(target.SelectedIndex, 0, target.ItemCount - 1);
+    }
+
+    private void SwitchPaneAligned(ListBox sourceList, int direction)
+    {
+        if (_customDragActive || _painting) return;
+        var targetColumn = GetAdjacentColumn(GetListColumn(sourceList), direction);
+        var targetList = GetModListForColumn(targetColumn);
+        if (targetList is null || !targetList.IsEffectivelyVisible) return;
+
+        var targetY = GetAlignedTargetY(sourceList, targetList);
+        var savedOffset = GetListScrollOffset(targetList);
+        SetPaneInteractionContext(targetList);
+
+        if (targetList.ItemCount > 0)
+        {
+            var alignedIndex = GetNearestRowIndexAtY(targetList, targetY);
+            if (alignedIndex >= 0)
+            {
+                _refreshing = true;
+                PaneSelectionRange.Select(targetList, alignedIndex, alignedIndex);
+                SetPaneAnchor(targetList, alignedIndex);
+                _lastPressList = targetList;
+                _refreshing = false;
+                SetListScrollOffset(targetList, savedOffset);
+                if (targetList.Items[alignedIndex] is ModInfo mod)
+                {
+                    ShowDetails(mod);
+                }
+            }
+        }
+
+        targetList.Focus();
+    }
+
     private void MoveSelectedModsHorizontal(ListBox sourceList, int direction)
     {
         if (_customDragActive || _painting) return;
@@ -5679,16 +5827,13 @@ public partial class MainWindow : Window
         var mods = GetSelectedMods(sourceList);
         if (mods.Count == 0) return;
 
-        var targetColumn = (sourceColumn, direction) switch
-        {
-            (0, > 0) => _config.ShowSecondaryPane && _lastEnableColumn == 2 ? 2 : 1,
-            (1, < 0) => 0,
-            (1, > 0) when _config.ShowSecondaryPane => 2,
-            (2, < 0) => 1,
-            _ => -1
-        };
+        var targetColumn = GetAdjacentColumn(sourceColumn, direction);
         if (targetColumn < 0) return;
 
+        var targetList = GetModListForColumn(targetColumn);
+        if (targetList is null || !targetList.IsEffectivelyVisible) return;
+
+        var targetY = GetAlignedTargetY(sourceList, targetList);
         var payload = new DragPayload(sourceColumn, mods);
         if (targetColumn > 0)
         {
@@ -5697,10 +5842,10 @@ public partial class MainWindow : Window
             if (targetInstance is null || targetInstance.IsDamaged) return;
             if (IsSameInstance(sourceInstance, targetInstance))
             {
-                if (targetColumn == 1 && sourceColumn == 2)
-                {
-                    MoveMods(payload, 0, 0);
-                }
+                // Same instance in split view: align/reorder into right or left pane's current visual slot
+                var sameDisplayIndex = GetDropIndexAt(targetList, new Point(4, targetY));
+                var sameActiveIndex = MapDropIndexToActive(targetList, sameDisplayIndex);
+                MoveMods(payload, targetColumn, sameActiveIndex, preserveTargetViewport: true);
                 return;
             }
 
@@ -5711,11 +5856,13 @@ public partial class MainWindow : Window
                 return;
             }
 
-            MoveMods(payload, targetColumn, targetInstance.ActivePackageIds.Count);
+            var displayIndex = GetDropIndexAt(targetList, new Point(4, targetY));
+            var activeIndex = MapDropIndexToActive(targetList, displayIndex);
+            MoveMods(payload, targetColumn, activeIndex, preserveTargetViewport: true);
             return;
         }
 
-        MoveMods(payload, 0, 0);
+        MoveMods(payload, 0, 0, preserveTargetViewport: false);
     }
 
     private ManagedInstance? GetInstanceForColumn(int column)
@@ -5900,7 +6047,7 @@ public partial class MainWindow : Window
                );
     }
 
-    private void MoveMods(DragPayload payload, int targetColumn, int targetIndex)
+    private void MoveMods(DragPayload payload, int targetColumn, int targetIndex, bool preserveTargetViewport = false)
     {
         var selectedIds = payload.Mods
             .Select(mod => mod.PackageId)
@@ -5911,6 +6058,10 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        Vector? savedTargetOffset = preserveTargetViewport && GetModListForColumn(targetColumn) is { } tgtList
+            ? GetListScrollOffset(tgtList)
+            : null;
 
         var selectedSet = new HashSet<string>(selectedIds, StringComparer.OrdinalIgnoreCase);
         var sourceInstance = GetInstanceForColumn(payload.SourceColumn);
@@ -6015,7 +6166,7 @@ public partial class MainWindow : Window
             _selectionAnchorList = null;
             _selectionAnchorIndex = -1;
             RefreshManager(false);
-            Dispatcher.UIThread.Post(() => SelectMovedMods(targetColumn, selectedIds));
+            Dispatcher.UIThread.Post(() => SelectMovedMods(targetColumn, selectedIds, savedTargetOffset));
         }
     }
 

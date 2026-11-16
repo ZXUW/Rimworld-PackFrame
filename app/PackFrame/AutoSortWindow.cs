@@ -8,6 +8,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 
 namespace PackFrame;
 
@@ -110,7 +111,7 @@ internal sealed class AutoSortWindow : Window
             if (_currentStep > 1)
             {
                 _currentStep--;
-                ReloadAndRebuild();
+                ReloadAndRebuild(preserveScroll: false);
             }
         };
 
@@ -136,7 +137,7 @@ internal sealed class AutoSortWindow : Window
             if (_currentStep < 4)
             {
                 _currentStep++;
-                ReloadAndRebuild();
+                ReloadAndRebuild(preserveScroll: false);
             }
             else
             {
@@ -171,6 +172,7 @@ internal sealed class AutoSortWindow : Window
         };
 
         _bodyScroll = new ScrollViewer();
+        _bodyScroll.PointerWheelChanged += (_, _) => _scrollRestoreGeneration++;
         var bodyBorder = new Border
         {
             BorderBrush = ThemeService.SecondaryBrush,
@@ -238,8 +240,12 @@ internal sealed class AutoSortWindow : Window
         ReloadAndRebuild();
     }
 
-    private void ReloadAndRebuild()
+    private int _scrollRestoreGeneration;
+
+    private void ReloadAndRebuild(bool preserveScroll = true)
     {
+        var savedOffset = preserveScroll ? _bodyScroll.Offset : default;
+        var generation = ++_scrollRestoreGeneration;
         var opts = new AutoSortScanOptions(_confirmedFuzzyDeps, _useCommunityRules, _cycleResolutions);
         var snap = _rescan(opts);
         _scan = snap.Scan;
@@ -267,6 +273,20 @@ internal sealed class AutoSortWindow : Window
             _ => BuildStep4Body()
         };
         UpdateFooterStatus();
+
+        void ApplyScroll()
+        {
+            if (_scrollRestoreGeneration != generation) return;
+            var maxY = Math.Max(0, _bodyScroll.Extent.Height - _bodyScroll.Viewport.Height);
+            var maxX = Math.Max(0, _bodyScroll.Extent.Width - _bodyScroll.Viewport.Width);
+            _bodyScroll.Offset = preserveScroll
+                ? new Vector(Math.Clamp(savedOffset.X, 0, maxX), Math.Clamp(savedOffset.Y, 0, maxY))
+                : default;
+        }
+
+        ApplyScroll();
+        Dispatcher.UIThread.Post(ApplyScroll, DispatcherPriority.Loaded);
+        Dispatcher.UIThread.Post(ApplyScroll, DispatcherPriority.Background);
     }
 
     private Control BuildStepFlowchart(int currentStep)
