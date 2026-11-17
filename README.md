@@ -12,6 +12,15 @@ Avalonia 12 写得环世界整合包管理器。优点就是多实例共存（�
 
 支持 中英简繁和家乡话。
 
+## 打不开？先装 .NET 10 运行时
+
+本软件是“轻量包”，依赖系统的 .NET 10 运行时。双击没反应或者弹框让你装 .NET，装一次就好（只需要 **.NET Runtime**，不需要 Desktop Runtime 或 SDK）：
+
+- 国内下载（快）：[dotnet-runtime-10.0.15-win-x64.exe](https://gitee.com/zxuw/PackFrame-Runtime/releases/download/dotnet-10.0.15/dotnet-runtime-10.0.15-win-x64.exe)
+- 微软官方页（慢）：https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0/runtime
+
+装完重新双击 `Rimworld PackFrame.exe` 即可。
+
 ## 功能（我写的）
 
 - 打开之后点那个在右侧展开，能打开另一列列表，点击可以切换启动的列表，两个列表之间拖mod是复制模组。
