@@ -458,7 +458,8 @@ public static class ModCatalog
 
             var author = ReadAuthor(root);
             var description = ElementValue(root, "description") ?? string.Empty;
-            var preview = FindPreview(directory);
+            // Resolved on demand in the details pane; scanning thousands of mods must not hit the disk for previews.
+            var preview = (string?)null;
             var versions = root.Elements()
                 .FirstOrDefault(element => element.Name.LocalName == "supportedVersions")
                 ?.Elements()
@@ -543,15 +544,15 @@ public static class ModCatalog
         if (!Directory.Exists(directory)) return false;
         try
         {
+            // Fast path: a mod that ships real content at its root is never translation-only,
+            // so the common case costs one stat instead of enumerating every subfolder.
+            if (HasContentDirectory(directory)) return false;
+
             var dirs = new List<string> { directory };
             dirs.AddRange(Directory.EnumerateDirectories(directory));
             var hasLanguages = dirs.Any(d => Directory.Exists(Path.Combine(d, "Languages")));
             if (!hasLanguages) return false;
-            var hasContent = dirs.Any(d =>
-                Directory.Exists(Path.Combine(d, "Defs")) ||
-                Directory.Exists(Path.Combine(d, "Assemblies")) ||
-                Directory.Exists(Path.Combine(d, "Textures")) ||
-                Directory.Exists(Path.Combine(d, "Sounds")));
+            var hasContent = dirs.Any(HasContentDirectory);
             return !hasContent;
         }
         catch
@@ -559,6 +560,12 @@ public static class ModCatalog
             return false;
         }
     }
+
+    private static bool HasContentDirectory(string directory) =>
+        Directory.Exists(Path.Combine(directory, "Defs")) ||
+        Directory.Exists(Path.Combine(directory, "Assemblies")) ||
+        Directory.Exists(Path.Combine(directory, "Textures")) ||
+        Directory.Exists(Path.Combine(directory, "Sounds"));
 
     private static (List<string> Ids, Dictionary<string, string> Names, Dictionary<string, string> Urls) ReadDependencies(
         XElement root,
@@ -743,7 +750,7 @@ public static class ModCatalog
         return string.Join(", ", authors);
     }
 
-    private static string? FindPreview(string directory)
+    internal static string? FindPreview(string directory)
     {
         var aboutDirectory = Path.Combine(directory, "About");
         foreach (var name in PreviewNames)

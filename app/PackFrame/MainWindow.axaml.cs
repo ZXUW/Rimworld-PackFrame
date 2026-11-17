@@ -156,6 +156,7 @@ public partial class MainWindow : Window
     private readonly TextBlock _undoToastText;
     private readonly DispatcherTimer _undoToastTimer;
     private readonly DispatcherTimer _problemTooltipTimer;
+    private const int StartupRefreshDelayMs = 3000;
     private IDisposable? _problemTooltipShowTimer;
     private readonly Popup _modBadgePopup;
     private Control? _problemTooltipTarget;
@@ -576,11 +577,14 @@ public partial class MainWindow : Window
             var indexUrl = ModpackService.StartupIndexUrl(_config.ModpackIndexUrl);
             _ = Task.Run(async () =>
             {
+                // Let the initial mod scan finish before competing for threads and disk.
+                await Task.Delay(StartupRefreshDelayMs);
                 try { await ModpackCatalogCache.Shared.RefreshAsync(indexUrl); }
                 catch (Exception exception) { AppLog.Error("Refresh modpack index on startup: " + indexUrl, exception); }
             });
             _ = Task.Run(async () =>
             {
+                await Task.Delay(StartupRefreshDelayMs);
                 try { await CommunityRulesCache.Shared.RefreshAsync(); }
                 catch (Exception exception) { AppLog.Error("Refresh community rules on startup", exception); }
                 try { await WorkshopMapCache.Shared.RefreshAsync(); }
@@ -7425,20 +7429,21 @@ public partial class MainWindow : Window
         _packageValue.Text = mod.PackageId;
         _descriptionValue.Text = mod.Description;
 
-        if (_previewPath == mod.PreviewPath) return;
-        _previewPath = mod.PreviewPath;
+        var previewPath = mod.PreviewPath ?? ModCatalog.FindPreview(mod.Path);
+        if (_previewPath == previewPath) return;
+        _previewPath = previewPath;
         var version = ++_previewVersion;
         _previewImage.Source = null;
         _previewBitmap?.Dispose();
         _previewBitmap = null;
-        if (string.IsNullOrWhiteSpace(mod.PreviewPath))
+        if (string.IsNullOrWhiteSpace(previewPath))
         {
             return;
         }
 
         try
         {
-            var path = mod.PreviewPath;
+            var path = previewPath;
             var width = Math.Clamp((int)(_previewImage.Bounds.Width * RenderScaling), 256, 1024);
             var bitmap = await Task.Run(() =>
             {
@@ -7455,7 +7460,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            AppLog.Error("Load preview: " + mod.PreviewPath, exception);
+            AppLog.Error("Load preview: " + previewPath, exception);
             if (version == _previewVersion) _previewPath = null;
         }
     }
