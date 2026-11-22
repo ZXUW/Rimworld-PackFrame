@@ -16,6 +16,7 @@ public sealed class ManagedInstance
     public required string FolderName { get; init; }
     public required string DirectoryPath { get; init; }
     public List<string> ActivePackageIds { get; set; } = new();
+    public List<string> InactiveModOrder { get; set; } = new();
     public string? GameVersion { get; set; }
     public List<string> KnownExpansions { get; set; } = new();
     public InstanceMetadata? Metadata { get; set; }
@@ -62,6 +63,8 @@ public sealed class ManagedInstance
 
 public sealed class InstanceMetadata
 {
+    public List<string> InactiveModOrder { get; set; } = new();
+    public bool InactiveModOrderInitialized { get; set; }
     public string? WorkshopCollectionId { get; set; }
     public string? PackSource { get; set; }
     public long? InstalledRevision { get; set; }
@@ -1307,6 +1310,7 @@ public static class InstanceStore
             ApplyPending(directory, ref active, ref version, ref known);
         }
 
+        var metadata = ReadMetadata(directory);
         return new ManagedInstance
         {
             FolderName = OfficialFolderName,
@@ -1340,6 +1344,7 @@ public static class InstanceStore
             ref version,
             ref known
         );
+        var metadata = ReadMetadata(directory);
 
         return new ManagedInstance
         {
@@ -1348,7 +1353,8 @@ public static class InstanceStore
             ActivePackageIds = active,
             GameVersion = version,
             KnownExpansions = known,
-            Metadata = ReadMetadata(directory)
+            Metadata = metadata,
+            InactiveModOrder = metadata?.InactiveModOrder?.ToList() ?? new List<string>()
         };
     }
 

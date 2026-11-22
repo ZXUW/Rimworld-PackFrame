@@ -13,19 +13,178 @@ internal static class NoteChecks
         {
             ModNoteStore.Invalidate();
             ModNoteStore.Set(root, "a.mod", "  别名  ", "分类一");
-            ModNoteStore.Set(root, "b.mod", null, "分类二");
+            ModNoteStore.Set(root, "b.mod", null, "分类一");
+            ModNoteStore.Set(root, "d.mod", null, "  大类 / 子类  ");
             var note = ModNoteStore.Get(root, "A.MOD");
             Require(note?.Alias == "别名" && note.Category == "分类一",
                 "mod notes keep alias and category case-insensitively");
-            Require(ModNoteStore.Categories(root).SequenceEqual(new[] { "分类一", "分类二" }) ||
-                    ModNoteStore.Categories(root).Count == 2,
-                "mod note categories are deduplicated");
+            var allCats = ModNoteStore.Categories(root);
+            Require(allCats.Count == 3 &&
+                    allCats.Contains("分类一") &&
+                    allCats.Contains("大类") &&
+                    allCats.Contains("大类/子类"),
+                "mod note categories are deduplicated and expand slash hierarchies");
+
+            var categoryTable = ModCategoryDatabase.Parse(
+                "{\"version\":1,\"workshop\":{\"123\":\"种族/A\"},\"packageId\":{\"p.b\":\"系列/B\"},\"name\":{\"[Tag] Name C\":\"美化/C\"}}");
+            var flatTable = ModCategoryDatabase.Parse("{\"p.flat\":\"系列/F\"}");
+            Require(categoryTable is not null &&
+                    categoryTable.Workshop["123"] == "种族/A" &&
+                    categoryTable.PackageId["p.b"] == "系列/B" &&
+                    categoryTable.Name.Count == 1 &&
+                    ModCategoryDatabase.NormalizeName("[Tag] Name   C") == "Name C" &&
+                    flatTable is not null && flatTable.PackageId["p.flat"] == "系列/F",
+                "category table parses workshop/packageId/name sections and flat files");
+
+            var metadataTable = ModCategoryDatabase.Parse(
+                "{\"version\":3,\"generated\":\"2026-11-22T15:43:18+08:00\",\"title\":\"Mine\",\"packageId\":{\"p.meta\":\"内容拓展/Meta\"}}");
+            Require(metadataTable is { Version: 3, Title: "Mine" } &&
+                    metadataTable.Generated == "2026-11-22T15:43:18+08:00" &&
+                    metadataTable.PackageId.Count == 1 &&
+                    metadataTable.PackageId["p.meta"] == "内容拓展/Meta" &&
+                    !metadataTable.PackageId.ContainsKey("generated") &&
+                    !metadataTable.PackageId.ContainsKey("title"),
+                "category table treats generated/title as metadata, not package ids");
+
+            var resolveTable = ModCategoryDatabase.Parse(
+                "{\"workshop\":{\"123\":\"种族/W\"},\"packageId\":{\"p.b\":\"系列/P\"},\"name\":{\"Name C\":\"美化/N\"}}");
+            var normalizedNames = ModCategoryDatabase.BuildNormalizedNames(resolveTable!.Name);
+            var byWorkshop = new ModInfo("Other", "A", "", "p.b", "", null, ModSource.Workshop, "1.6", DateTime.MinValue)
+            {
+                Link = "https://steamcommunity.com/sharedfiles/filedetails/?id=123"
+            };
+            var byPackage = new ModInfo("Other", "A", "", "p.b", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
+            var byName = new ModInfo("Name C", "A", "", "p.other", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
+            var byNormalized = new ModInfo("[Tag] Name C", "A", "", "p.other2", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
+            var byNothing = new ModInfo("None", "A", "", "p.none", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
+            Require(ModCategoryDatabase.Resolve(byWorkshop, resolveTable, normalizedNames) == "种族/W" &&
+                    ModCategoryDatabase.Resolve(byPackage, resolveTable, normalizedNames) == "系列/P" &&
+                    ModCategoryDatabase.Resolve(byName, resolveTable, normalizedNames) == "美化/N" &&
+                    ModCategoryDatabase.Resolve(byNormalized, resolveTable, normalizedNames) == "美化/N" &&
+                    ModCategoryDatabase.Resolve(byNothing, resolveTable, normalizedNames) is null,
+                "category resolve uses workshop, then packageId, then exact/normalized name");
+
+            var templatePath = Path.Combine(root, "template.json");
+            CategoryTemplateStore.SaveDocument(templatePath, new ModCategoryDocument
+            {
+                PackageId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["p.saved"] = "内容拓展/Saved"
+                }
+            }, "Mine");
+            var savedTemplate = ModCategoryDatabase.Parse(File.ReadAllText(templatePath));
+            Require(savedTemplate is { Version: 3, Title: "Mine" } &&
+                    savedTemplate.PackageId.Count == 1 &&
+                    savedTemplate.PackageId["p.saved"] == "内容拓展/Saved" &&
+                    CategoryTemplateStore.SanitizeFileName("a/b:c") == "a_b_c",
+                "saved template round-trips and sanitizes file names");
+
+            // Check custom folder & mod drag-reorder persistence in CategoryTree
+            var customCatOrder = new[] { "种族/鼠族", "种族/米莉拉" };
+            var customModOrder = new[] { "Valeries.miliraexpansion", "Ancot.MiliraRace" };
+            var reorderedRows = CategoryTree.BuildRows(
+                new[]
+                {
+                    new ModInfo("Milira Race", "A", "", "Ancot.MiliraRace", "", null, ModSource.Workshop, "1.6", DateTime.MinValue) { Category = "种族/米莉拉" },
+                    new ModInfo("Milira Expansion", "A", "", "Valeries.miliraexpansion", "", null, ModSource.Workshop, "1.6", DateTime.MinValue) { Category = "种族/米莉拉" },
+                    new ModInfo("NewRatkinPlus", "A", "", "Solaris.RatkinRaceMod", "", null, ModSource.Workshop, "1.6", DateTime.MinValue) { Category = "种族/鼠族" }
+                },
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                autoExpandAll: false,
+                "未分类",
+                customCatOrder,
+                customModOrder);
+            var subHeaders = reorderedRows.OfType<CategoryHeaderRow>().Where(h => h.Depth == 1).Select(h => h.PathKey).ToList();
+            var visibleIds = reorderedRows.OfType<ModInfo>().Select(m => m.PackageId).ToList();
+            Require(subHeaders.SequenceEqual(new[] { "种族/鼠族", "种族/米莉拉" }) &&
+                    visibleIds.SequenceEqual(new[] { "Solaris.RatkinRaceMod", "Valeries.miliraexpansion", "Ancot.MiliraRace" }),
+                "CategoryTree honors user drag-reordered folder and mod sequences");
+
+            var miliraBase = new ModInfo("Milira Race", "A", "", "Ancot.MiliraRace", "", null, ModSource.Workshop, "1.6", DateTime.MinValue) { Category = "种族/米莉拉" };
+            var miliraExp = new ModInfo("Milira Expansion", "A", "", "Valeries.miliraexpansion", "", null, ModSource.Workshop, "1.6", DateTime.MinValue) { Category = "种族/米莉拉" };
+            var ratkinBase = new ModInfo("NewRatkinPlus", "A", "", "Solaris.RatkinRaceMod", "", null, ModSource.Workshop, "1.6", DateTime.MinValue) { Category = "种族/鼠族" };
+            var plainMod = new ModInfo("Plain Mod", "A", "", "plain.mod", "", null, ModSource.Workshop, "1.6", DateTime.MinValue);
+            var compactLong = ModInfo.FormatCompactCategory("系列/Sized Apparel for RJW");
+            Require(miliraBase.HasCategory &&
+                    ModInfo.FormatCompactCategory("种族/Monolyn") == "种族/Monolyn" &&
+                    compactLong.StartsWith("Sized Apparel") &&
+                    !compactLong.Contains("…/") &&
+                    ModInfo.FormatCompactCategory("内容拓展/性能优化/Faster Game Loading") == "性能优化" &&
+                    ModInfo.FormatCompactCategory("非内容拓展/操作便利/Find Trade") == "操作便利" &&
+                    ModInfo.FormatCompactCategory("内容拓展/种族/NewRatkin/Sub") == "种族" &&
+                    ModInfo.FormatCompactCategory("Combat Extended/内容拓展/Yuran") == "Yuran",
+                "ModInfo shows the middle category level without …/ prefixes");
+            var hoverRow = miliraBase with { Alias = "米", Category = "系列/Sized Apparel for RJW" };
+            hoverRow.ShowOriginalName = true;
+            Require(hoverRow.CategoryBadgeOpacity < 0.2 && hoverRow.NameColumnSpan == 2 &&
+                    hoverRow.NameOpacity == 1 && hoverRow.AliasOpacity == 0,
+                "hovering a mod name fades the category badge and gives the original name both columns");
+            hoverRow.CategoryHovered = true;
+            Require(hoverRow.CategoryBadgeOpacity == 1 && hoverRow.NameColumnSpan == 1 &&
+                    hoverRow.CategoryBadgeText == hoverRow.CategoryText,
+                "hovering the category side reveals the complete category in place");
+            Require(!MainWindow.IsCategoryRegion(300, 199) &&
+                    MainWindow.IsCategoryRegion(300, 200) &&
+                    MainWindow.IsCategoryRegion(300, 300) &&
+                    !MainWindow.IsCategoryRegion(0, 0),
+                "the right third of a row is the category region, the left two thirds show the name");
+            hoverRow.ShowOriginalName = false;
+            hoverRow.CategoryHovered = false;
+            Require(hoverRow.CategoryBadgeOpacity == 1 && hoverRow.NameColumnSpan == 1 &&
+                    hoverRow.AliasOpacity == 1 && hoverRow.CategoryBadgeText == compactLong,
+                "moving away restores the alias and compact category badge");
+
+            var slotGrid = new Avalonia.Controls.Grid
+            {
+                ColumnDefinitions = new Avalonia.Controls.ColumnDefinitions("*,8,*,8,*")
+            };
+            var childA = new Avalonia.Controls.Border { Width = 520, Height = 40 };
+            var childB = new Avalonia.Controls.Border { Width = 120, Height = 40 };
+            var childC = new Avalonia.Controls.Border { Width = 340, Height = 40 };
+            var slotA = new FixedStarSlot { Child = childA };
+            var slotB = new FixedStarSlot { Child = childB };
+            var slotC = new FixedStarSlot { Child = childC };
+            Avalonia.Controls.Grid.SetColumn(slotA, 0);
+            Avalonia.Controls.Grid.SetColumn(slotB, 2);
+            Avalonia.Controls.Grid.SetColumn(slotC, 4);
+            slotGrid.Children.AddRange(new Avalonia.Controls.Control[] { slotA, slotB, slotC });
+            slotGrid.Measure(new Avalonia.Size(968, 400));
+            slotGrid.Arrange(new Avalonia.Rect(0, 0, 968, 400));
+            var initialWidths = slotGrid.ColumnDefinitions.Select(c => c.ActualWidth).ToArray();
+            childC.Width = 220;
+            slotGrid.Measure(new Avalonia.Size(968, 400));
+            slotGrid.Arrange(new Avalonia.Rect(0, 0, 968, 400));
+            Require(slotGrid.ColumnDefinitions.Select(c => c.ActualWidth).SequenceEqual(initialWidths) &&
+                    slotA.DesiredSize.Width == 0 && slotC.DesiredSize.Width == 0,
+                "FixedStarSlot isolates Star pane widths from child desired-width changes");
+            var collapsed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "种族/鼠族" };
+            var treeRows = CategoryTree.BuildRows(new[] { miliraBase, miliraExp, ratkinBase, plainMod }, collapsed, autoExpandAll: false, "未分类");
+            var headers = treeRows.OfType<CategoryHeaderRow>().ToList();
+            Require(headers.Any(h => h.PathKey == "种族" && h.Depth == 0 && h.TotalModCount == 3 && h.IsExpanded) &&
+                    headers.Any(h => h.PathKey == "种族/米莉拉" && h.Depth == 1 && h.TotalModCount == 2 && h.IsExpanded) &&
+                    headers.Any(h => h.PathKey == "种族/鼠族" && h.Depth == 1 && h.TotalModCount == 1 && !h.IsExpanded) &&
+                    headers.Any(h => h.PathKey == CategoryTree.UncategorizedKey && h.TotalModCount == 1) &&
+                    treeRows.OfType<ModInfo>().All(m => !m.HasCategory) &&
+                    treeRows.OfType<ModInfo>().Select(m => m.PackageId).SequenceEqual(new[] { "Valeries.miliraexpansion", "Ancot.MiliraRace", "plain.mod" }),
+                "CategoryTree builds multi-level headers with rolled-up counts, hides collapsed subtrees, and suppresses duplicate row badges inside tree view");
+
+            var frameRows = CategoryTree.BuildRows(new[] { miliraBase, ratkinBase, plainMod with { Category = "种族" } },
+                collapsed, autoExpandAll: false, "未分类");
+            Require(frameRows.OfType<CategoryHeaderRow>().Single(h => h.PathKey == "种族").CategoryFrames
+                        .SequenceEqual(new[] { new CategoryFrameLayer(0, true, false) }) &&
+                    frameRows.OfType<ModInfo>().Single(m => m.PackageId == miliraBase.PackageId).CategoryFrames!
+                        .SequenceEqual(new[] { new CategoryFrameLayer(0, false, false), new CategoryFrameLayer(1, false, true) }) &&
+                    frameRows.OfType<CategoryHeaderRow>().Single(h => h.PathKey == "种族/鼠族").CategoryFrames
+                        .SequenceEqual(new[] { new CategoryFrameLayer(0, false, false), new CategoryFrameLayer(1, true, true) }) &&
+                    frameRows.OfType<ModInfo>().Single(m => m.PackageId == plainMod.PackageId).CategoryFrames!
+                        .SequenceEqual(new[] { new CategoryFrameLayer(0, false, true) }),
+                "expanded frames end at the last owned row and collapsed subfolders retain their own frame");
 
             ModNoteStore.SetCategory(root, new[] { "a.mod", "c.mod" }, "批量");
             Require(ModNoteStore.Get(root, "a.mod")?.Category == "批量" &&
                     ModNoteStore.Get(root, "a.mod")?.Alias == "别名",
                 "batch category keeps the alias");
-            ModNoteStore.SetCategory(root, new[] { "a.mod", "b.mod", "c.mod" }, null);
+            ModNoteStore.SetCategory(root, new[] { "a.mod", "b.mod", "c.mod", "d.mod" }, null);
             Require(ModNoteStore.Get(root, "a.mod") is { Category: null, Alias: "别名" } &&
                     ModNoteStore.Get(root, "b.mod") is null &&
                     ModNoteStore.Get(root, "c.mod") is null,
@@ -107,6 +266,43 @@ internal static class NoteChecks
                     new[] { "brrainz.harmony", "test.framework", "test.feature", "test.megazh" },
                     StringComparer.OrdinalIgnoreCase),
                 "prerequisites are inserted in dependency order before dependents");
+
+            ModNoteStore.ToggleIgnoredPrerequisite(root, featureMod, framework.PackageId.ToUpperInvariant());
+            ModNoteStore.Set(root, featureMod.PackageId, null, "试验分类");
+            ModNoteStore.ClearAllCategories(root);
+            ModNoteStore.Invalidate();
+            var ignoredFeature = featureMod with
+            {
+                IgnoredPrerequisites = ModNoteStore.Get(root, "TEST.FEATURE")!.IgnoredPrerequisites!.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                LoadAfter = new() { enabledTarget.PackageId }
+            };
+            ModInfo? ResolveInstalled(string id) => installedMap.GetValueOrDefault(id);
+            var ignoredScan = AutoSortPrerequisites.Scan(new[] { ignoredFeature }, ResolveInstalled, allInstalled);
+            Require(ignoredFeature.IsPrerequisiteIgnored(framework.PackageId) && ignoredFeature.ModDependencies.Count == 2 &&
+                    ignoredScan.InstalledMissing.Count == 0 && ignoredScan.UninstalledMissing.Count == 1 &&
+                    ignoredScan.UninstalledMissing[0].PackageId == "missing.uninstalled",
+                "ignoring one prerequisite survives category edits and reload without hiding other requirements");
+
+            var maskedFramework = framework with { IgnoredPrerequisites = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { harmony.PackageId } };
+            var transitiveScan = AutoSortPrerequisites.Scan(new[] { featureMod },
+                id => id == maskedFramework.PackageId ? maskedFramework : ResolveInstalled(id), allInstalled);
+            Require(transitiveScan.InstalledMissing.Select(item => item.PackageId).SequenceEqual(new[] { framework.PackageId }),
+                "ignoring a prerequisite's own requirements does not remove other mods' dependency on it");
+
+            var maskedActive = new[] { ignoredFeature, framework, enabledTarget };
+            var maskedRules = AutoSortPrerequisites.CollectSortRules(maskedActive, "zh", useCommunityRules: false);
+            Require(!maskedRules.Rules.Any(rule => rule.AfterId == ignoredFeature.PackageId && rule.Kind == SortRuleKind.Dependency) &&
+                    maskedRules.Rules.Any(rule => rule.AfterId == ignoredFeature.PackageId && rule.BeforeId == enabledTarget.PackageId &&
+                        rule.Kind == SortRuleKind.LoadAfter) &&
+                    AutoSortPrerequisites.InsertPrerequisites(new[] { featureMod.PackageId }, new[] { framework.PackageId },
+                        new[] { ignoredFeature }, ResolveInstalled, allInstalled).SequenceEqual(new[] { featureMod.PackageId, framework.PackageId }),
+                "ignored hard dependencies no longer drive sorting or prerequisite insertion, but explicit load order still does");
+
+            ModNoteStore.ToggleIgnoredPrerequisite(root, featureMod, framework.PackageId);
+            ModNoteStore.Invalidate();
+            Require(ModNoteStore.Get(root, featureMod.PackageId) is null &&
+                    AutoSortPrerequisites.Scan(new[] { featureMod }, ResolveInstalled, allInstalled).InstalledMissing.Count == 2,
+                "restoring hard prerequisites removes an otherwise empty note and resumes normal scanning");
 
             var core = new ModInfo("Core", "Ludeon", "", "ludeon.rimworld", "", null, ModSource.Official, "1.6", DateTime.MinValue);
             var royalty = new ModInfo("Royalty", "Ludeon", "", "ludeon.rimworld.royalty", "", null, ModSource.Official, "1.6", DateTime.MinValue);

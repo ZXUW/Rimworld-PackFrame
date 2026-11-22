@@ -10,6 +10,77 @@ internal sealed record ModInsertionPreview(
 
 internal static class ModListOperations
 {
+    public static List<string> DefaultNewInstanceMods(IEnumerable<ModInfo> mods)
+    {
+        var available = mods.GroupBy(mod => mod.PackageId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Any(mod =>
+                mod.PackageId.Equals("brrainz.harmony", StringComparison.OrdinalIgnoreCase) ||
+                mod.Source == ModSource.Official), StringComparer.OrdinalIgnoreCase);
+        var defaults = new[]
+        {
+            "brrainz.harmony",
+            "ludeon.rimworld",
+            "ludeon.rimworld.royalty",
+            "ludeon.rimworld.ideology",
+            "ludeon.rimworld.biotech",
+            "ludeon.rimworld.anomaly",
+            "ludeon.rimworld.odyssey"
+        };
+        return defaults.Where(id => available.TryGetValue(id, out var installed) && installed).ToList();
+    }
+
+    public static List<string> ReconcileInactiveOrder(
+        IReadOnlyList<string> existingOrder,
+        IReadOnlyList<ModInfo> mods,
+        bool initialize)
+    {
+        var current = mods.Select(mod => mod.PackageId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var currentSet = new HashSet<string>(current, StringComparer.OrdinalIgnoreCase);
+        var order = initialize
+            ? mods.Where(mod => !string.IsNullOrWhiteSpace(mod.PackageId))
+                .OrderBy(mod => mod.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(mod => mod.PackageId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            : existingOrder.Where(id => currentSet.Contains(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        var known = new HashSet<string>(order, StringComparer.OrdinalIgnoreCase);
+        order.AddRange(current.Where(known.Add));
+        return order;
+    }
+
+    public static List<string> MoveIdsToEnd(IReadOnlyList<string> order, IEnumerable<string> ids)
+    {
+        var moved = ids.Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var movedSet = new HashSet<string>(moved, StringComparer.OrdinalIgnoreCase);
+        var result = order.Where(id => !movedSet.Contains(id)).ToList();
+        result.AddRange(moved);
+        return result;
+    }
+
+    public static List<ModInfo> OrderBySavedPosition(
+        IReadOnlyList<ModInfo> mods,
+        IReadOnlyList<string> order,
+        bool reversed = false)
+    {
+        var positions = order.Select((id, index) => (id, index))
+            .GroupBy(item => item.id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().index, StringComparer.OrdinalIgnoreCase);
+        var ordered = mods.OrderBy(mod => positions.GetValueOrDefault(mod.PackageId, int.MaxValue)).ToList();
+        if (reversed) ordered.Reverse();
+        return ordered;
+    }
+
+    // Display position of a reversed manual list maps to its saved slot.
+    public static int SavedInsertIndex(int savedCount, int displayIndex, bool reversed) =>
+        reversed ? savedCount - displayIndex : displayIndex;
+
     public static List<ModInfo> WithLoadOrder(
         IReadOnlyList<ModInfo> resolvedMods,
         IReadOnlyList<string> activePackageIds)

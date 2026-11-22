@@ -14,7 +14,7 @@ internal sealed record PaneSelectionSnapshot(string? Scope, string[] SelectedIds
     internal static PaneSelectionSnapshot Capture(ListBox list, string? scope, string? anchorId) =>
         new(scope, list.SelectedItems!.OfType<ModInfo>().Select(mod => mod.PackageId).ToArray(), anchorId);
 
-    internal int Restore(ListBox list, IReadOnlyList<ModInfo> rows, string? scope, bool selectFirst)
+    internal int Restore(ListBox list, IReadOnlyList<object> rows, string? scope, bool selectFirst)
     {
         var sameScope = string.Equals(Scope, scope, StringComparison.OrdinalIgnoreCase);
         var selected = sameScope ? new HashSet<string>(SelectedIds, StringComparer.OrdinalIgnoreCase) : new();
@@ -25,16 +25,35 @@ internal sealed record PaneSelectionSnapshot(string? Scope, string[] SelectedIds
             list.ItemsSource = rows;
             list.SelectedItems!.Clear();
             for (var index = 0; index < rows.Count; index++)
-                if (selected.Contains(rows[index].PackageId)) list.SelectedItems.Add(rows[index]);
-            if (selectFirst && list.SelectedItems.Count == 0 && (!sameScope || SelectedIds.Length == 0) && rows.Count > 0)
-                list.SelectedItems.Add(rows[0]);
+                if (rows[index] is ModInfo mod && selected.Contains(mod.PackageId))
+                    list.SelectedItems.Add(mod);
+            if (selectFirst && list.SelectedItems.Count == 0 && (!sameScope || SelectedIds.Length == 0))
+            {
+                var firstMod = rows.OfType<ModInfo>().FirstOrDefault();
+                if (firstMod is not null) list.SelectedItems.Add(firstMod);
+            }
         }
         finally { list.AutoScrollToSelectedItem = autoScroll; }
 
-        var anchor = sameScope && AnchorId is not null
-            ? rows.ToList().FindIndex(mod => string.Equals(mod.PackageId, AnchorId, StringComparison.OrdinalIgnoreCase))
-            : -1;
-        return anchor >= 0 ? anchor : list.SelectedItem is ModInfo first ? rows.ToList().IndexOf(first) : -1;
+        var anchor = -1;
+        if (sameScope && AnchorId is not null)
+        {
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (rows[i] is ModInfo mod && string.Equals(mod.PackageId, AnchorId, StringComparison.OrdinalIgnoreCase))
+                {
+                    anchor = i;
+                    break;
+                }
+            }
+        }
+        if (anchor >= 0) return anchor;
+        if (list.SelectedItem is ModInfo first)
+        {
+            for (var i = 0; i < rows.Count; i++)
+                if (ReferenceEquals(rows[i], first)) return i;
+        }
+        return -1;
     }
 }
 
@@ -43,9 +62,22 @@ internal static class PaneSelectionRange
     internal static int Move(ListBox list, int direction, bool extend, int anchorIndex, int endpointIndex)
     {
         if (list.ItemCount == 0) return -1;
-        var next = endpointIndex < 0
-            ? direction > 0 ? 0 : list.ItemCount - 1
-            : Math.Clamp(endpointIndex + direction, 0, list.ItemCount - 1);
+        var step = direction >= 0 ? 1 : -1;
+        var start = endpointIndex < 0
+            ? (step > 0 ? 0 : list.ItemCount - 1)
+            : Math.Clamp(endpointIndex + step, 0, list.ItemCount - 1);
+        var next = start;
+        while (next >= 0 && next < list.ItemCount && list.Items[next] is CategoryHeaderRow)
+        {
+            next += step;
+        }
+        if (next < 0 || next >= list.ItemCount)
+        {
+            next = endpointIndex >= 0 && endpointIndex < list.ItemCount && list.Items[endpointIndex] is not CategoryHeaderRow
+                ? endpointIndex
+                : -1;
+            if (next < 0) return -1;
+        }
         Select(list, extend && anchorIndex >= 0 ? anchorIndex : next, next);
         return next;
     }
@@ -61,7 +93,13 @@ internal static class PaneSelectionRange
             // Keep the batch within the selection model. Clearing SelectedItems
             // here queues collection synchronization that can discard the range.
             if (!additive) selection.Clear();
-            selection.SelectRange(Math.Min(anchorIndex, endpointIndex), Math.Max(anchorIndex, endpointIndex));
+            var start = Math.Min(anchorIndex, endpointIndex);
+            var end = Math.Max(anchorIndex, endpointIndex);
+            for (var i = start; i <= end; i++)
+            {
+                if (i >= 0 && i < list.ItemCount && list.Items[i] is not CategoryHeaderRow)
+                    selection.Select(i);
+            }
         }
         finally
         {
@@ -84,7 +122,7 @@ public partial class MainWindow
         foreach (var list in GetModLists())
             list.GotFocus += (_, _) => SetPaneInteractionContext(list);
         foreach (var control in new Control[] { _inactiveSearchBox, _inactiveSearchField,
-                     _inactiveSourceButton, _inactiveViewModeButton, _inactiveSortButton })
+                     _inactiveSourceButton, _inactiveViewModeButton, _inactiveSortButton, _inactiveSortActionButton, _inactiveCategoryModeButton, _inactiveCollapseCategoriesButton })
             control.GotFocus += (_, _) => SetPaneInteractionContext(_inactiveList);
         foreach (var control in new Control[] { _activeSearchBox1, _activeSearchField1,
                      _activeSourceButton1, _activeViewModeButton1, _instanceCombo1,
@@ -103,8 +141,7 @@ public partial class MainWindow
         _activeSelectionList = list;
         _selectionAnchorList = list;
         _selectionAnchorIndex = _paneAnchors.TryGetValue(list, out var id) && id is not null
-            ? list.Items.OfType<ModInfo>().ToList().FindIndex(mod =>
-                string.Equals(mod.PackageId, id, StringComparison.OrdinalIgnoreCase))
+            ? FindModRowIndex(list, id)
             : list.SelectedIndex;
         foreach (var pane in GetModLists())
         {
@@ -141,9 +178,18 @@ public partial class MainWindow
 
     private int GetPaneRangeEnd(ListBox list) =>
         _paneRangeEnds.TryGetValue(list, out var id) && id is not null
-            ? list.Items.OfType<ModInfo>().ToList().FindIndex(mod =>
-                string.Equals(mod.PackageId, id, StringComparison.OrdinalIgnoreCase))
+            ? FindModRowIndex(list, id)
             : list.SelectedIndex;
+
+    private static int FindModRowIndex(ListBox list, string packageId)
+    {
+        for (var i = 0; i < list.ItemCount; i++)
+        {
+            if (list.Items[i] is ModInfo mod && string.Equals(mod.PackageId, packageId, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
+    }
 
     private static string? PaneInstanceScope(ManagedInstance? instance) => instance is null
         ? null : instance.DirectoryPath + "\n" + instance.FolderName;
@@ -151,14 +197,14 @@ public partial class MainWindow
     private void InvalidatePaneScrollRestore(ListBox list) =>
         _paneRestoreVersions[list] = _paneRestoreVersions.GetValueOrDefault(list) + 1;
 
-    private void ReplacePaneItems(ListBox list, List<ModInfo> rows, string? scope, bool selectFirst = false)
+    private void ReplacePaneItems(ListBox list, IReadOnlyList<object> rows, string? scope, bool selectFirst = false)
     {
         var oldScope = _paneScopes.GetValueOrDefault(list);
         var snapshot = PaneSelectionSnapshot.Capture(list, oldScope, _paneAnchors.GetValueOrDefault(list));
         var offset = GetListScrollOffset(list);
         var anchor = snapshot.Restore(list, rows, scope, selectFirst);
         _paneScopes[list] = scope;
-        _paneAnchors[list] = anchor >= 0 ? rows[anchor].PackageId : null;
+        _paneAnchors[list] = anchor >= 0 && rows[anchor] is ModInfo anchorMod ? anchorMod.PackageId : null;
         if (!string.Equals(oldScope, scope, StringComparison.OrdinalIgnoreCase) || GetPaneRangeEnd(list) < 0)
             _paneRangeEnds[list] = _paneAnchors[list];
         if (ReferenceEquals(_selectionAnchorList, list))

@@ -74,32 +74,44 @@ static int IsNet10Installed(void) {
     len = GetEnvironmentVariableW(L"DOTNET_ROOT(x86)", envRoot, MAX_PATH);
 
     HKEY hKey = NULL;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\dotnet\\Setup\\InstalledVersions\\x64", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
-        wchar_t installLoc[MAX_PATH] = {0};
-        DWORD cb = sizeof(installLoc);
-        if (RegQueryValueExW(hKey, L"InstallLocation", NULL, NULL, (LPBYTE)installLoc, &cb) == ERROR_SUCCESS) {
-            size_t n = wcslen(installLoc);
-            while (n > 0 && (installLoc[n - 1] == L'\\' || installLoc[n - 1] == L'/')) installLoc[--n] = 0;
-            if (HasNet10InFolder(installLoc)) {
-                RegCloseKey(hKey);
-                return 1;
+    static const wchar_t* kRegKeys[] = {
+        L"SOFTWARE\\dotnet\\Setup\\InstalledVersions\\x64",
+        L"SOFTWARE\\WOW6432Node\\dotnet\\Setup\\InstalledVersions\\x64"
+    };
+    for (int i = 0; i < 2; i++) {
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kRegKeys[i], 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
+            wchar_t installLoc[MAX_PATH] = {0};
+            DWORD cb = sizeof(installLoc);
+            if (RegQueryValueExW(hKey, L"InstallLocation", NULL, NULL, (LPBYTE)installLoc, &cb) == ERROR_SUCCESS) {
+                size_t n = wcslen(installLoc);
+                while (n > 0 && (installLoc[n - 1] == L'\\' || installLoc[n - 1] == L'/')) installLoc[--n] = 0;
+                if (HasNet10InFolder(installLoc)) {
+                    RegCloseKey(hKey);
+                    return 1;
+                }
             }
+            RegCloseKey(hKey);
         }
-        RegCloseKey(hKey);
     }
 
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\dotnet\\Setup\\InstalledVersions\\x64\\sharedhost", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
-        wchar_t hostPath[MAX_PATH] = {0};
-        DWORD cb = sizeof(hostPath);
-        if (RegQueryValueExW(hKey, L"Path", NULL, NULL, (LPBYTE)hostPath, &cb) == ERROR_SUCCESS) {
-            size_t n = wcslen(hostPath);
-            while (n > 0 && (hostPath[n - 1] == L'\\' || hostPath[n - 1] == L'/')) hostPath[--n] = 0;
-            if (HasNet10InFolder(hostPath)) {
-                RegCloseKey(hKey);
-                return 1;
+    static const wchar_t* kHostKeys[] = {
+        L"SOFTWARE\\dotnet\\Setup\\InstalledVersions\\x64\\sharedhost",
+        L"SOFTWARE\\WOW6432Node\\dotnet\\Setup\\InstalledVersions\\x64\\sharedhost"
+    };
+    for (int i = 0; i < 2; i++) {
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kHostKeys[i], 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
+            wchar_t hostPath[MAX_PATH] = {0};
+            DWORD cb = sizeof(hostPath);
+            if (RegQueryValueExW(hKey, L"Path", NULL, NULL, (LPBYTE)hostPath, &cb) == ERROR_SUCCESS) {
+                size_t n = wcslen(hostPath);
+                while (n > 0 && (hostPath[n - 1] == L'\\' || hostPath[n - 1] == L'/')) hostPath[--n] = 0;
+                if (HasNet10InFolder(hostPath)) {
+                    RegCloseKey(hKey);
+                    return 1;
+                }
             }
+            RegCloseKey(hKey);
         }
-        RegCloseKey(hKey);
     }
 
     wchar_t pf[MAX_PATH];
@@ -469,12 +481,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLin
         return 1;
     }
 
-    wchar_t configJson[MAX_PATH];
-    StringCchPrintfW(configJson, MAX_PATH, L"%s\\app\\PackFrame\\bin\\Release\\net10.0\\packframe.json", selfPath);
-    if (GetFileAttributesW(configJson) == INVALID_FILE_ATTRIBUTES) {
-        if (!IsNet10Installed() && !DownloadAndInstallNet10(hInstance)) {
-            return 1;
-        }
+    if (!IsNet10Installed() && !DownloadAndInstallNet10(hInstance)) {
+        return 1;
     }
 
     wchar_t cmdLine[2048];
@@ -484,22 +492,40 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLin
         StringCchPrintfW(cmdLine, 2048, L"\"%s\"", targetExe);
     }
 
-    STARTUPINFOW si;
-    PROCESS_INFORMATION pi;
-    ZeroMemory(&si, sizeof(si));
-    ZeroMemory(&pi, sizeof(pi));
-    si.cb = sizeof(si);
+    SetEnvironmentVariableW(L"DOTNET_DISABLE_GUI_ERRORS", L"1");
 
-    if (!CreateProcessW(targetExe, cmdLine, NULL, NULL, FALSE, 0, NULL, selfPath, &si, &pi)) {
-        wchar_t err[MAX_PATH + 128];
-        StringCchPrintfW(err, MAX_PATH + 128,
-            IsChineseLocale() ? L"无法启动 packframe.exe（错误码 %lu）：\n%s" : L"Could not start packframe.exe (error %lu):\n%s",
-            GetLastError(), targetExe);
-        MessageBoxW(NULL, err, L"Rimworld PackFrame", MB_OK | MB_ICONERROR);
-        return 1;
+    for (int attempt = 0; attempt < 2; attempt++) {
+        STARTUPINFOW si;
+        PROCESS_INFORMATION pi;
+        ZeroMemory(&si, sizeof(si));
+        ZeroMemory(&pi, sizeof(pi));
+        si.cb = sizeof(si);
+
+        if (!CreateProcessW(targetExe, cmdLine, NULL, NULL, FALSE, 0, NULL, selfPath, &si, &pi)) {
+            wchar_t err[MAX_PATH + 128];
+            StringCchPrintfW(err, MAX_PATH + 128,
+                IsChineseLocale() ? L"无法启动 packframe.exe（错误码 %lu）：\n%s" : L"Could not start packframe.exe (error %lu):\n%s",
+                GetLastError(), targetExe);
+            MessageBoxW(NULL, err, L"Rimworld PackFrame", MB_OK | MB_ICONERROR);
+            return 1;
+        }
+
+        DWORD wait = WaitForSingleObject(pi.hProcess, 400);
+        DWORD exitCode = 0;
+        if (wait == WAIT_OBJECT_0) {
+            GetExitCodeProcess(pi.hProcess, &exitCode);
+        }
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+
+        // CoreHostMissingException / FrameworkMissingFailure / HostNotFound (0x80008081..0x8000809F)
+        if (wait == WAIT_OBJECT_0 && (exitCode & 0xFFFFFFE0U) == 0x80008080U) {
+            if (attempt == 0 && DownloadAndInstallNet10(hInstance)) {
+                continue;
+            }
+            return 1;
+        }
+        break;
     }
-
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
     return 0;
 }

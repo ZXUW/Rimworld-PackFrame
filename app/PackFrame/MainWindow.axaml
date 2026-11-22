@@ -10,9 +10,58 @@
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
-    <Window.Resources>
-        <DataTemplate x:Key="ModTemplate" x:DataType="local:ModInfo">
-            <Border Background="{Binding RowBrush}">
+    <Window.DataTemplates>
+        <DataTemplate DataType="local:InstanceSelectorItem">
+            <Border Height="22" ClipToBounds="True">
+                <TextBlock Text="{Binding Name}"
+                           HorizontalAlignment="{Binding Alignment}"
+                           VerticalAlignment="Center"
+                           TextAlignment="Center"
+                           FontSize="{Binding FontSize}" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate DataType="local:CategoryHeaderRow">
+            <Border MinHeight="24"
+                    Padding="2,3,2,3"
+                    Margin="{Binding IndentMargin}">
+                <Grid ColumnDefinitions="12,18,*,Auto">
+                    <Path Data="M 1,1 L 4,4 L 1,7"
+                          Stroke="{DynamicResource SecondaryTextBrush}"
+                          StrokeThickness="1"
+                          VerticalAlignment="Center"
+                          IsVisible="{Binding !IsExpanded}" />
+                    <Path Data="M 1,2 L 4,5 L 7,2"
+                          Stroke="{DynamicResource SecondaryTextBrush}"
+                          StrokeThickness="1"
+                          VerticalAlignment="Center"
+                          IsVisible="{Binding IsExpanded}" />
+                    <Path Grid.Column="1"
+                          Data="M 1,3 L 6,3 L 8,5 L 14,5 L 14,13 L 1,13 Z"
+                          Stroke="{DynamicResource SecondaryTextBrush}"
+                          StrokeThickness="1"
+                          VerticalAlignment="Center">
+                        <Path.RenderTransform>
+                            <TranslateTransform Y="-1" />
+                        </Path.RenderTransform>
+                    </Path>
+                    <TextBlock Grid.Column="2"
+                                Text="{Binding Title}"
+                                FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource PrimaryTextBrush}" />
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding TotalModCount}"
+                               FontSize="12"
+                               Margin="8,0,4,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+        <DataTemplate DataType="local:ModInfo">
+            <Grid>
+            <Border Background="{Binding RowBrush}" Margin="{Binding TreeIndent}" Padding="{Binding CategoryRowPadding}">
                 <Grid ColumnDefinitions="Auto,*,Auto" Opacity="{Binding SearchOpacity}">
                     <TextBlock Text="{Binding LoadOrderText}"
                                IsVisible="{Binding HasLoadOrder}"
@@ -35,20 +84,40 @@
                                         Height="22" />
                     </Border>
                     <Grid Grid.Column="1" ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                        <Grid>
+                        <Border Grid.Column="1"
+                                IsVisible="{Binding HasCategory}"
+                                Opacity="{Binding CategoryBadgeOpacity}"
+                                Background="{DynamicResource SecondaryBrush}"
+                                CornerRadius="3"
+                                Padding="4,1"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center">
+                            <TransitioningContentControl Content="{Binding CategoryBadgeText}"
+                                                         VerticalAlignment="Center"
+                                                         IsHitTestVisible="False">
+                                <TransitioningContentControl.PageTransition>
+                                    <CrossFade Duration="0:0:0.075" />
+                                </TransitioningContentControl.PageTransition>
+                                <TransitioningContentControl.ContentTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Text="{Binding}"
+                                                   FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    </DataTemplate>
+                                </TransitioningContentControl.ContentTemplate>
+                            </TransitioningContentControl>
+                        </Border>
+                        <Grid Grid.Column="0" Grid.ColumnSpan="{Binding NameColumnSpan}" IsHitTestVisible="False">
                             <TextBlock Text="{Binding Name}"
                                        Opacity="{Binding NameOpacity}"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
                                        Effect="{Binding NameEffect}"
                                        TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Center"
-                                       ToolTip.ShowDelay="200"
-                                       ToolTip.Tip="{Binding ColorLabel}"
-                                       PointerEntered="OnModNamePointerEntered"
-                                       PointerExited="OnModNamePointerExited">
+                                       VerticalAlignment="Center">
                                 <TextBlock.Transitions>
                                     <Transitions>
-                                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                                        <DoubleTransition Property="Opacity" Duration="0:0:0.075" />
                                     </Transitions>
                                 </TextBlock.Transitions>
                             </TextBlock>
@@ -58,35 +127,33 @@
                                        Foreground="{DynamicResource PrimaryTextBrush}"
                                        Effect="{Binding NameEffect}"
                                        TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Center"
-                                       ToolTip.ShowDelay="200"
-                                       ToolTip.Tip="{Binding ColorLabel}"
-                                       PointerEntered="OnModNamePointerEntered"
-                                       PointerExited="OnModNamePointerExited">
+                                       VerticalAlignment="Center">
                                 <TextBlock.Transitions>
                                     <Transitions>
-                                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                                        <DoubleTransition Property="Opacity" Duration="0:0:0.075" />
                                     </Transitions>
                                 </TextBlock.Transitions>
                             </TextBlock>
                         </Grid>
-                        <Border Grid.Column="1"
-                                IsVisible="{Binding HasCategory}"
-                                Background="{DynamicResource SecondaryBrush}"
-                                CornerRadius="3"
-                                Padding="4,1"
-                                Margin="8,0,0,0"
-                                VerticalAlignment="Center">
-                            <TextBlock Text="{Binding CategoryText}"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SecondaryTextBrush}" />
-                        </Border>
+                        <!-- Transparent hit area for the color-label tooltip. -->
+                        <Border Grid.Column="0"
+                                Grid.ColumnSpan="{Binding NameColumnSpan}"
+                                Background="Transparent"
+                                ToolTip.ShowDelay="200"
+                                ToolTip.Tip="{Binding ColorLabel}" />
                     </Grid>
                 </Grid>
             </Border>
+            </Grid>
         </DataTemplate>
-    </Window.Resources>
+    </Window.DataTemplates>
     <Window.Styles>
+        <Style Selector="ListBox.category-mode ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="Button.prerequisite-row:pointerover /template/ Border">
+            <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}" />
+        </Style>
         <Style Selector="Border.pane-header Border.header-tint">
             <Setter Property="Opacity" Value="0" />
         </Style>
@@ -184,7 +251,7 @@
                     BorderBrush="{DynamicResource SecondaryBrush}"
                     BorderThickness="1"
                     Padding="12">
-                <Grid RowDefinitions="240,Auto,Auto,Auto,Auto,Auto,Auto,*">
+                <Grid RowDefinitions="240,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
                     <Image x:Name="PreviewImage"
                            Grid.Row="0"
                            Stretch="Uniform"
@@ -250,33 +317,91 @@
                                              Foreground="{DynamicResource PrimaryTextBrush}"
                                              TextWrapping="Wrap" />
                     </ScrollViewer>
+
+                    <Border x:Name="PrerequisitesSection" Grid.Row="8"
+                            IsVisible="False" Margin="0,8,0,0" Padding="0,6,0,0"
+                            BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="0,1,0,0">
+                        <Grid RowDefinitions="Auto,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                                <TextBlock x:Name="PrerequisitesLabel" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource SecondaryTextBrush}" />
+                                <TextBlock x:Name="PrerequisitesHint" Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <ScrollViewer Grid.Row="1" MaxHeight="110" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="PrerequisitesItems" />
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
 
             <Grid x:Name="ManagerColumns" Grid.Column="2" ColumnDefinitions="*,8,*,8,*">
-                <Border Grid.Column="0"
-                        Background="Transparent"
+                <local:FixedStarSlot Grid.Column="0">
+                <Border Background="Transparent"
                         BorderBrush="{DynamicResource SecondaryBrush}"
                         BorderThickness="1"
                         Padding="8">
                     <Grid RowDefinitions="Auto,30,*,Auto">
-                        <Grid RowDefinitions="30" Margin="2,0,2,4">
-                            <Grid>
+        <Grid RowDefinitions="30" Margin="2,0,2,4">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+                            <Button x:Name="InactiveCategoryModeButton"
+                                Grid.Column="0"
+                                Theme="{StaticResource FlatButton}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                MinHeight="26"
+                                Height="26"
+                                Padding="8,2"
+                                Margin="2,0,0,0"
+                                Click="OnInactiveCategoryModeClick" />
+                            <Button x:Name="ModCategoryButton"
+                                Grid.Column="1"
+                                Theme="{StaticResource FlatButton}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                MinHeight="26"
+                                Height="26"
+                                Padding="8,2"
+                                Margin="4,0,0,0"
+                                IsVisible="False"
+                                Click="OnModCategoryClick" />
+                            <Button x:Name="InactiveCollapseCategoriesButton"
+                                Grid.Column="2"
+                                Theme="{StaticResource FlatButton}"
+                                MinWidth="48"
+                                MinHeight="26"
+                                Height="26"
+                                Padding="8,2"
+                                Margin="4,0,0,0"
+                                Click="OnInactiveCollapseCategoriesClick" />
                             <Button x:Name="InactiveSortButton"
-                                Grid.Row="0"
+                                Grid.Column="3"
                                 Theme="{StaticResource FlatButton}"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
                                 MinHeight="26"
                                 Height="26"
                                 Padding="6,2"
-                                Margin="2,0,0,0"
+                                Margin="6,0,0,0"
                                 Click="OnInactiveSortClick" />
+                            <Button x:Name="InactiveSortActionButton"
+                                Grid.Column="4"
+                                Theme="{StaticResource FlatButton}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                MinHeight="26"
+                                Height="26"
+                                Padding="6,2"
+                                Margin="4,0,0,0"
+                                Click="OnInactiveSortActionClick" />
                         <TextBlock x:Name="InactiveHeader"
+                                   Grid.Column="5"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Center"
-                                   Margin="2,0,2,0" />
+                                   Margin="2,0,8,0" />
                             </Grid>
                         </Grid>
                         <Grid Grid.Row="1"
@@ -320,7 +445,6 @@
                         </Grid>
                         <ListBox x:Name="InactiveList"
                                  Classes="modpane"
-                                 ItemTemplate="{StaticResource ModTemplate}"
                                  Grid.Row="2"
                                  ItemContainerTheme="{StaticResource ModListItem}"
                                  SelectionChanged="OnListSelectionChanged">
@@ -348,9 +472,10 @@
                             </StackPanel>
                         </Border>                    </Grid>
                 </Border>
+                </local:FixedStarSlot>
 
+                <local:FixedStarSlot Grid.Column="2">
                 <Border x:Name="ActiveColumn1"
-                        Grid.Column="2"
                         Background="Transparent"
                         BorderBrush="{DynamicResource SecondaryBrush}"
                         BorderThickness="1"
@@ -398,12 +523,11 @@
                                 </Button>
                             </Grid>
                             <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*">
-                                <Button x:Name="InstanceActionButton1"
-                                        Theme="{StaticResource FlatButton}"
-                                        Content="…"
-                                        Padding="8,4"
-                                        MinWidth="30"
-                                        MinHeight="28"
+                                 <Button x:Name="InstanceActionButton1"
+                                         Theme="{StaticResource FlatButton}"
+                                         MinWidth="48"
+                                         Padding="8,4"
+                                         MinHeight="28"
                                         Margin="0,0,6,0"
                                         VerticalAlignment="Center"
                                         Click="OnInstanceActionsClick" />
@@ -427,7 +551,8 @@
                                            Grid.Column="3"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            HorizontalAlignment="Right"
-                                           VerticalAlignment="Center" />
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0" />
                             </Grid>
                             </Grid>
                           </Grid>
@@ -473,7 +598,6 @@
                         </Grid>
                         <ListBox x:Name="ActiveList1"
                                  Classes="modpane"
-                                 ItemTemplate="{StaticResource ModTemplate}"
                                  Grid.Row="2"
                                  ItemContainerTheme="{StaticResource ModListItem}"
                                  SelectionChanged="OnListSelectionChanged">
@@ -510,9 +634,10 @@
                             </StackPanel>
                         </Border>                    </Grid>
                 </Border>
+                </local:FixedStarSlot>
 
+                <local:FixedStarSlot Grid.Column="4">
                 <Border x:Name="ActiveColumn2"
-                        Grid.Column="4"
                         Background="Transparent"
                         BorderBrush="{DynamicResource SecondaryBrush}"
                         BorderThickness="1"
@@ -557,9 +682,8 @@
                             <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*">
                                 <Button x:Name="InstanceActionButton2"
                                         Theme="{StaticResource FlatButton}"
-                                        Content="…"
+                                        MinWidth="48"
                                         Padding="8,4"
-                                        MinWidth="30"
                                         MinHeight="28"
                                         Margin="0,0,6,0"
                                         VerticalAlignment="Center"
@@ -584,7 +708,8 @@
                                            Grid.Column="3"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            HorizontalAlignment="Right"
-                                           VerticalAlignment="Center" />
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0" />
                             </Grid>
                             </Grid>
                           </Grid>
@@ -630,7 +755,6 @@
                         </Grid>
                         <ListBox x:Name="ActiveList2"
                                  Classes="modpane"
-                                 ItemTemplate="{StaticResource ModTemplate}"
                                  Grid.Row="2"
                                  ItemContainerTheme="{StaticResource ModListItem}"
                                  SelectionChanged="OnListSelectionChanged">
@@ -667,6 +791,7 @@
                             </StackPanel>
                         </Border>                    </Grid>
                 </Border>
+                </local:FixedStarSlot>
             </Grid>
         </Grid>
 
@@ -705,6 +830,12 @@
                         MinHeight="36"
                         Padding="24,8"
                         Click="OnSaveClick" />
+                <Button x:Name="TerminateGameButton"
+                        Theme="{StaticResource FlatButton}"
+                        MinHeight="36"
+                        Padding="18,8"
+                        IsVisible="False"
+                        Click="OnTerminateGameClick" />
                 <Button x:Name="LaunchButton"
                         Theme="{StaticResource FlatButton}"
                         MinHeight="36"

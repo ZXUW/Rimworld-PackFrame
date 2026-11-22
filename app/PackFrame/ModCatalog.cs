@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using Avalonia;
 using Avalonia.Media;
 
 namespace PackFrame;
@@ -28,7 +29,7 @@ public sealed record ModInfo(
     string? PreviewPath,
     ModSource Source,
     string GameVersions,
-    DateTime SubscribedAt
+    DateTime LastModifiedAt
 ) : INotifyPropertyChanged
 {
     private IBrush? _rowBrush;
@@ -74,6 +75,7 @@ public sealed record ModInfo(
     private string? _alias;
     private string? _category;
     private bool _showOriginalName;
+    private bool _categoryHovered;
 
     public string? Alias
     {
@@ -98,7 +100,20 @@ public sealed record ModInfo(
             if (_category == value) return;
             _category = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CategoryText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CategoryBadgeText)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasCategory)));
+        }
+    }
+
+    public bool CategoryHovered
+    {
+        set
+        {
+            if (_categoryHovered == value) return;
+            _categoryHovered = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CategoryBadgeText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CategoryBadgeOpacity)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NameColumnSpan)));
         }
     }
 
@@ -111,6 +126,8 @@ public sealed record ModInfo(
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RowName)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NameOpacity)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AliasOpacity)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CategoryBadgeOpacity)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NameColumnSpan)));
         }
     }
 
@@ -118,11 +135,59 @@ public sealed record ModInfo(
     public double AliasOpacity => _showOriginalName ? 0 : 1;
     public double NameOpacity =>
         _showOriginalName || string.IsNullOrWhiteSpace(_alias) ? 1 : 0;
+    public double CategoryBadgeOpacity => _showOriginalName && !_categoryHovered ? 0.14 : 1;
+    public int NameColumnSpan => _showOriginalName && !_categoryHovered ? 2 : 1;
 
     public string RowName =>
         _showOriginalName || string.IsNullOrWhiteSpace(_alias) ? Name : _alias!;
     public string CategoryText => _category ?? string.Empty;
-    public bool HasCategory => !string.IsNullOrWhiteSpace(_category);
+    public string CategoryBadgeText => _categoryHovered ? CategoryText : FormatCompactCategory(_category);
+    public bool ShowCategoryBadge { get; init; } = true;
+
+    internal static string FormatCompactCategory(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category)) return string.Empty;
+        var parts = category.Split(
+            '/',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return string.Empty;
+
+        var full = string.Join("/", parts);
+        if (parts.Length == 2 && VisualWidth(full) <= 16)
+        {
+            return full;
+        }
+
+        var label = parts.Length >= 3 ? parts[1] : parts[^1];
+        if ((label is "内容拓展" or "非内容拓展") && parts.Length > 2)
+        {
+            label = parts[2];
+        }
+        if (VisualWidth(label) <= 16) return label;
+        return TruncateVisual(label, 14).TrimEnd() + "…";
+    }
+
+    private static int VisualWidth(string s)
+    {
+        var w = 0;
+        foreach (var ch in s) w += ch > 0x7F ? 2 : 1;
+        return w;
+    }
+
+    private static string TruncateVisual(string s, int maxWidth)
+    {
+        var w = 0;
+        for (var i = 0; i < s.Length; i++)
+        {
+            w += s[i] > 0x7F ? 2 : 1;
+            if (w > maxWidth) return s[..i];
+        }
+        return s;
+    }
+    public bool HasCategory => ShowCategoryBadge && !string.IsNullOrWhiteSpace(_category);
+    public Thickness TreeIndent { get; init; }
+    public IReadOnlyList<CategoryFrameLayer>? CategoryFrames { get; init; }
+    public Thickness CategoryRowPadding => CategoryFrames is null ? default : new Thickness(0, 3, 0, 3);
 
     public int? LoadOrder { get; init; }
     public double LoadOrderGutterWidth { get; init; }
@@ -145,6 +210,10 @@ public sealed record ModInfo(
     public List<string> ForceLoadBefore { get; init; } = new();
     public List<string> IncompatibleWith { get; init; } = new();
     public List<string> ModDependencies { get; init; } = new();
+    internal IReadOnlySet<string>? IgnoredPrerequisites { get; set; }
+    internal bool IsPrerequisiteIgnored(string id) => IgnoredPrerequisites?.Contains(id) == true;
+    internal IEnumerable<string> RequiredDependenciesForSort => IgnoredPrerequisites is null
+        ? ModDependencies : ModDependencies.Where(id => !IsPrerequisiteIgnored(id));
     public Dictionary<string, string> ModDependencyNames { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> ModDependencyUrls { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public bool IsTranslationMod { get; init; }
@@ -489,7 +558,7 @@ public static class ModCatalog
                 source,
                 string.Join(", ", versions),
                 source == ModSource.Workshop
-                    ? Directory.GetCreationTime(directory)
+                    ? Directory.GetLastWriteTime(directory)
                     : DateTime.MinValue
             )
             {
@@ -535,8 +604,7 @@ public static class ModCatalog
 
     internal static bool DetectTranslationMod(string directory, string name, string packageId)
     {
-        if (TranslationNameTokens.Any(t => name.Contains(t, StringComparison.OrdinalIgnoreCase)) ||
-            TranslationIdTokens.Any(t => packageId.Contains(t, StringComparison.OrdinalIgnoreCase)))
+        if (HasTranslationNameSignal(name) || HasTranslationIdSignal(packageId))
         {
             return true;
         }
@@ -560,6 +628,12 @@ public static class ModCatalog
             return false;
         }
     }
+
+    internal static bool HasTranslationNameSignal(string? name) =>
+        !string.IsNullOrWhiteSpace(name) && TranslationNameTokens.Any(t => name.Contains(t, StringComparison.OrdinalIgnoreCase));
+
+    internal static bool HasTranslationIdSignal(string? packageId) =>
+        !string.IsNullOrWhiteSpace(packageId) && TranslationIdTokens.Any(t => packageId.Contains(t, StringComparison.OrdinalIgnoreCase));
 
     private static bool HasContentDirectory(string directory) =>
         Directory.Exists(Path.Combine(directory, "Defs")) ||

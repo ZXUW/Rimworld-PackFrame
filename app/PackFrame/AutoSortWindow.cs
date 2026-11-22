@@ -466,14 +466,15 @@ internal sealed class AutoSortWindow : Window
             }
 
             var toggleText = new TextBlock { Foreground = ThemeService.SecondaryTextBrush };
+            var chevron = CreateDisclosureChevron();
             void UpdateToggleLabel(bool expanded)
             {
-                var arrow = expanded ? "▼" : "▶";
+                SetDisclosureChevron(chevron, expanded);
                 toggleText.Text = T(
-                    $"{arrow} Satisfied bundle localization remaining targets ({_scan.IgnoredTranslation.Count})",
-                    $"{arrow} 汉化模组已满足的其他前置 ({_scan.IgnoredTranslation.Count})",
-                    $"{arrow} 漢化模組已滿足的其他前置 ({_scan.IgnoredTranslation.Count})",
-                    $"{arrow} 充足済みの統合翻訳MODの残り前提 ({_scan.IgnoredTranslation.Count})");
+                    $"Satisfied bundle localization remaining targets ({_scan.IgnoredTranslation.Count})",
+                    $"汉化模组已满足的其他前置 ({_scan.IgnoredTranslation.Count})",
+                    $"漢化模組已滿足的其他前置 ({_scan.IgnoredTranslation.Count})",
+                    $"充足済みの統合翻訳MODの残り前提 ({_scan.IgnoredTranslation.Count})");
             }
             UpdateToggleLabel(_transExpanded);
 
@@ -484,7 +485,7 @@ internal sealed class AutoSortWindow : Window
                 MinHeight = 28,
                 Margin = new Thickness(0, 6, 0, 0),
                 Theme = Application.Current?.FindResource("FlatButton") as ControlTheme,
-                Content = toggleText
+                Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { chevron, toggleText } }
             };
             toggleBtn.Click += (_, _) =>
             {
@@ -989,17 +990,14 @@ internal sealed class AutoSortWindow : Window
                 });
             }
 
-            var toggleText = new TextBlock { Foreground = ThemeService.SecondaryTextBrush };
-            void UpdateSatisfiedLabel(bool expanded)
+            var toggleText = new TextBlock
             {
-                var arrow = expanded ? "▼" : "▶";
-                toggleText.Text = T(
-                    $"{arrow} Satisfied mod ordering ({satisfiedRules.Count})",
-                    $"{arrow} 已符合的模组排序 ({satisfiedRules.Count})",
-                    $"{arrow} 已符合的模組排序 ({satisfiedRules.Count})",
-                    $"{arrow} 充足済みのMOD順序 ({satisfiedRules.Count})");
-            }
-            UpdateSatisfiedLabel(_satisfiedRulesExpanded);
+                Foreground = ThemeService.SecondaryTextBrush,
+                Text = T($"Satisfied mod ordering ({satisfiedRules.Count})", $"已符合的模组排序 ({satisfiedRules.Count})",
+                    $"已符合的模組排序 ({satisfiedRules.Count})", $"充足済みのMOD順序 ({satisfiedRules.Count})")
+            };
+            var chevron = CreateDisclosureChevron();
+            SetDisclosureChevron(chevron, _satisfiedRulesExpanded);
 
             var toggleBtn = new Button
             {
@@ -1008,13 +1006,13 @@ internal sealed class AutoSortWindow : Window
                 MinHeight = 28,
                 Margin = new Thickness(0, 6, 0, 0),
                 Theme = Application.Current?.FindResource("FlatButton") as ControlTheme,
-                Content = toggleText
+                Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { chevron, toggleText } }
             };
             toggleBtn.Click += (_, _) =>
             {
                 _satisfiedRulesExpanded = !_satisfiedRulesExpanded;
                 satisfiedStack.IsVisible = _satisfiedRulesExpanded;
-                UpdateSatisfiedLabel(_satisfiedRulesExpanded);
+                SetDisclosureChevron(chevron, _satisfiedRulesExpanded);
             };
 
             panel.Children.Add(toggleBtn);
@@ -1023,6 +1021,20 @@ internal sealed class AutoSortWindow : Window
 
         return panel;
     }
+
+    private static Path CreateDisclosureChevron() => new()
+    {
+        Width = 8,
+        Height = 8,
+        Stroke = ThemeService.SecondaryTextBrush,
+        StrokeThickness = 1,
+        Stretch = Stretch.Uniform,
+        VerticalAlignment = VerticalAlignment.Center,
+        IsHitTestVisible = false
+    };
+
+    private static void SetDisclosureChevron(Path chevron, bool expanded) =>
+        chevron.Data = Geometry.Parse(expanded ? "M 1,2 L 4,5 L 7,2" : "M 2,1 L 5,4 L 2,7");
 
     private Control BuildCycleChoiceCard(RuleCyclePair pair)
     {

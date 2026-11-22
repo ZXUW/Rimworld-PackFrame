@@ -32,10 +32,28 @@ internal sealed class BatchCategoryWindow : Window
             MaxHeight = 220,
             IsVisible = categories.Count > 0
         };
-        var input = new TextBox { PlaceholderText = T("New category", "新分类", "新分類", "新しい分類") };
+        var input = new TextBox
+        {
+            PlaceholderText = T("Category (use / for levels, e.g. Race/Milira)", "分类（用 / 分层级，如 种族/米莉拉）", "分類（用 / 分層級，如 種族/米莉拉）", "分類（/ で階層分け、例: 種族/ミリラ）")
+        };
+        var syncing = false;
         list.SelectionChanged += (_, _) =>
         {
-            if (list.SelectedItem is string value) input.Text = value;
+            if (syncing) return;
+            if (list.SelectedItem is string value)
+            {
+                syncing = true;
+                input.Text = value;
+                input.CaretIndex = value.Length;
+                syncing = false;
+            }
+        };
+        input.TextChanged += (_, _) =>
+        {
+            if (syncing) return;
+            syncing = true;
+            list.SelectedItem = null;
+            syncing = false;
         };
 
         var start = new Button
@@ -57,7 +75,7 @@ internal sealed class BatchCategoryWindow : Window
         };
         start.Click += (_, _) =>
         {
-            var category = (list.SelectedItem as string ?? input.Text)?.Trim();
+            var category = CategoryTree.NormalizePath(input.Text ?? list.SelectedItem as string);
             if (string.IsNullOrWhiteSpace(category)) return;
             Close(new BatchCategoryChoice(true, category, false));
         };

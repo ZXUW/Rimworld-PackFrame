@@ -24,6 +24,14 @@ public partial class MainWindow
         if (state.SourceIndex == 2 && mod.Source != ModSource.Local) return false;
         var query = state.Query.Trim();
         if (query.Length == 0) return true;
+        if (state.FieldIndex == 0)
+        {
+            return mod.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                   (!string.IsNullOrWhiteSpace(mod.Alias) &&
+                    mod.Alias.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                   (!string.IsNullOrWhiteSpace(mod.Category) &&
+                    mod.Category.Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
         var value = state.FieldIndex switch
         {
             1 => mod.Author, 2 => mod.Path, 3 => mod.PackageId, 4 => mod.GameVersions, _ => mod.Name
@@ -77,7 +85,7 @@ public partial class MainWindow
             var isOneToManySatisfied = false;
             if (mod.IsTranslationMod)
             {
-                var nonBaseDeps = mod.ModDependencies
+                var nonBaseDeps = mod.RequiredDependenciesForSort
                     .Where(d => !string.Equals(d, mod.PackageId, StringComparison.OrdinalIgnoreCase) &&
                                 !AutoSortPrerequisites.IsCommonBaseId(d))
                     .ToList();
@@ -101,7 +109,7 @@ public partial class MainWindow
                     });
                 }
             }
-            foreach (var id in mod.ModDependencies)
+            foreach (var id in mod.RequiredDependenciesForSort)
             {
                 if (string.Equals(id, mod.PackageId, StringComparison.OrdinalIgnoreCase)) continue;
                 if (positions.TryGetValue(id, out var targetIndex))

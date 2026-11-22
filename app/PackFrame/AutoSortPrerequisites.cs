@@ -364,7 +364,7 @@ internal static class AutoSortPrerequisites
             var modTitle = string.IsNullOrWhiteSpace(mod.RowName) ? mod.Name : mod.RowName;
             if (mod.IsTranslationMod)
             {
-                var nonBaseDeps = mod.ModDependencies
+                var nonBaseDeps = mod.RequiredDependenciesForSort
                     .Where(d => !string.Equals(d, mod.PackageId, StringComparison.OrdinalIgnoreCase) &&
                                 !CommonBaseIds.Contains(d))
                     .ToList();
@@ -386,7 +386,7 @@ internal static class AutoSortPrerequisites
                         return resolved is not null && !isFuzzy && enabled.Contains(resolved.PackageId);
                     });
 
-                foreach (var depId in mod.ModDependencies)
+                foreach (var depId in mod.RequiredDependenciesForSort)
                 {
                     if (string.Equals(depId, mod.PackageId, StringComparison.OrdinalIgnoreCase))
                     {
@@ -426,7 +426,7 @@ internal static class AutoSortPrerequisites
             while (queue.Count > 0)
             {
                 var (current, requesterTitle) = queue.Dequeue();
-                foreach (var depId in current.ModDependencies)
+                foreach (var depId in current.RequiredDependenciesForSort)
                 {
                     if (string.IsNullOrWhiteSpace(depId)) continue;
                     var (resolved, isFuzzy) = Resolve(current, depId);
@@ -566,7 +566,7 @@ internal static class AutoSortPrerequisites
         IReadOnlyList<ModInfo> candidates,
         Func<string, ModInfo?> resolveInstalled)
     {
-        foreach (var dep in mod.ModDependencies)
+        foreach (var dep in mod.RequiredDependenciesForSort)
         {
             if (string.Equals(dep, targetPackageId, StringComparison.OrdinalIgnoreCase))
             {
@@ -600,7 +600,7 @@ internal static class AutoSortPrerequisites
             var mod = resolveInstalled(id);
             if (mod is not null)
             {
-                foreach (var dep in mod.ModDependencies)
+                foreach (var dep in mod.RequiredDependenciesForSort)
                 {
                     if (set.Contains(dep)) Visit(dep);
                 }
@@ -676,7 +676,7 @@ internal static class AutoSortPrerequisites
         foreach (var mod in activeMods)
         {
             if (assigned.Contains(mod.PackageId) || !mod.IsTranslationMod) continue;
-            var nonBaseTargets = mod.ModDependencies.Concat(mod.LoadAfter).Concat(mod.ForceLoadAfter)
+            var nonBaseTargets = mod.RequiredDependenciesForSort.Concat(mod.LoadAfter).Concat(mod.ForceLoadAfter)
                 .Where(id => !string.Equals(id, mod.PackageId, StringComparison.OrdinalIgnoreCase) &&
                              !IsCommonBaseId(id))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -796,7 +796,7 @@ internal static class AutoSortPrerequisites
                 Visit(harmony);
             }
 
-            foreach (var dep in mod.ModDependencies.Concat(mod.LoadAfter).Concat(mod.ForceLoadAfter))
+            foreach (var dep in mod.RequiredDependenciesForSort.Concat(mod.LoadAfter).Concat(mod.ForceLoadAfter))
             {
                 if (byId.TryGetValue(dep, out var target))
                 {
@@ -949,7 +949,7 @@ internal static class AutoSortPrerequisites
         // 1. Explicit modDependencies, loadAfter/forceLoadAfter, loadBefore/forceLoadBefore
         foreach (var mod in activeMods)
         {
-            foreach (var depId in mod.ModDependencies)
+            foreach (var depId in mod.RequiredDependenciesForSort)
             {
                 var target = ResolveActiveTarget(mod, depId, allowResolvedFallback: true);
                 if (target is not null) AddEdge(target, mod.PackageId, SortRuleKind.Dependency);
@@ -1036,7 +1036,7 @@ internal static class AutoSortPrerequisites
         foreach (var mod in activeMods)
         {
             if (!mod.IsTranslationMod || preCoreSet.Contains(mod.PackageId)) continue;
-            var nonBaseTargets = mod.ModDependencies.Concat(mod.LoadAfter).Concat(mod.ForceLoadAfter)
+            var nonBaseTargets = mod.RequiredDependenciesForSort.Concat(mod.LoadAfter).Concat(mod.ForceLoadAfter)
                 .Where(id => !string.Equals(id, mod.PackageId, StringComparison.OrdinalIgnoreCase) && !IsCommonBaseId(id))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -1091,7 +1091,10 @@ internal static class AutoSortPrerequisites
             if (hasExplicitNonBaseParent) continue;
 
             var inferredParent = InferTranslationParent(transMod, nonTransMods);
-            if (inferredParent is not null)
+            if (inferredParent is not null && !transMod.IsPrerequisiteIgnored(inferredParent.PackageId) &&
+                !(transMod.IgnoredPrerequisites?.Any(id => string.Equals(
+                    ResolveActiveTarget(transMod, id, allowResolvedFallback: true), inferredParent.PackageId,
+                    StringComparison.OrdinalIgnoreCase)) ?? false))
             {
                 AddEdge(inferredParent.PackageId, transMod.PackageId, SortRuleKind.ImplicitTranslation);
             }

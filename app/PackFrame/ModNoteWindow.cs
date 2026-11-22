@@ -11,10 +11,12 @@ internal sealed class ModNoteWindow : Window
 {
     private readonly string? _language;
 
-    internal ModNoteWindow(string modName, string? alias, string? category, string? language)
+    internal ModNoteWindow(string modName, string? alias, string? category, string? language, bool categoryOnly = false)
     {
         _language = language;
-        Title = T("Note", "备注", "備註", "メモ");
+        Title = categoryOnly
+            ? T("Set category", "设置分类", "設定分類", "分類を設定")
+            : T("Note", "备注", "備註", "メモ");
         Width = 460;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -26,12 +28,13 @@ internal sealed class ModNoteWindow : Window
         var aliasBox = new TextBox
         {
             Text = alias ?? string.Empty,
-            PlaceholderText = T("Alias", "别名", "別名", "別名")
+            PlaceholderText = T("Alias", "别名", "別名", "別名"),
+            IsVisible = !categoryOnly
         };
         var categoryBox = new TextBox
         {
             Text = category ?? string.Empty,
-            PlaceholderText = T("Category", "分类", "分類", "分類")
+            PlaceholderText = T("Category (use / for levels, e.g. Race/Milira)", "分类（用 / 分层级，如 种族/米莉拉）", "分類（用 / 分層級，如 種族/米莉拉）", "分類（/ で階層分け、例: 種族/ミリラ）")
         };
         var save = new Button
         {
@@ -71,7 +74,7 @@ internal sealed class ModNoteWindow : Window
                 }
             }
         };
-        Opened += (_, _) => aliasBox.Focus();
+        Opened += (_, _) => (categoryOnly ? categoryBox : aliasBox).Focus();
     }
 
     private string T(string en, string zh, string tw, string ja) =>

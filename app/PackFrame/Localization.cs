@@ -690,14 +690,14 @@ public static class Localization
         };
     }
 
-    public static string SearchBySubscribedTime(string? language)
+    public static string SearchByLastModifiedTime(string? language)
     {
         return language switch
         {
-            SimplifiedChinese => "订阅时间",
-            TraditionalChinese => "訂閱時間",
-            Japanese => "購読日時",
-            _ => "Subscription time"
+            SimplifiedChinese => "最近修改",
+            TraditionalChinese => "最近修改",
+            Japanese => "最終更新",
+            _ => "Last modified"
         };
     }
 

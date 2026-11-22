@@ -245,6 +245,9 @@
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="CornerRadius" Value="0" />
         </Style>
+        <Style Selector="ComboBoxItem.plus-item /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
         <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />

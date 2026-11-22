@@ -171,6 +171,39 @@ try
     Check(ModListOperations.InsertSelection(Array.Empty<string>(), new[] { "a" }, 99)
         .SequenceEqual(new[] { "a" }), "insertion handles empty target and out-of-range index");
     Check(originalOrder.SequenceEqual(new[] { "a", "b", "c", "d", "e" }), "reordering does not mutate original snapshot");
+    var inactiveA = new ModInfo("Alpha", "", "", "alpha", "", null, ModSource.Local, "", DateTime.MinValue);
+    var inactiveB = new ModInfo("Beta", "", "", "beta", "", null, ModSource.Local, "", DateTime.MinValue);
+    var inactiveC = new ModInfo("Gamma", "", "", "gamma", "", null, ModSource.Local, "", DateTime.MinValue);
+    var defaultMods = ModListOperations.DefaultNewInstanceMods(new[]
+    {
+        inactiveA with { PackageId = "ludeon.rimworld", Source = ModSource.Official },
+        inactiveB with { PackageId = "ludeon.rimworld.biotech", Source = ModSource.Official },
+        inactiveC with { PackageId = "ludeon.rimworld.odyssey", Source = ModSource.Workshop },
+        inactiveA with { PackageId = "brrainz.harmony", Source = ModSource.Workshop }
+    });
+    Check(defaultMods.SequenceEqual(new[] { "brrainz.harmony", "ludeon.rimworld", "ludeon.rimworld.biotech" }),
+        "new instances enable installed Harmony, Core and detected official DLC only");
+    var initialInactiveOrder = ModListOperations.ReconcileInactiveOrder(Array.Empty<string>(), new[] { inactiveB, inactiveA }, initialize: true);
+    Check(initialInactiveOrder.SequenceEqual(new[] { "alpha", "beta" }), "unsorted mode initializes by name ascending");
+    var refreshedInactiveOrder = ModListOperations.ReconcileInactiveOrder(initialInactiveOrder, new[] { inactiveC, inactiveA }, initialize: false);
+    Check(refreshedInactiveOrder.SequenceEqual(new[] { "alpha", "gamma" }), "inactive refresh retains old order, drops missing IDs, and appends new mods");
+    Check(ModListOperations.MoveIdsToEnd(refreshedInactiveOrder, new[] { "alpha" }).SequenceEqual(new[] { "gamma", "alpha" }),
+        "disabled mods move to the end of the saved inactive order");
+    Check(ModListOperations.OrderBySavedPosition(new[] { inactiveC, inactiveA }, refreshedInactiveOrder)
+        .Select(mod => mod.PackageId).SequenceEqual(new[] { "alpha", "gamma" }), "unsorted mode follows saved instance order");
+    Check(ModListOperations.OrderBySavedPosition(new[] { inactiveC, inactiveA }, refreshedInactiveOrder, reversed: true)
+        .Select(mod => mod.PackageId).SequenceEqual(new[] { "gamma", "alpha" }),
+        "descending manual mode shows the saved order reversed without rewriting it");
+    Check(ModListOperations.SavedInsertIndex(10, 0, true) == 10 &&
+          ModListOperations.SavedInsertIndex(10, 10, true) == 0 &&
+          ModListOperations.SavedInsertIndex(10, 3, true) == 7 &&
+          ModListOperations.SavedInsertIndex(10, 3, false) == 3,
+        "a drop in a reversed list maps its display position back to the saved slot");
+    var reversedSaved = new List<string> { "a", "b", "c", "d", "e" };
+    Check(ModListOperations.InsertSelection(reversedSaved, new[] { "a" },
+            ModListOperations.SavedInsertIndex(reversedSaved.Count, 0, reversed: true))
+        .SequenceEqual(new[] { "b", "c", "d", "e", "a" }),
+        "dropping at the top of a reversed list writes the item to the end of the saved order");
     Check(ModListOperations.NudgeSelection(originalOrder, new[] { "b", "d" }, -1)
         .SequenceEqual(new[] { "b", "a", "d", "c", "e" }), "Alt+Up nudges noncontiguous selection up one slot");
     Check(ModListOperations.NudgeSelection(originalOrder, new[] { "a", "c" }, -1)
@@ -369,6 +402,16 @@ Check(launch.ArgumentList.SequenceEqual(new[] { "-logfile", Path.Combine(saveFol
     var otherMod = framework with { PackageId = "other", LoadBefore = new(), ForceLoadBefore = new(), IncompatibleWith = new() };
     Check(framework.LoadBefore.SequenceEqual(new[] { "other" }) && framework.ForceLoadBefore.SequenceEqual(new[] { "forced" }),
         "mod metadata reads both Before rule types");
+    var modifiedWorkshopFolder = Path.Combine(root, "modified-workshop-mod");
+    Directory.CreateDirectory(Path.Combine(modifiedWorkshopFolder, "About"));
+    File.WriteAllText(Path.Combine(modifiedWorkshopFolder, "About", "About.xml"),
+        "<ModMetaData><packageId>workshop.modified</packageId></ModMetaData>");
+    var expectedModifiedAt = DateTime.Now.AddDays(-3);
+    Directory.SetLastWriteTime(modifiedWorkshopFolder, expectedModifiedAt);
+    var modifiedWorkshop = ModCatalog.ReadMod(modifiedWorkshopFolder, ModSource.Workshop)!;
+    Check(Math.Abs((modifiedWorkshop.LastModifiedAt - expectedModifiedAt).TotalSeconds) < 2 &&
+        ModCatalog.ReadMod(modifiedWorkshopFolder, ModSource.Local)!.LastModifiedAt == DateTime.MinValue,
+        "recent-modified sort field reads Workshop folder last-write time only");
     var versionDepsFolder = Path.Combine(root, "versioned-deps-mod");
     Directory.CreateDirectory(Path.Combine(versionDepsFolder, "About"));
     File.WriteAllText(Path.Combine(versionDepsFolder, "About", "About.xml"),

@@ -71,7 +71,7 @@ internal static class GameLaunchService
 
     // Link preparation remains a separate step so the UI can show its existing specific error.
     public static Task Start(RimWorldInstallation game, ManagedInstance instance, string saveDataFolder,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, Action<bool>? gameStateChanged = null)
     {
         instance.EnsureHealthy();
         try
@@ -94,13 +94,14 @@ internal static class GameLaunchService
                 var steamProcess = Process.Start(BuildSteamStartInfo(steam, saveDataFolder))
                     ?? throw new IOException("The Steam process could not be started.");
                 return ObserveSteamLaunchAsync(steamProcess, existing, game.GamePath!,
-                    instance, saveDataFolder, startedAt, cancellationToken);
+                    instance, saveDataFolder, startedAt, cancellationToken, gameStateChanged);
             }
 
             var process = Process.Start(BuildStartInfo(game.ExecutablePath!, game.GamePath,
                 saveDataFolder, OperatingSystem.IsMacOS()))
                 ?? throw new IOException("The game process could not be started.");
-            return ObserveExitAsync(process, game.GamePath!, instance, saveDataFolder, startedAt);
+            gameStateChanged?.Invoke(true);
+            return ObserveExitAsync(process, game.GamePath!, instance, saveDataFolder, startedAt, cancellationToken);
         }
         catch
         {
@@ -281,7 +282,7 @@ internal static class GameLaunchService
 
     private static async Task ObserveSteamLaunchAsync(Process steamProcess, HashSet<int> existingIds,
         string gamePath, ManagedInstance instance, string saveDataFolder, DateTime startedAt,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Action<bool>? gameStateChanged)
     {
         steamProcess.Dispose();
         try
@@ -304,10 +305,18 @@ internal static class GameLaunchService
                 return;
             }
 
-            await ObserveExitAsync(gameProcess, gamePath, instance, saveDataFolder, startedAt);
+            gameStateChanged?.Invoke(true);
+            await ObserveExitAsync(gameProcess, gamePath, instance, saveDataFolder, startedAt, cancellationToken,
+                gameStateChanged);
         }
         catch (OperationCanceledException)
         {
+            try
+            {
+                using var launched = FindNewGameProcess(existingIds);
+                if (launched is { HasExited: false }) launched.Kill(entireProcessTree: true);
+            }
+            catch (Exception exception) { AppLog.Error("Terminate cancelled Steam launch", exception); }
         }
         catch (Exception exception)
         {
@@ -333,19 +342,26 @@ internal static class GameLaunchService
     }
 
     private static async Task ObserveExitAsync(Process process, string gamePath,
-        ManagedInstance instance, string saveDataFolder, DateTime startedAt)
+        ManagedInstance instance, string saveDataFolder, DateTime startedAt, CancellationToken cancellationToken,
+        Action<bool>? gameStateChanged = null)
     {
         using (process)
         {
+            using var registration = cancellationToken.Register(() =>
+            {
+                try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+                catch (Exception exception) { AppLog.Error("Terminate launched RimWorld", exception); }
+            });
             try
             {
-                await process.WaitForExitAsync();
+                await process.WaitForExitAsync(CancellationToken.None);
                 await Task.Delay(300);
                 try { ModLinkService.Cleanup(gamePath, instance); }
                 catch (Exception exception) { AppLog.Error("Cleanup links after game exit", exception); }
                 await MirrorLogAsync(saveDataFolder, startedAt);
             }
             catch (Exception exception) { AppLog.Error("Observe game exit", exception); }
+            finally { gameStateChanged?.Invoke(false); }
         }
     }
 

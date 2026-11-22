@@ -78,12 +78,14 @@ public partial class MainWindow : Window
     private readonly Button _browseButton;
     private readonly Button _paintModeButton;
     private readonly Button _batchCategoryButton;
+    private readonly Button _modCategoryButton;
     private readonly TextBox _noteAliasBox;
     private readonly TextBox _noteCategoryBox;
     private ModInfo? _detailMod;
     private readonly Button _undoButton;
     private readonly Button _redoButton;
     private readonly Button _launchButton;
+    private readonly Button _terminateGameButton;
     private readonly Button _saveButton;
     private readonly Button _refreshButton;
     private readonly Button _syncConfigButton;
@@ -101,6 +103,11 @@ public partial class MainWindow : Window
     private readonly ComboBox _activeSearchField2;
     private readonly Button _inactiveSourceButton;
     private readonly Button _inactiveSortButton;
+    private readonly Button _inactiveCategoryModeButton;
+    private readonly Button _inactiveCollapseCategoriesButton;
+    private readonly Button _inactiveSortActionButton;
+    private readonly HashSet<string> _collapsedCategories = new(StringComparer.OrdinalIgnoreCase);
+    private CategoryHeaderRow? _pressedCategoryHeader;
     private readonly Button _activeSourceButton1;
     private readonly Button _activeSourceButton2;
     private readonly Button _inactiveViewModeButton;
@@ -147,6 +154,10 @@ public partial class MainWindow : Window
     private readonly SelectableTextBlock _pathValue;
     private readonly SelectableTextBlock _packageValue;
     private readonly SelectableTextBlock _descriptionValue;
+    private readonly Border _prerequisitesSection;
+    private readonly TextBlock _prerequisitesLabel;
+    private readonly TextBlock _prerequisitesHint;
+    private readonly StackPanel _prerequisitesItems;
     private readonly Image _previewImage;
     private readonly Canvas _dragOverlay;
     private readonly Border _dragGhost;
@@ -169,8 +180,8 @@ public partial class MainWindow : Window
     private Dictionary<string, List<ModInfo>> _modsByPackage = new(StringComparer.OrdinalIgnoreCase);
     private List<ManagedInstance> _instances = new();
     private readonly List<string> _scratchActiveIds = new();
-    private readonly ObservableCollection<string> _instanceNames1 = new();
-    private readonly ObservableCollection<string> _instanceNames2 = new();
+    private readonly ObservableCollection<InstanceSelectorItem> _instanceNames1 = new();
+    private readonly ObservableCollection<InstanceSelectorItem> _instanceNames2 = new();
     private int _inactiveCount;
     private int _active1Count;
     private int _active2Count;
@@ -229,8 +240,9 @@ public partial class MainWindow : Window
     private TopLevel? _instanceDragTopLevel;
     private ComboBoxItem? _instanceDropTarget;
     private bool _updatingSearch;
-    private int _inactiveSortField;
+    private int _inactiveSortField = 6;
     private bool _inactiveSortAscending = true;
+    private int? _pendingInactiveSortField;
     private readonly ProblemFilterState _inactiveFilter = new();
     private readonly ProblemFilterState _activeFilter1 = new();
     private readonly ProblemFilterState _activeFilter2 = new();
@@ -252,6 +264,7 @@ public partial class MainWindow : Window
     public MainWindow(AppConfig config)
     {
         _config = config;
+        _inactiveSortField = 6;
         InitializeComponent();
 
         _gamePathLabel = Find<TextBlock>("GamePathLabel");
@@ -262,11 +275,13 @@ public partial class MainWindow : Window
         _browseButton = Find<Button>("BrowseButton");
         _paintModeButton = Find<Button>("PaintModeButton");
         _batchCategoryButton = Find<Button>("BatchCategoryButton");
+        _modCategoryButton = Find<Button>("ModCategoryButton");
         _noteAliasBox = Find<TextBox>("NoteAliasBox");
         _noteCategoryBox = Find<TextBox>("NoteCategoryBox");
         _undoButton = Find<Button>("UndoButton");
         _redoButton = Find<Button>("RedoButton");
         _launchButton = Find<Button>("LaunchButton");
+        _terminateGameButton = Find<Button>("TerminateGameButton");
         _launchTargetText = Find<TextBlock>("LaunchTargetText");
         _saveButton = Find<Button>("SaveButton");
         _refreshButton = Find<Button>("RefreshButton");
@@ -284,6 +299,13 @@ public partial class MainWindow : Window
         _activeSearchField2 = Find<ComboBox>("ActiveSearchField2");
         _inactiveSourceButton = Find<Button>("InactiveSourceButton");
         _inactiveSortButton = Find<Button>("InactiveSortButton");
+        _inactiveSortActionButton = Find<Button>("InactiveSortActionButton");
+        _inactiveCategoryModeButton = Find<Button>("InactiveCategoryModeButton");
+        _inactiveCollapseCategoriesButton = Find<Button>("InactiveCollapseCategoriesButton");
+        foreach (var cat in _config.CollapsedCategories)
+        {
+            if (!string.IsNullOrWhiteSpace(cat)) _collapsedCategories.Add(cat);
+        }
         _activeSourceButton1 = Find<Button>("ActiveSourceButton1");
         _activeSourceButton2 = Find<Button>("ActiveSourceButton2");
         _inactiveViewModeButton = Find<Button>("InactiveViewModeButton");
@@ -350,6 +372,10 @@ public partial class MainWindow : Window
         _pathValue = Find<SelectableTextBlock>("PathValue");
         _packageValue = Find<SelectableTextBlock>("PackageValue");
         _descriptionValue = Find<SelectableTextBlock>("DescriptionValue");
+        _prerequisitesSection = Find<Border>("PrerequisitesSection");
+        _prerequisitesLabel = Find<TextBlock>("PrerequisitesLabel");
+        _prerequisitesHint = Find<TextBlock>("PrerequisitesHint");
+        _prerequisitesItems = Find<StackPanel>("PrerequisitesItems");
         _previewImage = Find<Image>("PreviewImage");
         _dragOverlay = Find<Canvas>("DragOverlay");
         _dragGhost = Find<Border>("DragGhost");
@@ -589,6 +615,8 @@ public partial class MainWindow : Window
                 catch (Exception exception) { AppLog.Error("Refresh community rules on startup", exception); }
                 try { await WorkshopMapCache.Shared.RefreshAsync(); }
                 catch (Exception exception) { AppLog.Error("Refresh workshop map on startup", exception); }
+                try { await ModCategoryDatabase.RefreshAsync(); }
+                catch (Exception exception) { AppLog.Error("Refresh mod categories on startup", exception); }
             });
             Dispatcher.UIThread.Post(
                 () => _inactiveList.Focus(),
@@ -643,9 +671,13 @@ public partial class MainWindow : Window
             "更新を確認"
         );
         Find<Button>("LogButton").Content = Localization.LogButton(language);
+        _modCategoryButton.Content = UpdateText("Mod categories", "模组分类", "模組分類", "MOD分類");
         UpdateBatchCategoryButtonVisual();
+        UpdateInactiveCategoryModeButton();
+        _inactiveCollapseCategoriesButton.Content = UpdateText("Collapse", "折叠", "摺疊", "折りたたむ");
+        ToolTip.SetTip(_inactiveCollapseCategoriesButton, UpdateText("Collapse or expand all folders", "折叠/展开全部文件夹", "摺疊/展開全部資料夾", "すべてのフォルダーを折りたたむ/展開"));
         _noteAliasBox.PlaceholderText = UpdateText("Note name", "备注名", "備註名", "メモ名");
-        _noteCategoryBox.PlaceholderText = UpdateText("Category", "分类", "分類", "分類");
+        _noteCategoryBox.PlaceholderText = UpdateText("Category (use / to create folder levels)", "分类（用“/”分文件夹层次）", "分類（用「/」分資料夾層次）", "「/」でフォルダー階層を分ける");
         _qqGroupText.Text = OperationText.Choose(
             language,
             "QQ group: 960717872",
@@ -665,6 +697,8 @@ public partial class MainWindow : Window
         _pathLabel.Text = Localization.FieldPath(language);
         _packageLabel.Text = Localization.FieldPackageId(language);
         _descriptionLabel.Text = Localization.FieldDescription(language);
+        _prerequisitesLabel.Text = UpdateText("Required mods", "前置", "前置", "必須MOD");
+        UpdatePrerequisitesDetails(_detailMod);
         var searchPlaceholder = Localization.SearchMods(language);
         _inactiveSearchBox.PlaceholderText = searchPlaceholder;
         _activeSearchBox1.PlaceholderText = searchPlaceholder;
@@ -1100,6 +1134,37 @@ public partial class MainWindow : Window
         }
 
         var entry = _undoHistory[^1];
+        if (entry.CategoryBefore is not null)
+        {
+            try
+            {
+                ModNoteStore.SetCategories(_packRoot, entry.CategoryBefore);
+                _undoHistory.RemoveAt(_undoHistory.Count - 1);
+                _redoHistory.Add(new UndoEntry(
+                    new List<InstanceSnapshot>(),
+                    entry.ModIds,
+                    entry.SourceColumn,
+                    entry.TargetColumn,
+                    CategoryBefore: entry.CategoryAfter,
+                    CategoryAfter: entry.CategoryBefore
+                ));
+                while (_redoHistory.Count > 10)
+                {
+                    _redoHistory.RemoveAt(0);
+                }
+
+                UpdateUndoButton();
+                ApplyNotesToLists(true);
+                ShowToast(UpdateText("Categories restored", "已恢复分类", "已恢復分類", "分類を元に戻しました"));
+            }
+            catch
+            {
+                ShowUndoFailed();
+            }
+
+            return;
+        }
+
         if (entry.ColorBefore is not null)
         {
             try
@@ -1178,6 +1243,37 @@ public partial class MainWindow : Window
         }
 
         var entry = _redoHistory[^1];
+        if (entry.CategoryBefore is not null)
+        {
+            try
+            {
+                ModNoteStore.SetCategories(_packRoot, entry.CategoryBefore);
+                _redoHistory.RemoveAt(_redoHistory.Count - 1);
+                _undoHistory.Add(new UndoEntry(
+                    new List<InstanceSnapshot>(),
+                    entry.ModIds,
+                    entry.SourceColumn,
+                    entry.TargetColumn,
+                    CategoryBefore: entry.CategoryAfter,
+                    CategoryAfter: entry.CategoryBefore
+                ));
+                while (_undoHistory.Count > 10)
+                {
+                    _undoHistory.RemoveAt(0);
+                }
+
+                UpdateUndoButton();
+                ApplyNotesToLists(true);
+                ShowToast(UpdateText("Categories restored", "已恢复分类", "已恢復分類", "分類を元に戻しました"));
+            }
+            catch
+            {
+                ShowRedoFailed();
+            }
+
+            return;
+        }
+
         if (entry.ColorBefore is not null)
         {
             try
@@ -1279,7 +1375,9 @@ public partial class MainWindow : Window
         int TargetColumn,
         Dictionary<string, string?>? ColorBefore = null,
         Dictionary<string, string?>? ColorAfter = null,
-        bool AllowMissingMods = false
+        bool AllowMissingMods = false,
+        Dictionary<string, string?>? CategoryBefore = null,
+        Dictionary<string, string?>? CategoryAfter = null
     );
     private void UpdateProblemSummary(
         TextBlock? sortText,
@@ -2427,6 +2525,11 @@ public partial class MainWindow : Window
                 }
 
                 _allMods = mods;
+                var initialNotes = ModNoteStore.Load(_packRoot);
+                foreach (var mod in _allMods)
+                {
+                    ApplyNote(mod, initialNotes);
+                }
                 _modsByPackage = mods
                     .GroupBy(mod => mod.PackageId, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(
@@ -2544,17 +2647,19 @@ public partial class MainWindow : Window
 
     private void SetInstanceNames(IReadOnlyList<string> names)
     {
-        UpdateInstanceNames(_instanceNames1, names);
-        UpdateInstanceNames(_instanceNames2, names);
+        var items = names.Select(name => new InstanceSelectorItem(name, false))
+            .Append(new InstanceSelectorItem("+", true)).ToList();
+        UpdateInstanceNames(_instanceNames1, items);
+        UpdateInstanceNames(_instanceNames2, items);
     }
 
     private static void UpdateInstanceNames(
-        ObservableCollection<string> target,
-        IReadOnlyList<string> names
+        ObservableCollection<InstanceSelectorItem> target,
+        IReadOnlyList<InstanceSelectorItem> names
     )
     {
         if (target.Count == names.Count &&
-            target.SequenceEqual(names, StringComparer.Ordinal))
+            target.SequenceEqual(names))
         {
             return;
         }
@@ -2708,6 +2813,7 @@ public partial class MainWindow : Window
         }
 
         var targetInstance = GetInstanceAt(targetIndex);
+        ReconcileInactiveOrder(targetInstance);
         var inactiveSource = DeduplicateModsForInstance(
             ApplySteamCmdFilter(
                 _allMods.Where(mod => !activeIds.Contains(mod.PackageId)),
@@ -2719,7 +2825,7 @@ public partial class MainWindow : Window
         _searchSources[_activeList1] = active1;
         _searchSources[_activeList2] = active2;
         var inactive = PrepareSearchList(_searchSources[_inactiveList], _inactiveSearch);
-        inactive = SortInactive(inactive);
+        if (!_config.InactiveCategoryMode) inactive = SortInactive(inactive);
         active1 = PrepareSearchList(active1, _activeSearch1);
         active2 = PrepareSearchList(active2, _activeSearch2);
         var inactiveForSummary = inactive;
@@ -2729,12 +2835,14 @@ public partial class MainWindow : Window
         active1 = ApplyProblemFilters(active1, _activeFilter1);
         active2 = ApplyProblemFilters(active2, _activeFilter2);
         var colorData = ModColorStore.Load(_packRoot);
-        inactive = ApplyModNotes(ApplyModColors(inactive, colorData));
-        active1 = ApplyModNotes(ApplyModColors(active1, colorData));
-        active2 = ApplyModNotes(ApplyModColors(active2, colorData));
+        inactive = ApplyModNotes(ApplyModColors(inactive, colorData), showCategoryBadge: !_config.InactiveCategoryMode);
+        active1 = ApplyModNotes(ApplyModColors(active1, colorData), showCategoryBadge: true);
+        active2 = ApplyModNotes(ApplyModColors(active2, colorData), showCategoryBadge: true);
+        var inactiveRows = BuildInactiveDisplayRows(inactive);
+        var inactiveVisibleMods = inactiveRows.OfType<ModInfo>().ToList();
 
         _refreshing = true;
-        ReplacePaneItems(_inactiveList, inactive, PaneInstanceScope(targetInstance));
+        ReplacePaneItems(_inactiveList, inactiveRows, PaneInstanceScope(targetInstance));
         ReplacePaneItems(_activeList1, active1, PaneInstanceScope(instance1));
         ReplacePaneItems(_activeList2, active2, PaneInstanceScope(instance2));
         _refreshing = false;
@@ -2788,7 +2896,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var first = inactive.FirstOrDefault()
+        var first = inactiveVisibleMods.FirstOrDefault()
             ?? active1.FirstOrDefault()
             ?? active2.FirstOrDefault();
         if (first is null)
@@ -2798,7 +2906,7 @@ public partial class MainWindow : Window
         }
 
         _refreshing = true;
-        if (inactive.Contains(first))
+        if (inactiveVisibleMods.Contains(first))
         {
             _inactiveList.SelectedItem = first;
         }
@@ -2811,7 +2919,7 @@ public partial class MainWindow : Window
             _activeList2.SelectedItem = first;
         }
         _refreshing = false;
-        var selectedList = inactive.Contains(first) ? _inactiveList : active1.Contains(first) ? _activeList1 : _activeList2;
+        var selectedList = inactiveVisibleMods.Contains(first) ? _inactiveList : active1.Contains(first) ? _activeList1 : _activeList2;
         SetPaneInteractionContext(selectedList);
         SetPaneAnchor(selectedList, selectedList.SelectedIndex);
         ShowDetails(first);
@@ -2870,10 +2978,11 @@ public partial class MainWindow : Window
         var state = inactive ? _inactiveSearch : firstColumn ? _activeSearch1 : _activeSearch2;
         var filter = inactive ? _inactiveFilter : firstColumn ? _activeFilter1 : _activeFilter2;
         var matches = PrepareSearchList(source, state);
-        if (inactive) matches = SortInactive(matches);
-        var visible = ApplyModNotes(ApplyModColors(ApplyProblemFilters(matches, filter), ModColorStore.Load(_packRoot)));
+        if (inactive && !_config.InactiveCategoryMode) matches = SortInactive(matches);
+        var visible = ApplyModNotes(ApplyModColors(ApplyProblemFilters(matches, filter), ModColorStore.Load(_packRoot)), showCategoryBadge: !inactive || !_config.InactiveCategoryMode);
+        var displayRows = inactive ? BuildInactiveDisplayRows(visible) : visible;
         _refreshing = true;
-        ReplacePaneItems(list, visible, _paneScopes.GetValueOrDefault(list), selectFirst: true);
+        ReplacePaneItems(list, displayRows, _paneScopes.GetValueOrDefault(list), selectFirst: true);
         var first = list.SelectedItem as ModInfo;
         _refreshing = false;
         if (inactive) _inactiveCount = visible.Count;
@@ -3016,50 +3125,234 @@ public partial class MainWindow : Window
     }
     private void OnInactiveSortClick(object? sender, RoutedEventArgs e)
     {
+        if (_config.InactiveCategoryMode) return;
         var language = _config.Language;
         var flyout = new MenuFlyout();
+        flyout.Items.Add(CreateMenuItem((_inactiveSortField == 6 ? "✓ " : "   ") + SortFieldName(6, language), true, () =>
+        {
+            _inactiveSortField = 6;
+            UpdateSortButton(language);
+            RefreshInactivePreservingScroll();
+        }));
+        flyout.Items.Add(new Separator());
         for (var i = 0; i < 6; i++)
         {
             var field = i;
-            var header = (i == _inactiveSortField ? "✓ " : "   ") +
-                SortFieldName(field, language);
-            flyout.Items.Add(CreateMenuItem(header, true, () =>
+            flyout.Items.Add(CreateMenuItem((_inactiveSortField == field ? "✓ " : "   ") + SortFieldName(field, language), true, () =>
             {
                 _inactiveSortField = field;
                 UpdateSortButton(language);
                 RefreshInactivePreservingScroll();
             }));
         }
-
         flyout.Items.Add(new Separator());
-        flyout.Items.Add(CreateMenuItem(
-            (_inactiveSortAscending ? "✓ " : "   ") + Localization.Ascending(language),
-            true,
-            () =>
-            {
-                _inactiveSortAscending = true;
-                UpdateSortButton(language);
-                RefreshInactivePreservingScroll();
-            }
-        ));
-        flyout.Items.Add(CreateMenuItem(
-            (!_inactiveSortAscending ? "✓ " : "   ") + Localization.Descending(language),
-            true,
-            () =>
-            {
-                _inactiveSortAscending = false;
-                UpdateSortButton(language);
-                RefreshInactivePreservingScroll();
-            }
-        ));
+        flyout.Items.Add(CreateMenuItem((_inactiveSortAscending ? "✓ " : "   ") + Localization.Ascending(language), true, () =>
+        {
+            _inactiveSortAscending = true;
+            UpdateSortButton(language);
+            RefreshInactivePreservingScroll();
+        }));
+        flyout.Items.Add(CreateMenuItem((!_inactiveSortAscending ? "✓ " : "   ") + Localization.Descending(language), true, () =>
+        {
+            _inactiveSortAscending = false;
+            UpdateSortButton(language);
+            RefreshInactivePreservingScroll();
+        }));
         flyout.ShowAt(_inactiveSortButton);
+    }
+
+    private void OnInactiveSortActionClick(object? sender, RoutedEventArgs e)
+    {
+        if (_config.InactiveCategoryMode) return;
+        var language = _config.Language;
+        var flyout = new MenuFlyout();
+        for (var i = 0; i < 6; i++)
+        {
+            var field = i;
+            flyout.Items.Add(CreateMenuItem(SortFieldName(field, language), true, () =>
+            {
+                _pendingInactiveSortField = field;
+                ShowInactiveSortDirectionMenu();
+            }));
+        }
+        flyout.ShowAt(_inactiveSortActionButton);
+    }
+
+    private void ShowInactiveSortDirectionMenu()
+    {
+        var language = _config.Language;
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(CreateMenuItem(Localization.Ascending(language), true, () =>
+        {
+            ApplySortToUnorderedList(_pendingInactiveSortField ?? 0, ascending: true);
+            _pendingInactiveSortField = null;
+        }));
+        flyout.Items.Add(CreateMenuItem(Localization.Descending(language), true, () =>
+        {
+            ApplySortToUnorderedList(_pendingInactiveSortField ?? 0, ascending: false);
+            _pendingInactiveSortField = null;
+        }));
+        flyout.ShowAt(_inactiveSortActionButton);
+    }
+
+    private void ApplySortToUnorderedList(int field, bool ascending)
+    {
+        var instance = GetSelectedInstance(_lastEnableColumn - 1);
+        if (instance is null || instance.IsDamaged) return;
+        ReconcileInactiveOrder(instance);
+        var byId = _allMods.GroupBy(mod => mod.PackageId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var ordered = instance.InactiveModOrder
+            .Where(byId.ContainsKey)
+            .Select(id => byId[id])
+            .Where(mod => !instance.ActivePackageIds.Contains(mod.PackageId, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        var sorted = SortInactiveByField(ordered, field, ascending);
+        var sortedIds = sorted.Select(mod => mod.PackageId).ToList();
+        var inactiveIds = new HashSet<string>(sortedIds, StringComparer.OrdinalIgnoreCase);
+        var order = instance.InactiveModOrder.Where(id => !inactiveIds.Contains(id)).Concat(sortedIds).ToList();
+        SaveInactiveModOrder(instance, order);
+        _inactiveSortField = 6;
+        // The order was just written in this direction; show it forwards.
+        _inactiveSortAscending = true;
+        UpdateSortButton(_config.Language);
+        RefreshInactivePreservingScroll();
+    }
+
+    private void OnInactiveCategoryModeClick(object? sender, RoutedEventArgs e)
+    {
+        _config.InactiveCategoryMode = !_config.InactiveCategoryMode;
+        _config.Save();
+        UpdateInactiveCategoryModeButton();
+        if (_allMods.Count > 0)
+        {
+            RefreshInactivePreservingScroll();
+        }
+    }
+
+    private void UpdateInactiveCategoryModeButton()
+    {
+        var active = _config.InactiveCategoryMode;
+        _inactiveList.Classes.Set("category-mode", active);
+        _inactiveCategoryModeButton.Content = active
+            ? UpdateText("Category mode", "分类模式", "分類模式", "分類モード")
+            : UpdateText("List mode", "列表模式", "清單模式", "リストモード");
+        _inactiveCategoryModeButton.Background = active ? TextBrush : SecondaryBorderBrush;
+        _inactiveCategoryModeButton.Foreground = active ? ThemeService.BackgroundBrush : Brushes.White;
+        _inactiveCategoryModeButton.FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal;
+        _modCategoryButton.IsVisible = active;
+        _inactiveCollapseCategoriesButton.IsVisible = active;
+        _inactiveSortButton.IsVisible = !active;
+        _inactiveSortActionButton.IsVisible = !active && _inactiveSortField == 6;
+    }
+
+    private void ToggleCategoryCollapse(string pathKey)
+    {
+        if (!_collapsedCategories.Add(pathKey))
+        {
+            _collapsedCategories.Remove(pathKey);
+        }
+
+        _config.CollapsedCategories = _collapsedCategories.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+        _config.Save();
+        RefreshInactivePreservingScroll();
+    }
+
+    private void CollapseOrExpandAllCategories(bool collapse)
+    {
+        _collapsedCategories.Clear();
+        if (collapse)
+        {
+            foreach (var row in _inactiveList.Items.OfType<CategoryHeaderRow>())
+            {
+                _collapsedCategories.Add(row.PathKey);
+            }
+            foreach (var cat in ModNoteStore.Categories(_packRoot))
+            {
+                _collapsedCategories.Add(cat);
+            }
+            _collapsedCategories.Add(CategoryTree.UncategorizedKey);
+        }
+
+        _config.CollapsedCategories = _collapsedCategories.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+        _config.Save();
+        RefreshInactivePreservingScroll();
+    }
+
+    private void CollapseOrExpandCategorySubtree(CategoryHeaderRow header, bool collapse)
+    {
+        var root = header.PathKey;
+        if (string.IsNullOrEmpty(root)) return;
+
+        var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { root };
+        foreach (var category in ModNoteStore.Categories(_packRoot))
+        {
+            if (category.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                affected.Add(category);
+            }
+        }
+
+        foreach (var path in affected)
+        {
+            if (collapse) _collapsedCategories.Add(path);
+            else _collapsedCategories.Remove(path);
+        }
+
+        _config.CollapsedCategories = _collapsedCategories
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _config.Save();
+        RefreshInactivePreservingScroll();
+    }
+
+    private void OnInactiveCollapseCategoriesClick(object? sender, RoutedEventArgs e)
+    {
+        var headers = _inactiveList.Items.OfType<CategoryHeaderRow>().ToList();
+        if (headers.Count == 0) return;
+        CollapseOrExpandAllCategories(headers.Any(row => row.IsExpanded));
+    }
+
+    private IReadOnlyList<object> BuildInactiveDisplayRows(List<ModInfo> mods)
+    {
+        if (!_config.InactiveCategoryMode)
+        {
+            return mods;
+        }
+
+        var notes = ModNoteStore.Load(_packRoot);
+        var autoExpand = !string.IsNullOrWhiteSpace(_inactiveSearch.Query);
+        var uncategorized = UpdateText("Uncategorized", "未分类", "未分類", "未分類");
+        return CategoryTree.BuildRows(mods, _collapsedCategories, autoExpand, uncategorized, notes.CategoryOrder, notes.ModOrder);
     }
 
     private void UpdateSortButton(string? language)
     {
         _inactiveSortButton.Content =
-            $"{SortFieldName(_inactiveSortField, language)} " +
-            (_inactiveSortAscending ? "↑" : "↓");
+            $"{SortFieldName(_inactiveSortField, language)} " + (_inactiveSortAscending ? "↑" : "↓");
+        _inactiveSortActionButton.Content = UpdateText("Sort", "排序", "排序", "並べ替え");
+        _inactiveSortActionButton.IsVisible = !_config.InactiveCategoryMode && _inactiveSortField == 6;
+    }
+
+    private void SaveInactiveModOrder(ManagedInstance instance, List<string> order)
+    {
+        instance.InactiveModOrder = order;
+        if (instance.IsScratch || instance.IsOfficial) return;
+        var metadata = instance.Metadata ?? new InstanceMetadata();
+        if (metadata.InactiveModOrderInitialized && metadata.InactiveModOrder.SequenceEqual(order, StringComparer.OrdinalIgnoreCase)) return;
+        metadata.InactiveModOrder = order;
+        metadata.InactiveModOrderInitialized = true;
+        InstanceStore.SaveMetadata(instance, metadata);
+    }
+
+    private void ReconcileInactiveOrder(ManagedInstance? instance)
+    {
+        if (instance is null || instance.IsDamaged) return;
+        var initialized = instance.IsScratch
+            ? instance.InactiveModOrder.Count > 0
+            : instance.Metadata?.InactiveModOrderInitialized == true;
+        var order = ModListOperations.ReconcileInactiveOrder(instance.InactiveModOrder, _allMods, !initialized);
+        SaveInactiveModOrder(instance, order);
     }
 
     private static string SortFieldName(int field, string? language)
@@ -3070,28 +3363,43 @@ public partial class MainWindow : Window
             2 => Localization.SearchByPath(language),
             3 => Localization.SearchByPackageId(language),
             4 => Localization.SearchByGameVersion(language),
-            5 => Localization.SearchBySubscribedTime(language),
+            5 => Localization.SearchByLastModifiedTime(language),
+            6 => OperationText.Choose(language, "Unordered", "无序", "無序", "未整列"),
             _ => Localization.SearchByName(language)
         };
     }
 
     private List<ModInfo> SortInactive(List<ModInfo> mods)
     {
-        if (_inactiveSortField == 5)
+        if (_inactiveSortField == 6)
         {
-            var dated = _inactiveSortAscending
-                ? mods.OrderBy(mod => mod.SubscribedAt == DateTime.MinValue
+            var instance = GetSelectedInstance(_lastEnableColumn - 1);
+            if (instance is null) return mods.OrderBy(mod => mod.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            var order = ModListOperations.ReconcileInactiveOrder(instance.InactiveModOrder, _allMods,
+                instance.IsScratch ? instance.InactiveModOrder.Count == 0 : instance.Metadata?.InactiveModOrderInitialized != true);
+            SaveInactiveModOrder(instance, order);
+            return ModListOperations.OrderBySavedPosition(mods, order, !_inactiveSortAscending);
+        }
+        return SortInactiveByField(mods, _inactiveSortField, _inactiveSortAscending);
+    }
+
+    private static List<ModInfo> SortInactiveByField(List<ModInfo> mods, int field, bool ascending)
+    {
+        if (field == 5)
+        {
+            var dated = ascending
+                ? mods.OrderBy(mod => mod.LastModifiedAt == DateTime.MinValue
                     ? DateTime.MaxValue
-                    : mod.SubscribedAt)
-                : mods.OrderByDescending(mod => mod.SubscribedAt == DateTime.MinValue
+                    : mod.LastModifiedAt)
+                : mods.OrderByDescending(mod => mod.LastModifiedAt == DateTime.MinValue
                     ? DateTime.MinValue
-                    : mod.SubscribedAt);
+                    : mod.LastModifiedAt);
             return dated
                 .ThenBy(mod => mod.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
         }
 
-        Func<ModInfo, string> selector = _inactiveSortField switch
+        Func<ModInfo, string> selector = field switch
         {
             1 => mod => mod.Author,
             2 => mod => mod.Path,
@@ -3100,7 +3408,7 @@ public partial class MainWindow : Window
             _ => mod => mod.Name
         };
 
-        var ordered = _inactiveSortAscending
+        var ordered = ascending
             ? mods.OrderBy(selector, StringComparer.CurrentCultureIgnoreCase)
             : mods.OrderByDescending(selector, StringComparer.CurrentCultureIgnoreCase);
         return ordered
@@ -3534,13 +3842,13 @@ public partial class MainWindow : Window
 
     private void OnSortWheel(object? sender, PointerWheelEventArgs e)
     {
-        if (e.Delta.Y == 0)
+        if (_config.InactiveCategoryMode || e.Delta.Y == 0)
         {
             return;
         }
 
         var step = e.Delta.Y > 0 ? -1 : 1;
-        _inactiveSortField = (_inactiveSortField + step + 6) % 6;
+        _inactiveSortField = (_inactiveSortField + step + 7) % 7;
         UpdateSortButton(_config.Language);
         RefreshInactivePreservingScroll();
         e.Handled = true;
@@ -3652,6 +3960,7 @@ public partial class MainWindow : Window
         }
 
         var targetInstance = GetInstanceAt(index);
+        ReconcileInactiveOrder(targetInstance);
         var inactiveSource = DeduplicateModsForInstance(
             ApplySteamCmdFilter(
                 _allMods.Where(mod => !activeIds.Contains(mod.PackageId)),
@@ -3661,13 +3970,14 @@ public partial class MainWindow : Window
         );
         _searchSources[_inactiveList] = inactiveSource.ToList();
         var inactive = PrepareSearchList(_searchSources[_inactiveList], _inactiveSearch);
-        inactive = SortInactive(inactive);
+        if (!_config.InactiveCategoryMode) inactive = SortInactive(inactive);
         var inactiveForSummary = inactive;
         inactive = ApplyProblemFilters(inactive, _inactiveFilter);
-        inactive = ApplyModNotes(ApplyModColors(inactive, ModColorStore.Load(_packRoot)));
+        inactive = ApplyModNotes(ApplyModColors(inactive, ModColorStore.Load(_packRoot)), showCategoryBadge: !_config.InactiveCategoryMode);
+        var inactiveRows = BuildInactiveDisplayRows(inactive);
 
         _refreshing = true;
-        ReplacePaneItems(_inactiveList, inactive, PaneInstanceScope(targetInstance));
+        ReplacePaneItems(_inactiveList, inactiveRows, PaneInstanceScope(targetInstance));
         _refreshing = false;
         _inactiveCount = inactive.Count;
         UpdateHeaders();
@@ -3850,6 +4160,14 @@ public partial class MainWindow : Window
 
         var column = ReferenceEquals(comboBox, _instanceCombo1) ? 0 : 1;
         var index = comboBox.SelectedIndex;
+        if (index == _instances.Count)
+        {
+            _updatingInstances = true;
+            comboBox.SelectedIndex = column == 0 ? _lastInstanceIndex1 : _lastInstanceIndex2;
+            _updatingInstances = false;
+            _ = CreateInstanceAsync(column);
+            return;
+        }
         if (index < 0 || index >= _instances.Count)
         {
             return;
@@ -4003,7 +4321,7 @@ public partial class MainWindow : Window
         }
 
         SetPaneInteractionContext(list);
-        var mod = list.SelectedItems!.Cast<ModInfo>().LastOrDefault();
+        var mod = list.SelectedItems!.OfType<ModInfo>().LastOrDefault();
         if (mod is not null)
         {
             ShowDetails(mod);
@@ -4056,9 +4374,17 @@ public partial class MainWindow : Window
         }
 
         var selectedSet = new HashSet<string>(selectedIds, StringComparer.OrdinalIgnoreCase);
-        var items = list.Items.Cast<ModInfo>().ToList();
-        var moved = items.Where(mod => selectedSet.Contains(mod.PackageId)).ToList();
-        if (moved.Count == 0)
+        var movedIndices = new List<int>();
+        var movedMods = new List<ModInfo>();
+        for (var i = 0; i < list.ItemCount; i++)
+        {
+            if (list.Items[i] is ModInfo m && selectedSet.Contains(m.PackageId))
+            {
+                movedIndices.Add(i);
+                movedMods.Add(m);
+            }
+        }
+        if (movedMods.Count == 0)
         {
             return;
         }
@@ -4078,13 +4404,9 @@ public partial class MainWindow : Window
         selection.BeginBatchUpdate();
         try
         {
-            foreach (var mod in moved)
+            foreach (var index in movedIndices)
             {
-                var index = items.IndexOf(mod);
-                if (index >= 0)
-                {
-                    selection.Select(index);
-                }
+                selection.Select(index);
             }
         }
         finally
@@ -4097,11 +4419,11 @@ public partial class MainWindow : Window
             }
         }
 
-        SetPaneAnchor(list, items.IndexOf(moved[0]));
+        SetPaneAnchor(list, movedIndices[0]);
         _lastPressList = list;
         _refreshing = false;
         list.Focus();
-        ShowDetails(moved[0]);
+        ShowDetails(movedMods[0]);
     }
 
     private int GetListColumn(ListBox list)
@@ -4136,8 +4458,8 @@ public partial class MainWindow : Window
 
     private static List<ModInfo> GetSelectedMods(ListBox list)
     {
-        var selected = new HashSet<ModInfo>(list.SelectedItems!.Cast<ModInfo>());
-        return list.Items.Cast<ModInfo>().Where(selected.Contains).ToList();
+        var selected = new HashSet<ModInfo>(list.SelectedItems!.OfType<ModInfo>());
+        return list.Items.OfType<ModInfo>().Where(selected.Contains).ToList();
     }
 
     private void RestorePressedMultiSelection(ListBox list)
@@ -4252,6 +4574,20 @@ public partial class MainWindow : Window
     {
         var instance = GetSelectedInstance(_lastEnableColumn - 1);
         UpdateLaunchTarget(instance);
+        if (_launchInProgress)
+        {
+            _launchTargetText.Text = UpdateText(
+                _gameStartedByThisLaunch ? "RimWorld is running..." : "Starting RimWorld...",
+                _gameStartedByThisLaunch ? "游戏运行中……" : "正在启动游戏……",
+                _gameStartedByThisLaunch ? "遊戲執行中……" : "正在啟動遊戲……",
+                _gameStartedByThisLaunch ? "RimWorld 実行中..." : "RimWorld 起動中...");
+            _launchButton.IsEnabled = false;
+            _terminateGameButton.Content = UpdateText("Terminate", "终止", "終止", "終了");
+            _terminateGameButton.IsVisible = true;
+            _terminateGameButton.IsEnabled = true;
+            return;
+        }
+        _terminateGameButton.IsVisible = false;
         var executable = _gameInstallation?.ExecutablePath;
         var executableExists = !string.IsNullOrWhiteSpace(executable) &&
             (File.Exists(executable) || Directory.Exists(executable));
@@ -4392,6 +4728,8 @@ public partial class MainWindow : Window
     private bool _pendingChangesPromptOpen;
     private bool _closeApproved;
     private CancellationTokenSource? _launchCancellation;
+    private bool _launchInProgress;
+    private bool _gameStartedByThisLaunch;
 
     private async Task<bool> ResolvePendingChangesAsync()
     {
@@ -4481,6 +4819,7 @@ public partial class MainWindow : Window
 
         if (!await ResolvePendingChangesAsync()) return;
         ModColorStore.Invalidate();
+        ModNoteStore.Invalidate();
         UpdateSaveState();
         var inactiveOffset = GetListScrollOffset(_inactiveList);
         var activeOffset1 = GetListScrollOffset(_activeList1);
@@ -4562,6 +4901,7 @@ public partial class MainWindow : Window
     }
     private void OnLaunchClick(object? sender, RoutedEventArgs e)
     {
+        if (_launchInProgress) return;
         var instance = GetSelectedInstance(_lastEnableColumn - 1);
         if (instance?.IsDamaged == true) { ShowToast(instance.LoadError!); return; }
         var executable = _gameInstallation?.ExecutablePath;
@@ -4609,19 +4949,65 @@ public partial class MainWindow : Window
         _launchCancellation?.Dispose();
         var launchCancellation = new CancellationTokenSource();
         _launchCancellation = launchCancellation;
+        _launchInProgress = true;
+        _gameStartedByThisLaunch = false;
+        UpdateLaunchButton();
         try
         {
-            _ = GameLaunchService.Start(_gameInstallation!, instance, saveDataFolder,
-                launchCancellation.Token);
+            _ = ObserveLaunchAsync(_gameInstallation!, instance, saveDataFolder, launchCancellation);
         }
         catch (Exception exception)
         {
             launchCancellation.Cancel();
             launchCancellation.Dispose();
             _launchCancellation = null;
+            _launchInProgress = false;
+            UpdateLaunchButton();
             AppLog.Error("Launch game: " + executable, exception);
             ShowHistoryFailure(Localization.LaunchFailed(_config.Language));
         }
+    }
+
+    private async Task ObserveLaunchAsync(RimWorldInstallation game, ManagedInstance instance,
+        string saveDataFolder, CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await GameLaunchService.Start(game, instance, saveDataFolder, cancellation.Token, running =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!ReferenceEquals(_launchCancellation, cancellation)) return;
+                    _gameStartedByThisLaunch = running;
+                    UpdateLaunchButton();
+                });
+            });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception exception)
+        {
+            AppLog.Error("Launch game", exception);
+            if (!_windowClosed) ShowHistoryFailure(Localization.LaunchFailed(_config.Language));
+        }
+        finally
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!ReferenceEquals(_launchCancellation, cancellation)) return;
+                _launchCancellation = null;
+                _launchInProgress = false;
+                _gameStartedByThisLaunch = false;
+                cancellation.Dispose();
+                if (!_windowClosed) UpdateLaunchButton();
+            });
+        }
+    }
+
+    private void OnTerminateGameClick(object? sender, RoutedEventArgs e)
+    {
+        _launchCancellation?.Cancel();
+        _terminateGameButton.IsEnabled = false;
+        _launchTargetText.Text = UpdateText("Terminating RimWorld...", "正在终止游戏……", "正在終止遊戲……", "RimWorld 終了中...");
     }
 
     private void MoveModSelection(ListBox list, int direction, bool shift)
@@ -4642,6 +5028,11 @@ public partial class MainWindow : Window
         _refreshing = true;
         var extend = shift && ReferenceEquals(_selectionAnchorList, list) && _selectionAnchorIndex >= 0;
         var next = PaneSelectionRange.Move(list, direction, extend, _selectionAnchorIndex, current);
+        if (next < 0)
+        {
+            _refreshing = false;
+            return;
+        }
         var nextItem = list.Items[next]!;
         if (extend) SetPaneRangeEnd(list, next);
         else SetPaneAnchor(list, next);
@@ -4694,6 +5085,12 @@ public partial class MainWindow : Window
         if (point.Properties.IsRightButtonPressed)
         {
             var contextItem = FindListItem(list, e.Source);
+            if (contextItem?.DataContext is CategoryHeaderRow contextHeader)
+            {
+                ShowCategoryHeaderContextMenu(list, contextHeader);
+                e.Handled = true;
+                return;
+            }
             if (contextItem?.DataContext is ModInfo contextMod)
             {
                 var contextIndex = list.IndexFromContainer(contextItem);
@@ -4710,6 +5107,17 @@ public partial class MainWindow : Window
         }
 
         var item = FindListItem(list, e.Source);
+        if (item?.DataContext is CategoryHeaderRow headerRow)
+        {
+            _pressedCategoryHeader = headerRow;
+            _dragSourceList = list;
+            _dragStartPoint = e.GetPosition(list);
+            e.Pointer.Capture(list);
+            e.Handled = true;
+            return;
+        }
+
+        _pressedCategoryHeader = null;
         if (item is null || item.DataContext is not ModInfo mod)
         {
             return;
@@ -4908,9 +5316,60 @@ public partial class MainWindow : Window
             () => _ = ShowModNoteAsync(selectedMods[0])
         ));
         flyout.Items.Add(CreateMenuItem(
+            UpdateText("Category...", "设置分类...", "設定分類...", "分類を設定..."),
+            _packRoot is not null && selectedMods.Count > 0,
+            () => _ = ShowSetCategoryAsync(selectedMods)
+        ));
+        flyout.Items.Add(CreateMenuItem(
             Localization.ColorMod(language),
             _packRoot is not null && selectedMods.Count > 0,
             () => _ = ShowModColorAsync(selectedMods, column)
+        ));
+        flyout.ShowAt(list, true);
+    }
+
+    private void ShowCategoryHeaderContextMenu(ListBox list, CategoryHeaderRow header)
+    {
+        var flyout = new MenuFlyout();
+        if (header.Mods.Count > 0)
+        {
+            flyout.Items.Add(CreateMenuItem(
+                UpdateText($"Enable all ({header.TotalModCount})", $"整组启用 ({header.TotalModCount})", $"整組啟用 ({header.TotalModCount})", $"グループを有効化 ({header.TotalModCount})"),
+                true,
+                () =>
+                {
+                    var targetList = GetModListForColumn(_lastEnableColumn);
+                    if (targetList is not null)
+                    {
+                        MoveMods(new DragPayload(0, header.Mods.ToList()), _lastEnableColumn, targetList.ItemCount);
+                    }
+                }
+            ));
+            flyout.Items.Add(CreateMenuItem(
+                UpdateText($"Select all in group ({header.TotalModCount})", $"选中整组模组 ({header.TotalModCount})", $"選取整組模組 ({header.TotalModCount})", $"グループ内をすべて選択 ({header.TotalModCount})"),
+                true,
+                () =>
+                {
+                    if (_collapsedCategories.Remove(header.PathKey))
+                    {
+                        _config.CollapsedCategories = _collapsedCategories.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+                        _config.Save();
+                        RefreshInactivePreservingScroll();
+                    }
+                    SelectMovedMods(0, header.Mods.Select(m => m.PackageId).ToList(), GetListScrollOffset(list));
+                }
+            ));
+            flyout.Items.Add(new Separator());
+        }
+        flyout.Items.Add(CreateMenuItem(
+            UpdateText("Expand all", "全部展开", "全部展開", "すべて展開"),
+            true,
+            () => CollapseOrExpandCategorySubtree(header, false)
+        ));
+        flyout.Items.Add(CreateMenuItem(
+            UpdateText("Collapse all", "全部折叠", "全部摺疊", "すべて折りたたむ"),
+            true,
+            () => CollapseOrExpandCategorySubtree(header, true)
         ));
         flyout.ShowAt(list, true);
     }
@@ -5029,6 +5488,7 @@ public partial class MainWindow : Window
                 UpdateProblemFilterVisuals();
                 UpdatePaintButtonVisual();
                 UpdateBatchCategoryButtonVisual();
+                UpdateInactiveCategoryModeButton();
                 _config.BackgroundColor = selectedHex;
                 _config.Save();
             };
@@ -5332,6 +5792,11 @@ public partial class MainWindow : Window
         if (_hoveredItem is not null)
         {
             _hoveredItem.Classes.Remove("hover");
+            if (_hoveredItem.DataContext is ModInfo mod)
+            {
+                mod.ShowOriginalName = false;
+                mod.CategoryHovered = false;
+            }
             _hoveredItem = null;
         }
 
@@ -5341,9 +5806,19 @@ public partial class MainWindow : Window
         }
     }
 
+    // Left 2/3 of a row previews the full mod name; the right 1/3 previews the full category.
+    internal static bool IsCategoryRegion(double rowWidth, double x) =>
+        rowWidth > 0 && x >= rowWidth * 2.0 / 3.0;
+
     private void UpdateHoveredItem(ListBox list, PointerEventArgs e)
     {
         var item = FindListItem(list, e.Source);
+        if (item?.DataContext is ModInfo hovered)
+        {
+            var position = e.GetPosition(item);
+            hovered.CategoryHovered = IsCategoryRegion(item.Bounds.Width, position.X);
+        }
+
         if (ReferenceEquals(item, _hoveredItem))
         {
             return;
@@ -5352,12 +5827,21 @@ public partial class MainWindow : Window
         if (_hoveredItem is not null)
         {
             _hoveredItem.Classes.Remove("hover");
+            if (_hoveredItem.DataContext is ModInfo previous)
+            {
+                previous.ShowOriginalName = false;
+                previous.CategoryHovered = false;
+            }
         }
 
         _hoveredItem = item;
         if (item is not null)
         {
             item.Classes.Add("hover");
+            if (item.DataContext is ModInfo current)
+            {
+                current.ShowOriginalName = true;
+            }
         }
     }
 
@@ -5386,6 +5870,8 @@ public partial class MainWindow : Window
 
         var wasDragging = _customDragActive;
         var payload = _dragPayload;
+        var pressedHeader = _pressedCategoryHeader;
+        _pressedCategoryHeader = null;
         _pressedMultiList = null;
         _pressedMultiMods = null;
         _rangeSelectionList = null;
@@ -5400,6 +5886,13 @@ public partial class MainWindow : Window
 
         if (!wasDragging)
         {
+            if (pressedHeader is not null)
+            {
+                ToggleCategoryCollapse(pressedHeader.PathKey);
+                e.Handled = true;
+                return;
+            }
+
             if (_pendingCollapseList is not null && _pendingCollapseMod is not null)
             {
                 _refreshing = true;
@@ -5424,6 +5917,11 @@ public partial class MainWindow : Window
         if (payload is not null && target is not null)
         {
             var targetColumn = GetListColumn(target);
+            if (payload.SourceColumn == 0 && targetColumn == 0 && _config.InactiveCategoryMode && _packRoot is not null)
+            {
+                HandleCategoryTreeInternalDrop(target, e.GetPosition(target), payload);
+                return;
+            }
             var sourceInstance = GetInstanceForColumn(payload.SourceColumn);
             var targetInstance = GetInstanceForColumn(targetColumn);
             var copy = payload.SourceColumn is 1 or 2 &&
@@ -5536,13 +6034,26 @@ public partial class MainWindow : Window
             return;
         }
 
-        var mods = GetSelectedMods(list);
-        if (mods.Count <= 1 &&
-            ReferenceEquals(_pressedMultiList, list) &&
-            _pressedMultiMods is { Count: > 1 })
+        List<ModInfo> mods;
+        var draggedHeader = _pressedCategoryHeader;
+        if (draggedHeader is not null)
         {
-            RestorePressedMultiSelection(list);
-            mods = _pressedMultiMods.ToList();
+            if (draggedHeader.IsUncategorized || draggedHeader.Mods.Count == 0)
+            {
+                return;
+            }
+            mods = draggedHeader.Mods.ToList();
+        }
+        else
+        {
+            mods = GetSelectedMods(list);
+            if (mods.Count <= 1 &&
+                ReferenceEquals(_pressedMultiList, list) &&
+                _pressedMultiMods is { Count: > 1 })
+            {
+                RestorePressedMultiSelection(list);
+                mods = _pressedMultiMods.ToList();
+            }
         }
 
         if (mods.Count == 0)
@@ -5553,12 +6064,11 @@ public partial class MainWindow : Window
         _pendingCollapseList = null;
         _pendingCollapseMod = null;
         _pendingCollapseIndex = -1;
-        _dragPayload = new DragPayload(GetListColumn(list), mods);
+        _dragPayload = new DragPayload(GetListColumn(list), mods, draggedHeader);
         _customDragActive = true;
-        _dragGhostText.Text = string.Join(
-            Environment.NewLine,
-            mods.Select(mod => mod.Name)
-        );
+        _dragGhostText.Text = draggedHeader is not null
+            ? $"{draggedHeader.Title} ({draggedHeader.TotalModCount})"
+            : string.Join(Environment.NewLine, mods.Select(mod => mod.Name));
         _dragGhost.IsVisible = true;
         _insertionLine.Opacity = 1;
         UpdateDragGhost(e);
@@ -5586,6 +6096,11 @@ public partial class MainWindow : Window
         }
 
         var position = e.GetPosition(target);
+        if (_dragPayload?.SourceColumn == 0 && GetListColumn(target) == 0 && _config.InactiveCategoryMode)
+        {
+            UpdateCategoryTreeInternalDragVisual(target, position, _dragPayload);
+            return;
+        }
         var index = GetDropIndexAt(target, position);
         var mappedIndex = MapDropIndexToActive(target, index);
         if (!UpdateModDragFeedback(target, mappedIndex))
@@ -5635,6 +6150,205 @@ public partial class MainWindow : Window
     {
         _dragGhost.IsVisible = false;
         ClearModDragFeedback();
+    }
+
+    private void DrawInsertionLineAtDisplayIndex(ListBox target, int displayIndex)
+    {
+        var targetTop = target.TranslatePoint(new Point(0, 0), _dragOverlay);
+        if (targetTop is null)
+        {
+            _insertionLine.IsVisible = false;
+            return;
+        }
+
+        double y;
+        if (displayIndex < target.ItemCount &&
+            target.ContainerFromIndex(displayIndex) is ListBoxItem item)
+        {
+            var itemTop = item.TranslatePoint(new Point(0, 0), _dragOverlay);
+            y = itemTop?.Y ?? targetTop.Value.Y + 4;
+        }
+        else
+        {
+            var last = target.GetRealizedContainers()
+                .OfType<ListBoxItem>()
+                .Select(container => new
+                {
+                    Container = container,
+                    Top = container.TranslatePoint(new Point(0, 0), _dragOverlay)
+                })
+                .Where(entry => entry.Top is not null)
+                .OrderBy(entry => entry.Top!.Value.Y)
+                .LastOrDefault();
+
+            y = last is null
+                ? targetTop.Value.Y + 4
+                : last.Top!.Value.Y + last.Container.Bounds.Height;
+        }
+
+        _insertionLine.Width = Math.Max(0, target.Bounds.Width - 8);
+        Canvas.SetLeft(_insertionLine, targetTop.Value.X + 4);
+        Canvas.SetTop(_insertionLine, y - 1);
+        _insertionLine.IsVisible = true;
+    }
+
+    private void UpdateCategoryTreeInternalDragVisual(ListBox target, Point position, DragPayload payload)
+    {
+        ClearModDragFeedback();
+        _insertionLine.IsVisible = false;
+
+        if (payload.DraggedHeader is { } draggedHeader)
+        {
+            var parentKey = CategoryTree.ParentKeyOf(draggedHeader.PathKey);
+            var siblings = target.Items
+                .Select((row, idx) => (Row: row as CategoryHeaderRow, Index: idx))
+                .Where(x => x.Row is { IsUncategorized: false } &&
+                            x.Row.Depth == draggedHeader.Depth &&
+                            string.Equals(CategoryTree.ParentKeyOf(x.Row.PathKey), parentKey, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (siblings.Count <= 1) return;
+
+            var dropRowIdx = GetDropIndexAt(target, position);
+            var siblingSlot = siblings.Count(s => s.Index < dropRowIdx);
+            int lineDisplayIdx;
+            if (siblingSlot < siblings.Count)
+            {
+                lineDisplayIdx = siblings[siblingSlot].Index;
+            }
+            else
+            {
+                // End of last sibling's subtree
+                var lastSiblingIdx = siblings[^1].Index;
+                lineDisplayIdx = lastSiblingIdx + 1;
+                while (lineDisplayIdx < target.ItemCount)
+                {
+                    if (target.Items[lineDisplayIdx] is CategoryHeaderRow hr && hr.Depth <= draggedHeader.Depth)
+                        break;
+                    lineDisplayIdx++;
+                }
+            }
+
+            _dragGhostAction.Text = UpdateText("Reorder folder", "调整分类顺序", "調整分類順序", "フォルダ順を変更");
+            _dragGhostAction.IsVisible = true;
+            DrawInsertionLineAtDisplayIndex(target, lineDisplayIdx);
+            return;
+        }
+
+        var hoverItem = FindListItemAtPosition(target, position);
+        if (hoverItem?.DataContext is CategoryHeaderRow hoverHeader &&
+            hoverItem.TranslatePoint(default, _dragOverlay) is { } headerTop)
+        {
+            var localY = position.Y - (hoverItem.TranslatePoint(default, target)?.Y ?? position.Y);
+            if (localY >= hoverItem.Bounds.Height * 0.2 && localY <= hoverItem.Bounds.Height * 0.8)
+            {
+                _dragGhostAction.Text = hoverHeader.IsUncategorized
+                    ? UpdateText("Clear category", "清除分类", "清除分類", "分類をクリア")
+                    : UpdateText("Move to: " + hoverHeader.PathKey, "归入分类：" + hoverHeader.PathKey, "歸入分類：" + hoverHeader.PathKey, "分類へ移動: " + hoverHeader.PathKey);
+                _dragGhostAction.IsVisible = true;
+                _dropTargetOutline.Width = hoverItem.Bounds.Width;
+                _dropTargetOutline.Height = hoverItem.Bounds.Height;
+                Canvas.SetLeft(_dropTargetOutline, headerTop.X);
+                Canvas.SetTop(_dropTargetOutline, headerTop.Y);
+                _dropTargetOutline.IsVisible = true;
+                return;
+            }
+        }
+
+        var dropIndex = GetDropIndexAt(target, position);
+        var (targetCat, _) = ResolveModCategoryDropSlot(target, dropIndex);
+        _dragGhostAction.Text = targetCat is null
+            ? UpdateText("Reorder in Uncategorized", "移至未分类此处", "移至未分類此處", "未分類のこの位置へ")
+            : UpdateText("Place in: " + targetCat, "置于：" + targetCat, "置於：" + targetCat, "配置先: " + targetCat);
+        _dragGhostAction.IsVisible = true;
+        DrawInsertionLineAtDisplayIndex(target, dropIndex);
+    }
+
+    private void HandleCategoryTreeInternalDrop(ListBox target, Point position, DragPayload payload)
+    {
+        if (_packRoot is null) return;
+
+        if (payload.DraggedHeader is { } draggedHeader)
+        {
+            var parentKey = CategoryTree.ParentKeyOf(draggedHeader.PathKey);
+            var siblings = target.Items
+                .Select((row, idx) => (Row: row as CategoryHeaderRow, Index: idx))
+                .Where(x => x.Row is { IsUncategorized: false } &&
+                            x.Row.Depth == draggedHeader.Depth &&
+                            string.Equals(CategoryTree.ParentKeyOf(x.Row.PathKey), parentKey, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (siblings.Count <= 1) return;
+
+            var dropRowIdx = GetDropIndexAt(target, position);
+            var siblingSlot = siblings.Count(s => s.Index < dropRowIdx);
+            ModNoteStore.ReorderSiblingCategories(
+                _packRoot,
+                siblings.Select(s => s.Row!.PathKey).ToList(),
+                draggedHeader.PathKey,
+                siblingSlot);
+            RefreshInactivePreservingScroll();
+            return;
+        }
+
+        var hoverItem = FindListItemAtPosition(target, position);
+        if (hoverItem?.DataContext is CategoryHeaderRow hoverHeader)
+        {
+            var localY = position.Y - (hoverItem.TranslatePoint(default, target)?.Y ?? position.Y);
+            if (localY >= hoverItem.Bounds.Height * 0.2 && localY <= hoverItem.Bounds.Height * 0.8)
+            {
+                ModNoteStore.SetCategory(
+                    _packRoot,
+                    payload.Mods.Select(m => m.PackageId),
+                    hoverHeader.IsUncategorized ? null : hoverHeader.PathKey);
+                ApplyNotesToLists(true);
+                return;
+            }
+        }
+
+        var dropIndex = GetDropIndexAt(target, position);
+        var (targetCat, insertSlot) = ResolveModCategoryDropSlot(target, dropIndex);
+        var currentGroupIds = target.Items
+            .OfType<ModInfo>()
+            .Where(m => string.Equals(
+                CategoryTree.NormalizePath(m.Category),
+                targetCat,
+                StringComparison.OrdinalIgnoreCase))
+            .Select(m => m.PackageId)
+            .ToList();
+        var draggedIds = payload.Mods.Select(m => m.PackageId).ToList();
+        ModNoteStore.MoveAndReorderModsInCategory(_packRoot, currentGroupIds, draggedIds, targetCat, insertSlot);
+        ApplyNotesToLists(true);
+        Dispatcher.UIThread.Post(() => SelectMovedMods(0, draggedIds, GetListScrollOffset(target)));
+    }
+
+    private static (string? TargetCategory, int InsertIndex) ResolveModCategoryDropSlot(ListBox target, int dropDisplayIndex)
+    {
+        // Determine which category section this display index falls into
+        string? targetCat = null;
+        if (dropDisplayIndex < target.ItemCount && target.Items[dropDisplayIndex] is ModInfo nextMod)
+        {
+            targetCat = CategoryTree.NormalizePath(nextMod.Category);
+        }
+        else if (dropDisplayIndex > 0 && dropDisplayIndex - 1 < target.ItemCount)
+        {
+            var prev = target.Items[dropDisplayIndex - 1];
+            if (prev is ModInfo prevMod)
+                targetCat = CategoryTree.NormalizePath(prevMod.Category);
+            else if (prev is CategoryHeaderRow prevHeader)
+                targetCat = prevHeader.IsUncategorized ? null : prevHeader.PathKey;
+        }
+
+        // Count how many direct mods of targetCat appear before dropDisplayIndex
+        var slot = 0;
+        var limit = Math.Clamp(dropDisplayIndex, 0, target.ItemCount);
+        for (var i = 0; i < limit; i++)
+        {
+            if (target.Items[i] is ModInfo m &&
+                string.Equals(CategoryTree.NormalizePath(m.Category), targetCat, StringComparison.OrdinalIgnoreCase))
+            {
+                slot++;
+            }
+        }
+        return (targetCat, slot);
     }
 
     private ListBox? GetTargetListAt(PointerEventArgs e)
@@ -5762,7 +6476,23 @@ public partial class MainWindow : Window
     {
         if (_customDragActive || _painting) return;
         var column = GetListColumn(list);
-        if (column == 0) return;
+        if (column == 0)
+        {
+            if (_inactiveSortField != 6) return;
+            var inactiveInstance = GetSelectedInstance(_lastEnableColumn - 1);
+            if (inactiveInstance is null || inactiveInstance.IsDamaged) return;
+            var ids = GetSelectedMods(list).Select(mod => mod.PackageId)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var inactiveVisibleIds = list.Items.OfType<ModInfo>().Select(mod => mod.PackageId).ToList();
+            // A reversed view runs the other way through the saved manual order.
+            var savedDirection = _inactiveSortAscending ? direction : -direction;
+            var reorderedInactiveIds = ModListOperations.NudgeSelection(inactiveInstance.InactiveModOrder, ids, savedDirection, inactiveVisibleIds);
+            if (reorderedInactiveIds.SequenceEqual(inactiveInstance.InactiveModOrder, StringComparer.OrdinalIgnoreCase)) return;
+            SaveInactiveModOrder(inactiveInstance, reorderedInactiveIds);
+            RefreshInactivePreservingScroll();
+            list.Focus();
+            return;
+        }
 
         var instance = GetInstanceForColumn(column);
         if (instance is null || instance.IsDamaged) return;
@@ -5858,6 +6588,7 @@ public partial class MainWindow : Window
         var bestDistance = double.MaxValue;
         foreach (var container in target.GetRealizedContainers().OfType<ListBoxItem>())
         {
+            if (container.DataContext is CategoryHeaderRow) continue;
             var idx = target.IndexFromContainer(container);
             if (idx < 0 || container.TranslatePoint(new Point(0, 0), target) is not { } top)
             {
@@ -5873,7 +6604,10 @@ public partial class MainWindow : Window
             }
         }
 
-        return bestIndex >= 0 ? bestIndex : Math.Clamp(target.SelectedIndex, 0, target.ItemCount - 1);
+        if (bestIndex >= 0) return bestIndex;
+        for (var i = 0; i < target.ItemCount; i++)
+            if (target.Items[i] is ModInfo) return i;
+        return -1;
     }
 
     private void SwitchPaneAligned(ListBox sourceList, int direction)
@@ -6147,6 +6881,18 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (payload.SourceColumn == 0 && targetColumn == 0 && _inactiveSortField == 6 &&
+            GetSelectedInstance(_lastEnableColumn - 1) is { IsDamaged: false } inactiveInstance)
+        {
+            var insertIndex = ModListOperations.SavedInsertIndex(
+                inactiveInstance.InactiveModOrder.Count, targetIndex, !_inactiveSortAscending);
+            var updated = ModListOperations.InsertSelection(inactiveInstance.InactiveModOrder, selectedIds, insertIndex);
+            if (updated.SequenceEqual(inactiveInstance.InactiveModOrder, StringComparer.OrdinalIgnoreCase)) return;
+            SaveInactiveModOrder(inactiveInstance, updated);
+            RefreshInactivePreservingScroll();
+            return;
+        }
+
         Vector? savedTargetOffset = preserveTargetViewport && GetModListForColumn(targetColumn) is { } tgtList
             ? GetListScrollOffset(tgtList)
             : null;
@@ -6250,12 +6996,19 @@ public partial class MainWindow : Window
 
         if (changed)
         {
+            if (targetColumn == 0 && sourceInstance is not null)
+                MoveInactiveIdsToEnd(selectedIds, sourceInstance);
             PushUndo(undoSnapshots, selectedIds, payload.SourceColumn, targetColumn);
             _selectionAnchorList = null;
             _selectionAnchorIndex = -1;
             RefreshManager(false);
             Dispatcher.UIThread.Post(() => SelectMovedMods(targetColumn, selectedIds, savedTargetOffset));
         }
+    }
+
+    private void MoveInactiveIdsToEnd(IEnumerable<string> ids, ManagedInstance instance)
+    {
+        SaveInactiveModOrder(instance, ModListOperations.MoveIdsToEnd(instance.InactiveModOrder, ids));
     }
 
     private static bool ActiveIdsEqual(
@@ -6286,7 +7039,7 @@ public partial class MainWindow : Window
         public int SourceIndex;
         public bool HideUnmatched = true;
     }
-    private sealed record DragPayload(int SourceColumn, List<ModInfo> Mods);
+    private sealed record DragPayload(int SourceColumn, List<ModInfo> Mods, CategoryHeaderRow? DraggedHeader = null);
 
     private async void OnModpack1Click(object? sender, RoutedEventArgs e)
     {
@@ -6449,6 +7202,7 @@ public partial class MainWindow : Window
             try
             {
                 InstanceStore.StageActiveMods(instance, updatedOrder);
+                MoveInactiveIdsToEnd(removeIds, instance);
                 PushUndo(snapshots, removeIds.ToList(), column, 0);
                 RefreshManager(false);
             }
@@ -6851,7 +7605,7 @@ public partial class MainWindow : Window
             var source = GetSelectedInstance(column);
             var initialMods = source?.IsScratch == true
                 ? source.ActivePackageIds.ToList()
-                : null;
+                : ModListOperations.DefaultNewInstanceMods(_allMods);
             var created = await Task.Run(() =>
                 InstanceStore.CreateNew(
                     _packRoot,
@@ -7397,6 +8151,7 @@ public partial class MainWindow : Window
 
     private async void ShowDetails(ModInfo? mod)
     {
+        UpdatePrerequisitesDetails(mod);
         if (mod is null)
         {
             _detailMod = null;
@@ -7464,6 +8219,9 @@ public partial class MainWindow : Window
             if (version == _previewVersion) _previewPath = null;
         }
     }
+
+    internal static string RequiredModName(ModInfo mod, string id, IReadOnlyDictionary<string, ModInfo> installed) =>
+        installed.TryGetValue(id, out var requirement) ? requirement.Name : mod.ModDependencyNames.GetValueOrDefault(id) ?? id;
 
     private void SetFieldValid(bool valid)
     {

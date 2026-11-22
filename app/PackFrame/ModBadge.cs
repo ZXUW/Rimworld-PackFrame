@@ -14,7 +14,7 @@ public sealed class ModBadge : Control
 
     private static readonly Typeface BadgeTypeface = new(FontFamily.Default);
     private static readonly IBrush BadgeBrush =
-        ThemeService.PrimaryTextBrush;
+        ThemeService.MutedTextBrush;
     // Lazily populated on the UI render thread, after Avalonia's font services exist.
     private static readonly Dictionary<(string, double), FormattedText> TextCache = new();
 
@@ -47,16 +47,16 @@ public sealed class ModBadge : Control
         const double height = 22;
         if (badges.Count == 1)
         {
-            DrawLetter(context, badges[0], new Rect(0, 0, width, height), 18);
+            DrawLetter(context, badges[0], new Rect(0, 0, width, height), 12);
         }
         else if (badges.Count == 2)
         {
-            DrawLetter(context, badges[0], new Rect(0, 0, width / 2, height), 14);
+            DrawLetter(context, badges[0], new Rect(0, 0, width / 2, height), 9);
             DrawLetter(
                 context,
                 badges[1],
                 new Rect(width / 2, 0, width / 2, height),
-                14
+                9
             );
         }
         else
@@ -69,7 +69,7 @@ public sealed class ModBadge : Control
                     width / 2,
                     height / 2
                 );
-                DrawLetter(context, badges[i], cell, 10);
+                DrawLetter(context, badges[i], cell, 7);
             }
         }
     }

@@ -5,9 +5,30 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Threading;
 
 namespace PackFrame;
+
+public sealed record InstanceSelectorItem(string Name, bool IsAdd)
+{
+    public HorizontalAlignment Alignment => IsAdd ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+    public string FontSize => IsAdd ? "22" : "14";
+}
+
+/// <summary>
+/// Stretches to the arranged width from a Star column without reporting child
+/// desired width back up to the parent Grid, preventing row/hover changes from
+/// resizing sibling panes.
+/// </summary>
+public sealed class FixedStarSlot : Decorator
+{
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var measured = base.MeasureOverride(availableSize);
+        return new Size(0, measured.Height);
+    }
+}
 
 public partial class MainWindow
 {
@@ -129,6 +150,11 @@ public partial class MainWindow
 
     private void UpdatePaneHeaders()
     {
+        var actions = UpdateText("Actions", "操作", "操作", "操作");
+        _instanceActionButton1.Content = actions;
+        _instanceActionButton2.Content = actions;
+        AutomationProperties.SetName(_instanceActionButton1, actions);
+        AutomationProperties.SetName(_instanceActionButton2, actions);
         var first = GetSelectedInstance(0);
         var second = GetSelectedInstance(1);
         var sameList = _config.ShowSecondaryPane && IsSameInstance(first, second);
@@ -164,6 +190,12 @@ public partial class MainWindow
         var source = GetInstanceForColumn(_dragPayload.SourceColumn);
         var column = GetListColumn(target);
         var destination = GetInstanceForColumn(column);
+        if (_dragPayload.SourceColumn == 0 && column == 0 && _inactiveSortField == 6 &&
+            GetSelectedInstance(_lastEnableColumn - 1) is { IsDamaged: false })
+        {
+            _insertionLine.IsVisible = false;
+            return true;
+        }
         if (source?.IsDamaged == true || destination?.IsDamaged == true ||
             (column == 0 ? source is null : destination is null))
         {
