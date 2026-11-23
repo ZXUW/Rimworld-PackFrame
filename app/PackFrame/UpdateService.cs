@@ -27,7 +27,7 @@ internal static class UpdateService
     internal const string LatestReleaseUrl = "https://api.github.com/repos/ZXUW/Rimworld-PackFrame/releases/latest";
     internal const string GiteeRepositoryUrl = "https://gitee.com/zxuw/Rimworld-PackFrame";
     internal const string GiteeLatestReleaseUrl =
-        "https://gitee.com/api/v5/repos/zxuw/Rimworld-PackFrame/releases/latest";
+        "https://gitee.com/api/v5/repos/zxuw/Rimworld-PackFrame/releases?per_page=100&page=1";
     // Release assets are what users download; the checksum list lives in the repo instead.
     internal const string GiteeManifestUrl =
         "https://gitee.com/zxuw/Rimworld-PackFrame/raw/main/update/latest.json";
@@ -199,8 +199,31 @@ internal static class UpdateService
         var body = await ReadLimitedAsync(response, cancellationToken);
         using var document = JsonDocument.Parse(body);
         var release = document.RootElement;
-        if (release.ValueKind != JsonValueKind.Object)
+        if (release.ValueKind == JsonValueKind.Array)
+        {
+            // Gitee's /releases/latest can keep returning an older release, so take
+            // the highest version tag from the list instead.
+            // shortcut: only the first 100 releases are scanned, page further if the
+            // repository ever grows past that.
+            Version? bestVersion = null;
+            var best = default(JsonElement);
+            foreach (var item in release.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                if (IsTrue(item, "draft") || IsTrue(item, "prerelease")) continue;
+                if (!TryStableVersion(ReadString(item, "tag_name"), out var version)) continue;
+                if (bestVersion is not null && version <= bestVersion) continue;
+                bestVersion = version;
+                best = item;
+            }
+
+            if (bestVersion is null) return null;
+            release = best;
+        }
+        else if (release.ValueKind != JsonValueKind.Object)
+        {
             throw new InvalidDataException("Gitee release metadata is not an object.");
+        }
         if (IsTrue(release, "draft") || IsTrue(release, "prerelease")) return null;
         var tag = ReadString(release, "tag_name")?.Trim();
         if (tag is null || !TryStableVersion(tag, out _))
