@@ -36,6 +36,10 @@ internal sealed class CategoryMapView : Control
     private sealed record BandChevron(Rect Rect, CategoryMapNode Owner, int Delta);
 
     private readonly HashSet<string> _expanded = new(StringComparer.OrdinalIgnoreCase);
+    // When a drum's centre is collapsed, the neighbour opened last takes over;
+    // stamps keep that order.
+    private readonly Dictionary<string, long> _expandOrder = new(StringComparer.OrdinalIgnoreCase);
+    private long _expandSeq;
     private readonly Dictionary<string, double> _bandRotations = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, double> _bandTargets = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<BandChevron> _chevrons = new();
@@ -74,6 +78,7 @@ internal sealed class CategoryMapView : Control
         {
             if (string.Equals(_selectedPath, value, StringComparison.Ordinal)) return;
             _selectedPath = value;
+            InvalidateLayout();
             InvalidateVisual();
         }
     }
@@ -84,8 +89,10 @@ internal sealed class CategoryMapView : Control
     {
         _root = root;
         _expanded.Clear();
-        _expanded.Add(string.Empty);
-        foreach (var child in root.Children) _expanded.Add(child.Path);
+        _expandOrder.Clear();
+        _expandSeq = 0;
+        MarkExpanded(string.Empty);
+        foreach (var child in root.Children) MarkExpanded(child.Path);
         _bandRotations.Clear();
         _bandTargets.Clear();
         _spin.Stop();
@@ -125,7 +132,7 @@ internal sealed class CategoryMapView : Control
         {
             for (var parent = match.Parent; parent is not null; parent = parent.Parent)
             {
-                _expanded.Add(parent.Path);
+                MarkExpanded(parent.Path);
             }
 
             // A match hidden on a drum has to be rotated into view.
@@ -148,7 +155,8 @@ internal sealed class CategoryMapView : Control
     public void CollapseAll()
     {
         _expanded.Clear();
-        _expanded.Add(string.Empty);
+        _expandOrder.Clear();
+        MarkExpanded(string.Empty);
         InvalidateLayout();
         InvalidateVisual();
     }
@@ -173,13 +181,14 @@ internal sealed class CategoryMapView : Control
         {
             foreach (var node in CategoryMap.Flatten(_root))
             {
-                if (!node.IsLeaf) _expanded.Add(node.Path);
+                if (!node.IsLeaf) MarkExpanded(node.Path);
             }
         }
         else
         {
             _expanded.Clear();
-            _expanded.Add(string.Empty);
+            _expandOrder.Clear();
+            MarkExpanded(string.Empty);
         }
 
         InvalidateLayout();
@@ -201,7 +210,7 @@ internal sealed class CategoryMapView : Control
         void Walk(CategoryMapNode node, int level)
         {
             if (level > depth || node.IsLeaf) return;
-            _expanded.Add(node.Path);
+            MarkExpanded(node.Path);
             foreach (var child in node.Children) Walk(child, level + 1);
         }
         Walk(_root, 0);
@@ -246,7 +255,7 @@ internal sealed class CategoryMapView : Control
 
         for (var parent = target.Parent; parent is not null; parent = parent.Parent)
         {
-            _expanded.Add(parent.Path);
+            MarkExpanded(parent.Path);
         }
 
         if (target.Parent is { } bandOwner && CategoryMap.UsesBand(bandOwner))
@@ -401,8 +410,7 @@ internal sealed class CategoryMapView : Control
         }
 
         if (hit is null) return;
-        _selectedPath = hit.Node.Path;
-        InvalidateVisual();
+        SelectedPath = hit.Node.Path;
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -447,9 +455,16 @@ internal sealed class CategoryMapView : Control
     private void ToggleExpanded(CategoryMapNode node)
     {
         if (node.IsLeaf) return;
-        if (!_expanded.Add(node.Path)) _expanded.Remove(node.Path);
+        if (_expanded.Remove(node.Path)) _expandOrder.Remove(node.Path);
+        else MarkExpanded(node.Path);
         InvalidateLayout();
         InvalidateVisual();
+    }
+
+    private void MarkExpanded(string path)
+    {
+        if (!_expanded.Add(path) || path.Length == 0) return;
+        _expandOrder[path] = ++_expandSeq;
     }
 
     private void InvalidateLayout()
@@ -466,7 +481,7 @@ internal sealed class CategoryMapView : Control
     {
         if (_root is null) return;
         if (!_layoutDirty) return;
-        _layout = CategoryMap.Layout(_root, _expanded, NodeWidth, _bandRotations);
+        _layout = CategoryMap.Layout(_root, _expanded, NodeWidth, _bandRotations, _selectedPath, _expandOrder);
         _layoutDirty = false;
     }
 

@@ -103,7 +103,13 @@ internal static class CategoryMap
     /// <summary>True when a level is big enough for a drum.</summary>
     public static bool UsesBand(CategoryMapNode node) => node.CanBand;
 
-    public static CategoryMapNode Build(IReadOnlyList<string> paths, IReadOnlyList<ModInfo>? mods = null)
+    public static CategoryMapNode Build(IReadOnlyList<string> paths, IReadOnlyList<ModInfo>? mods = null) =>
+        Build(paths, (mods ?? Array.Empty<ModInfo>()).Select(mod => (mod.Name, mod.Category)));
+
+    // Name/category pairs, so a category table can be shown without real mod rows.
+    public static CategoryMapNode Build(
+        IReadOnlyList<string> paths,
+        IEnumerable<(string Name, string? Category)> mods)
     {
         var root = new CategoryMapNode(string.Empty, string.Empty, null);
         var index = new Dictionary<string, CategoryMapNode>(StringComparer.OrdinalIgnoreCase)
@@ -130,7 +136,7 @@ internal static class CategoryMap
                 var normalized = CategoryTree.NormalizePath(mod.Category);
                 if (string.IsNullOrWhiteSpace(normalized)) continue;
                 var node = Wire(normalized, root, index);
-                node.Mods.Add(string.IsNullOrWhiteSpace(mod.Name) ? mod.PackageId : mod.Name);
+                node.Mods.Add(string.IsNullOrWhiteSpace(mod.Name) ? string.Empty : mod.Name);
                 for (var current = node; current is not null; current = current.Parent)
                 {
                     current.TotalMods++;
@@ -193,7 +199,9 @@ internal static class CategoryMap
         CategoryMapNode root,
         IReadOnlySet<string> expanded,
         Func<CategoryMapNode, double> width,
-        IReadOnlyDictionary<string, double> bandRotations)
+        IReadOnlyDictionary<string, double> bandRotations,
+        string? selectedPath = null,
+        IReadOnlyDictionary<string, long>? expandOrder = null)
     {
         var placements = new List<CategoryMapPlacement>();
         var links = new List<CategoryMapLink>();
@@ -291,6 +299,69 @@ internal static class CategoryMap
             var limit = (BandVisible - 1) / 2.0 + 1;
             var columnX = ownerRect.Right + gap;
             var drumWidth = Math.Min(node.Children.Max(width), 210);
+
+            // Which item grows a real subtree. Normally the one facing the viewer;
+            // when that one has nothing to open, an expanded neighbour takes over so
+            // a drum stopped on a leaf still shows a subtree.
+            var frontIndex = -1;
+            for (var index = 0; index < node.Children.Count; index++)
+            {
+                if (Math.Abs(index - rotation) < 0.5)
+                {
+                    frontIndex = index;
+                    break;
+                }
+            }
+
+            // Between two items nobody is within half a step; still pick one so the
+            // level does not blink empty at the half-way point of a spin.
+            if (frontIndex < 0 && node.Children.Count > 0)
+            {
+                frontIndex = Math.Clamp((int)Math.Round(rotation), 0, node.Children.Count - 1);
+            }
+
+            bool CanOpen(int index) =>
+                frontIndex >= 0 && index >= 0 && index < node.Children.Count &&
+                Math.Abs(index - rotation) <= limit &&
+                Math.Abs((index - rotation) * DrumStep) < Math.PI / 2 &&
+                !node.Children[index].IsLeaf &&
+                expanded.Contains(node.Children[index].Path);
+
+            long OpenedAt(int index) =>
+                expandOrder is not null &&
+                expandOrder.TryGetValue(node.Children[index].Path, out var stamp)
+                    ? stamp
+                    : 0;
+
+            var openIndex = CanOpen(frontIndex) ? frontIndex : -1;
+            if (openIndex < 0)
+            {
+                var upOpen = CanOpen(frontIndex - 1);
+                var downOpen = CanOpen(frontIndex + 1);
+                if (upOpen && downOpen)
+                {
+                    // Both neighbours could open: the picked one wins, else the one
+                    // the user opened most recently.
+                    var upSelected = string.Equals(
+                        node.Children[frontIndex - 1].Path, selectedPath, StringComparison.OrdinalIgnoreCase);
+                    var downSelected = string.Equals(
+                        node.Children[frontIndex + 1].Path, selectedPath, StringComparison.OrdinalIgnoreCase);
+                    openIndex = upSelected != downSelected
+                        ? (upSelected ? frontIndex - 1 : frontIndex + 1)
+                        : (OpenedAt(frontIndex - 1) > OpenedAt(frontIndex + 1)
+                            ? frontIndex - 1
+                            : frontIndex + 1);
+                }
+                else if (upOpen)
+                {
+                    openIndex = frontIndex - 1;
+                }
+                else if (downOpen)
+                {
+                    openIndex = frontIndex + 1;
+                }
+            }
+
             CategoryMapPlacement? front = null;
             var frontDistance = double.MaxValue;
 
@@ -327,9 +398,9 @@ internal static class CategoryMap
                 }
 
                 if (child.IsLeaf || !expanded.Contains(child.Path)) continue;
-                if (Math.Abs(offset) < 0.5)
+                if (index == openIndex)
                 {
-                    // Only the item facing the viewer opens; it moves with the drum.
+                    // The chosen item opens; it moves with the drum.
                     // A long lead keeps the open subtree clear of the drum itself.
                     if (UsesBand(child))
                     {

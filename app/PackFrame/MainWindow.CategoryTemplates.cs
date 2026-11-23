@@ -18,6 +18,7 @@ public partial class MainWindow
         var window = new ModCategoryWindow(
             _config.Language,
             () => CategoryTemplateStore.LoadAll(_packRoot),
+            CreateCategoryTemplateViewer,
             ApplyCategoryTemplateAsync,
             SaveCategoryTemplateAsync,
             ClearCurrentCategoriesAsync,
@@ -26,6 +27,53 @@ public partial class MainWindow
             DeleteCategoryTemplateAsync);
         await window.ShowDialog(this);
     }
+
+    // Browses a whole category table in the same map the batch brush uses.
+    private Window? CreateCategoryTemplateViewer(CategoryTemplateEntry entry)
+    {
+        var document = entry.Document;
+        // The community table is keyed by workshop id; show the installed mod's
+        // name where we have one, and the raw key otherwise.
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var mod in _allMods)
+        {
+            if (string.IsNullOrWhiteSpace(mod.Name)) continue;
+            var workshopId = ModpackService.ParseWorkshopId(mod.Link)?.ToString();
+            if (workshopId is not null) names.TryAdd(workshopId, mod.Name);
+            if (!string.IsNullOrWhiteSpace(mod.PackageId)) names.TryAdd(mod.PackageId, mod.Name);
+        }
+
+        var titles = document.Titles;
+        var entries = CategoryTemplateTable(document)
+            .Select(pair => (names.TryGetValue(pair.Key, out var installed)
+                ? installed
+                : titles.TryGetValue(pair.Key, out var title) && !string.IsNullOrWhiteSpace(title)
+                    ? title
+                    : pair.Key.All(char.IsDigit)
+                        ? UpdateText("Workshop ", "创意工坊 ", "創意工坊 ", "ワークショップ ") + pair.Key
+                        : pair.Key, (string?)pair.Value))
+            .ToList();
+        if (entries.Count == 0) return null;
+        var categories = entries
+            .Select(item => item.Item2)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return new BatchCategoryWindow(
+            categories,
+            entries,
+            _config.Language,
+            entry.Name);
+    }
+
+    // The section the "N entries" count in the row comes from.
+    private static Dictionary<string, string> CategoryTemplateTable(ModCategoryDocument document) =>
+        document.Workshop.Count > 0
+            ? document.Workshop
+            : document.PackageId.Count > 0
+                ? document.PackageId
+                : document.Name;
 
     private async Task<string?> ApplyCategoryTemplateAsync(CategoryTemplateEntry entry, bool overwrite)
     {

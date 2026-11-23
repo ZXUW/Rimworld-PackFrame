@@ -61,7 +61,7 @@ public partial class MainWindow
     {
         if (_packRoot is null || mods.Count == 0) return;
         var categories = ModNoteStore.Categories(_packRoot);
-        var dialog = new BatchCategoryWindow(categories, _allMods, _config.Language);
+        var dialog = new BatchCategoryWindow(categories, CategoryMapEntries(), _config.Language);
         var choice = await dialog.ShowDialog<BatchCategoryChoice?>(this);
         if (choice is null) return;
         if (!choice.Start && !choice.Clear) return;
@@ -78,6 +78,9 @@ public partial class MainWindow
             _noteCategoryBox.Text = ModNoteStore.Get(_packRoot, _detailMod.PackageId)?.Category ?? string.Empty;
         }
     }
+
+    private IReadOnlyList<(string Name, string? Category)> CategoryMapEntries() =>
+        _allMods.Select(mod => (mod.Name, mod.Category)).ToList();
 
     private Dictionary<string, string?> CaptureCategoryStates(IEnumerable<string> packageIds)
     {
@@ -263,7 +266,7 @@ public partial class MainWindow
         if (_packRoot is null) return;
         var dialog = new BatchCategoryWindow(
             ModNoteStore.Categories(_packRoot),
-            _allMods,
+            CategoryMapEntries(),
             _config.Language);
         var choice = await dialog.ShowDialog<BatchCategoryChoice?>(this);
         if (choice is null) return;

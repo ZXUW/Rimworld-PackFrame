@@ -20,7 +20,7 @@
 
 ```json
 {
-  "version": 1,
+  "version": 3,
   "workshop": {
     "2154569778": "种族/Ancient Species"
   },
@@ -29,11 +29,16 @@
   },
   "name": {
     "Ancient Species": "种族/Ancient Species"
+  },
+  "titles": {
+    "2154569778": "Ancient Species"
   }
 }
 ```
 
-三段都可以省略；同一个模组建议只写一段，重复写也没关系。
+四段都可以省略；同一个模组建议只写一段，重复写也没关系。
+
+`titles` 只用于显示（查看器里把 workshop id 换成模组名），不参与查找；它由 `tools/AddTitles.ps1` 从 `catalog/workshop-catalog.json.gz` 补进表里，`ExportCategories.ps1` 导完会自动调用。
 
 ## 查找顺序
 

@@ -22,6 +22,9 @@ internal sealed class ModCategoryDocument
     public Dictionary<string, string> Workshop { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> PackageId { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> Name { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Workshop id → mod title. Display only; not used for lookups.</summary>
+    public Dictionary<string, string> Titles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 internal static class ModCategoryDatabase
@@ -214,6 +217,7 @@ internal static class ModCategoryDatabase
         foreach (var (key, value) in source.Workshop) target.Workshop[key] = value;
         foreach (var (key, value) in source.PackageId) target.PackageId[key] = value;
         foreach (var (key, value) in source.Name) target.Name[key] = value;
+        foreach (var (key, value) in source.Titles) target.Titles[key] = value;
     }
 
     internal static ModCategoryDocument? Parse(string json)
@@ -258,6 +262,9 @@ internal static class ModCategoryDatabase
                         break;
                     case "name":
                         ReadSection(section.Value, result.Name);
+                        break;
+                    case "titles":
+                        ReadSection(section.Value, result.Titles);
                         break;
                     default:
                         // 兼容扁平表：纯数字键进 workshop 段，其余按 packageId

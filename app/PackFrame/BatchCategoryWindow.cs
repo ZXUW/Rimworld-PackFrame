@@ -22,6 +22,7 @@ internal sealed class BatchCategoryWindow : Window
     internal sealed record ModRow(string Name, string Category, bool Dim);
 
     private readonly string? _language;
+    private readonly bool _viewer;
     private readonly TextBox _input;
     private readonly CategoryMapView _map;
     private readonly TextBlock _status;
@@ -35,11 +36,14 @@ internal sealed class BatchCategoryWindow : Window
 
     internal BatchCategoryWindow(
         IReadOnlyList<string> categories,
-        IReadOnlyList<ModInfo> mods,
-        string? language)
+        IReadOnlyList<(string Name, string? Category)> mods,
+        string? language,
+        string? viewerTitle = null)
     {
         _language = language;
-        Title = T("Batch category", "批量分类", "批次分類", "分類を一括");
+        // Same map and mod column, opened read-only to browse a category table.
+        _viewer = viewerTitle is not null;
+        Title = viewerTitle ?? T("Batch category", "批量分类", "批次分類", "分類を一括");
         Width = 1160;
         Height = 660;
         MinWidth = 720;
@@ -66,11 +70,13 @@ internal sealed class BatchCategoryWindow : Window
 
         _input = new TextBox
         {
-            PlaceholderText = T(
-                "Search or type a category (use / for levels, e.g. Race/Milira)",
-                "搜索或输入分类（用 / 分层级，如 种族/米莉拉）",
-                "搜尋或輸入分類（用 / 分層級，如 種族/米莉拉）",
-                "分類を検索または入力（/ で階層、例: 種族/ミリラ）")
+            PlaceholderText = _viewer
+                ? T("Search a category", "搜索分类", "搜尋分類", "分類を検索")
+                : T(
+                    "Search or type a category (use / for levels, e.g. Race/XXX), then click Batch category brush",
+                    "搜索选择或输入分类（用 / 分层级，如 种族/XXX），然后点击批量分类刷子",
+                    "搜尋選擇或輸入分類（用 / 分層級，如 種族/XXX），然後點擊批次分類刷子",
+                    "分類を検索・選択または入力（/ で階層、例: 種族/XXX）、その後「分類ブラシ」をクリック")
         };
         _input.TextChanged += (_, _) =>
         {
@@ -81,7 +87,7 @@ internal sealed class BatchCategoryWindow : Window
         };
         _input.KeyDown += (_, e) =>
         {
-            if (e.Key != Key.Enter) return;
+            if (e.Key != Key.Enter || _viewer) return;
             Apply(_input.Text);
             e.Handled = true;
         };
@@ -115,6 +121,14 @@ internal sealed class BatchCategoryWindow : Window
         start.Click += (_, _) => Apply(_input.Text);
         clear.Click += (_, _) => Close(new BatchCategoryChoice(false, null, true));
         cancel.Click += (_, _) => Close();
+        if (_viewer)
+        {
+            // Nothing to pick here; keep the search box and the map only.
+            start.IsVisible = false;
+            start.IsDefault = false;
+            clear.IsVisible = false;
+            cancel.Content = T("Close", "关闭", "關閉", "閉じる");
+        }
 
         var tools = new StackPanel
         {
@@ -456,6 +470,7 @@ internal sealed class BatchCategoryWindow : Window
 
     private void Apply(string? typed)
     {
+        if (_viewer) return;
         var category = CategoryTree.NormalizePath(typed);
         if (string.IsNullOrWhiteSpace(category)) category = _map.SelectedPath;
         if (string.IsNullOrWhiteSpace(category)) return;

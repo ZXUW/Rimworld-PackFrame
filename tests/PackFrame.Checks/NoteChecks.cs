@@ -186,6 +186,13 @@ internal static class NoteChecks
                     collected.Select(entry => entry.Direct).SequenceEqual(new[] { true, false }),
                 "category map counts direct and subtree mods and lists subfolder mods after the direct ones");
 
+            var tableMap = CategoryMap.Build(
+                new[] { "种族/米莉拉" },
+                new[] { ("Milira", (string?)"种族/米莉拉"), ("Ratkin", (string?)"种族") });
+            Require(tableMap.TotalMods == 2 &&
+                    tableMap.Children.Single().Mods.Count == 1,
+                "a category table can be mapped from name/category pairs alone");
+
             var bandRoot = CategoryMap.Build(
                 Enumerable.Range(1, 9).Select(index => "组/A" + index).ToArray());
             var deepRoot = CategoryMap.Build(
@@ -203,6 +210,32 @@ internal static class NoteChecks
                     !scrolledLayout.Placements.Any(item => item.Node.Path == "组/A1/子") &&
                     scrolledLayout.Ghosts.Count > 0,
                 "the centred drum item opens its subtree, and it collapses to a fading outline when scrolled away");
+
+            var borrowRoot = CategoryMap.Build(
+                new[] { "族/A1/甲", "族/B", "族/C1/丙" }
+                    .Concat(Enumerable.Range(1, 6).Select(index => "族/D" + index)).ToArray());
+            var borrowExpanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "", "族", "族/A1", "族/C1" };
+            var centreLeaf = new Dictionary<string, double> { ["族"] = 1 };
+            var bothOpen = CategoryMap.Layout(
+                borrowRoot, borrowExpanded, _ => 100, centreLeaf, null,
+                new Dictionary<string, long> { ["族/A1"] = 1, ["族/C1"] = 2 });
+            var pickedOne = CategoryMap.Layout(
+                borrowRoot, borrowExpanded, _ => 100, centreLeaf, "族/A1",
+                new Dictionary<string, long> { ["族/A1"] = 1, ["族/C1"] = 2 });
+            var reopenedOne = CategoryMap.Layout(
+                borrowRoot, borrowExpanded, _ => 100, centreLeaf, null,
+                new Dictionary<string, long> { ["族/A1"] = 2, ["族/C1"] = 1 });
+            var onlyUp = CategoryMap.Layout(
+                borrowRoot,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "", "族", "族/A1" },
+                _ => 100, centreLeaf);
+            Require(bothOpen.Placements.Any(item => item.Node.Path == "族/C1/丙") &&
+                    !bothOpen.Placements.Any(item => item.Node.Path == "族/A1/甲") &&
+                    pickedOne.Placements.Any(item => item.Node.Path == "族/A1/甲") &&
+                    reopenedOne.Placements.Any(item => item.Node.Path == "族/A1/甲") &&
+                    onlyUp.Placements.Any(item => item.Node.Path == "族/A1/甲"),
+                "a drum stopped on a leaf lends its subtree to an expanded neighbour, picking the selected one or the one opened last");
 
             var expandedMap = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "", "组" };
             var bandLayout = CategoryMap.Layout(bandRoot, expandedMap, _ => 100, new Dictionary<string, double>());

@@ -13,6 +13,7 @@ internal sealed class ModCategoryWindow : Window
 {
     private readonly string? _language;
     private readonly Func<IReadOnlyList<CategoryTemplateEntry>> _loadTemplates;
+    private readonly Func<CategoryTemplateEntry, Window?> _createViewer;
     private readonly Func<CategoryTemplateEntry, bool, Task<string?>> _applyTemplate;
     private readonly Func<Task<string?>> _saveCurrent;
     private readonly Func<Task<string?>> _clearCurrent;
@@ -27,6 +28,7 @@ internal sealed class ModCategoryWindow : Window
     internal ModCategoryWindow(
         string? language,
         Func<IReadOnlyList<CategoryTemplateEntry>> loadTemplates,
+        Func<CategoryTemplateEntry, Window?> createViewer,
         Func<CategoryTemplateEntry, bool, Task<string?>> applyTemplate,
         Func<Task<string?>> saveCurrent,
         Func<Task<string?>> clearCurrent,
@@ -36,6 +38,7 @@ internal sealed class ModCategoryWindow : Window
     {
         _language = language;
         _loadTemplates = loadTemplates;
+        _createViewer = createViewer;
         _applyTemplate = applyTemplate;
         _saveCurrent = saveCurrent;
         _clearCurrent = clearCurrent;
@@ -44,9 +47,9 @@ internal sealed class ModCategoryWindow : Window
         _deleteTemplate = deleteTemplate;
 
         Title = T("Mod categories", "模组分类", "模組分類", "MOD分類");
-        Width = 720;
+        Width = 780;
         SizeToContent = SizeToContent.Height;
-        MinWidth = 620;
+        MinWidth = 680;
         MaxHeight = 560;
         CanResize = true;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -178,6 +181,10 @@ internal sealed class ModCategoryWindow : Window
             Spacing = 8
         };
         actions.Children.Add(MakeRowButton(
+            T("View", "查看", "查看", "表示"),
+            entry.Count > 0,
+            () => OpenViewer(entry)));
+        actions.Children.Add(MakeRowButton(
             T("Supplement", "补充分类", "補充分類", "分類を補完"),
             entry.Count > 0,
             () => RunAsync(() => _applyTemplate(entry, false))));
@@ -204,6 +211,12 @@ internal sealed class ModCategoryWindow : Window
 
         border.Child = grid;
         return border;
+    }
+
+    private async Task OpenViewer(CategoryTemplateEntry entry)
+    {
+        var viewer = _createViewer(entry);
+        if (viewer is not null) await viewer.ShowDialog(this);
     }
 
     private Button MakeRowButton(string text, bool enabled, Func<Task> action)
