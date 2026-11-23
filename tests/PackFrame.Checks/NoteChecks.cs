@@ -157,6 +157,70 @@ internal static class NoteChecks
             Require(slotGrid.ColumnDefinitions.Select(c => c.ActualWidth).SequenceEqual(initialWidths) &&
                     slotA.DesiredSize.Width == 0 && slotC.DesiredSize.Width == 0,
                 "FixedStarSlot isolates Star pane widths from child desired-width changes");
+
+            var map = CategoryMap.Build(new[] { "种族/米莉拉", "种族/鼠族", "种族", "系列", "系列/A" });
+            Require(map.Children.Select(child => child.Leaf).SequenceEqual(new[] { "系列", "种族" }) &&
+                    map.Count == 5 &&
+                    map.Children.First(child => child.Leaf == "种族").Count == 3,
+                "category map builds a sorted tree and counts every path in each subtree");
+
+            ModInfo WithCategory(string name, string id, string? category) =>
+                new(name, "A", "", id, "", null, ModSource.Workshop, "1.6", DateTime.MinValue)
+                {
+                    Category = category
+                };
+            var modMap = CategoryMap.Build(
+                new[] { "种族", "种族/米莉拉", "系列" },
+                new[]
+                {
+                    WithCategory("Milira", "milira", "种族/米莉拉"),
+                    WithCategory("Base", "base", "种族"),
+                    WithCategory("Series", "series", "系列")
+                });
+            var raceNode = modMap.Children.First(child => child.Leaf == "种族");
+            var miliraNode = raceNode.Children.First(child => child.Leaf == "米莉拉");
+            var collected = CategoryMap.CollectMods(raceNode).ToList();
+            Require(modMap.TotalMods == 3 && raceNode.TotalMods == 2 &&
+                    raceNode.Mods.SequenceEqual(new[] { "Base" }) &&
+                    miliraNode.TotalMods == 1 &&
+                    collected.Select(entry => entry.Direct).SequenceEqual(new[] { true, false }),
+                "category map counts direct and subtree mods and lists subfolder mods after the direct ones");
+
+            var bandRoot = CategoryMap.Build(
+                Enumerable.Range(1, 9).Select(index => "组/A" + index).ToArray());
+            var deepRoot = CategoryMap.Build(
+                Enumerable.Range(1, 9).Select(index => "组/A" + index)
+                    .Concat(new[] { "组/A1/子" }).ToArray());
+            var openChild = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "", "组", "组/A1" };
+            Require(CategoryMap.UsesBand(bandRoot.Children[0]) &&
+                    CategoryMap.UsesBand(deepRoot.Children[0]),
+                "a big level stays a drum even when one of its folders is open");
+
+            var drumLayout = CategoryMap.Layout(deepRoot, openChild, _ => 100, new Dictionary<string, double>());
+            var scrolledLayout = CategoryMap.Layout(
+                deepRoot, openChild, _ => 100, new Dictionary<string, double> { ["组"] = 2 });
+            Require(drumLayout.Placements.Any(item => item.Node.Path == "组/A1/子") &&
+                    !scrolledLayout.Placements.Any(item => item.Node.Path == "组/A1/子") &&
+                    scrolledLayout.Ghosts.Count > 0,
+                "the centred drum item opens its subtree, and it collapses to a fading outline when scrolled away");
+
+            var expandedMap = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "", "组" };
+            var bandLayout = CategoryMap.Layout(bandRoot, expandedMap, _ => 100, new Dictionary<string, double>());
+            var shelf = bandLayout.Placements.Where(item => item.BandItem).ToList();
+            var rotated = CategoryMap.Layout(
+                bandRoot, expandedMap, _ => 100, new Dictionary<string, double> { ["组"] = 8 });
+            var rotatedShelf = rotated.Placements.Where(item => item.BandItem).ToList();
+            var widest = shelf.OrderByDescending(item => item.Bounds.Width).First();
+            var narrowest = shelf.OrderBy(item => item.Bounds.Width).First();
+            var zone = bandLayout.Zones.Single();
+            var gapPoint = new Avalonia.Point(
+                zone.Bounds.Center.X,
+                (shelf.First().Bounds.Bottom + shelf.Last().Bounds.Top) / 2);
+            Require(shelf.Count is > 0 and <= CategoryMap.BandVisible &&
+                    widest.Bounds.Width > narrowest.Bounds.Width &&
+                    rotatedShelf.Select(item => item.Node.Leaf).First() != shelf.Select(item => item.Node.Leaf).First() &&
+                    zone.Bounds.Contains(gapPoint),
+                $"drum tapers towards its ends, rotates, and swallows the wheel between items (count={shelf.Count}, gap={gapPoint})");
             var collapsed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "种族/鼠族" };
             var treeRows = CategoryTree.BuildRows(new[] { miliraBase, miliraExp, ratkinBase, plainMod }, collapsed, autoExpandAll: false, "未分类");
             var headers = treeRows.OfType<CategoryHeaderRow>().ToList();

@@ -61,19 +61,70 @@ public partial class MainWindow
     {
         if (_packRoot is null || mods.Count == 0) return;
         var categories = ModNoteStore.Categories(_packRoot);
-        var dialog = new BatchCategoryWindow(categories, _config.Language);
+        var dialog = new BatchCategoryWindow(categories, _allMods, _config.Language);
         var choice = await dialog.ShowDialog<BatchCategoryChoice?>(this);
         if (choice is null) return;
         if (!choice.Start && !choice.Clear) return;
-        ModNoteStore.SetCategory(
-            _packRoot,
-            mods.Select(m => m.PackageId),
-            choice.Clear ? null : choice.Category);
+        var packageIds = mods.Select(m => m.PackageId).ToList();
+        var before = CaptureCategoryStates(packageIds);
+        var category = choice.Clear ? null : choice.Category;
+        ModNoteStore.SetCategory(_packRoot, packageIds, category);
+        PushCategoryUndo(
+            before,
+            packageIds.ToDictionary(id => id, _ => category, StringComparer.OrdinalIgnoreCase));
         ApplyNotesToLists(true);
         if (_detailMod is not null)
         {
             _noteCategoryBox.Text = ModNoteStore.Get(_packRoot, _detailMod.PackageId)?.Category ?? string.Empty;
         }
+    }
+
+    private Dictionary<string, string?> CaptureCategoryStates(IEnumerable<string> packageIds)
+    {
+        var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (_packRoot is null) return result;
+        foreach (var id in packageIds)
+        {
+            if (string.IsNullOrWhiteSpace(id) || result.ContainsKey(id)) continue;
+            result[id] = ModNoteStore.Get(_packRoot, id)?.Category;
+        }
+        return result;
+    }
+
+    private void PushCategoryUndo(
+        Dictionary<string, string?> before,
+        Dictionary<string, string?> after)
+    {
+        if (before.Count == 0 || CategoryMapsEqual(before, after)) return;
+        _redoHistory.Clear();
+        _undoHistory.Add(new UndoEntry(
+            new List<InstanceSnapshot>(),
+            after.Keys.ToList(),
+            0,
+            0,
+            CategoryBefore: new Dictionary<string, string?>(before, StringComparer.OrdinalIgnoreCase),
+            CategoryAfter: new Dictionary<string, string?>(after, StringComparer.OrdinalIgnoreCase)));
+        while (_undoHistory.Count > 10) _undoHistory.RemoveAt(0);
+        UpdateUndoButton();
+    }
+
+    private static bool CategoryMapsEqual(
+        IReadOnlyDictionary<string, string?> first,
+        IReadOnlyDictionary<string, string?> second)
+    {
+        if (first.Count != second.Count) return false;
+        foreach (var pair in first)
+        {
+            if (!second.TryGetValue(pair.Key, out var other)) return false;
+            var left = CategoryTree.NormalizePath(pair.Value);
+            var right = CategoryTree.NormalizePath(other);
+            if (!string.Equals(left ?? string.Empty, right ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void ApplyNotesToLists(bool rebuildCategoryTree = false)
@@ -212,6 +263,7 @@ public partial class MainWindow
         if (_packRoot is null) return;
         var dialog = new BatchCategoryWindow(
             ModNoteStore.Categories(_packRoot),
+            _allMods,
             _config.Language);
         var choice = await dialog.ShowDialog<BatchCategoryChoice?>(this);
         if (choice is null) return;
@@ -236,9 +288,9 @@ public partial class MainWindow
     {
         _batchCategoryButton.Content = _noteBatchMode
             ? (_noteBatchClear
-                ? UpdateText("Clear category", "清除分类", "清除分類", "分類をクリア")
-                : _noteBatchCategory ?? UpdateText("Batch category", "批量分类", "批次分類", "分類を一括"))
-            : UpdateText("Batch category", "批量分类", "批次分類", "分類を一括");
+                ? UpdateText("Batch clear (brush)", "批量清除分类刷子", "批次清除分類刷子", "分類クリア（ブラシ）")
+                : _noteBatchCategory ?? UpdateText("Batch category brush", "批量分类刷子", "批次分類刷子", "分類ブラシ"))
+            : UpdateText("Batch category brush", "批量分类刷子", "批次分類刷子", "分類ブラシ");
         _batchCategoryButton.Background = _noteBatchMode ? TextBrush : SecondaryBorderBrush;
         _batchCategoryButton.Foreground = _noteBatchMode
             ? ThemeService.BackgroundBrush
@@ -285,10 +337,13 @@ public partial class MainWindow
 
         if (_packRoot is not null)
         {
-            ModNoteStore.SetCategory(
-                _packRoot,
-                _noteBatchIds.ToList(),
-                _noteBatchClear ? null : _noteBatchCategory);
+            var ids = _noteBatchIds.ToList();
+            var before = CaptureCategoryStates(ids);
+            var category = _noteBatchClear ? null : _noteBatchCategory;
+            ModNoteStore.SetCategory(_packRoot, ids, category);
+            PushCategoryUndo(
+                before,
+                ids.ToDictionary(id => id, _ => category, StringComparer.OrdinalIgnoreCase));
         }
 
         _noteBatchIds.Clear();

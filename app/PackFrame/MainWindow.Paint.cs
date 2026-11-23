@@ -26,7 +26,7 @@ public partial class MainWindow
     {
         if (_packRoot is null) return null;
         var data = ModColorStore.Load(_packRoot);
-        var picker = new ColorPaletteWindow(_paintColorHex, data.ColorLabels, _config.Language);
+        var picker = new ColorPaletteWindow(_paintColorHex, data.ColorLabels, _packRoot, _config.Language);
         var choice = await picker.ShowDialog<ModColorChoice?>(this);
         if (choice is null) return null;
         ModColorStore.SetLabels(_packRoot, choice.Labels);

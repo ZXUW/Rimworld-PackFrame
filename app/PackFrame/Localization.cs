@@ -1129,10 +1129,10 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "清除颜色",
-            TraditionalChinese => "清除顏色",
-            Japanese => "色をクリア",
-            _ => "Clear Color"
+            SimplifiedChinese => "清除颜色刷子",
+            TraditionalChinese => "清除顏色刷子",
+            Japanese => "色クリアブラシ",
+            _ => "Clear color brush"
         };
     }
 
@@ -1140,10 +1140,10 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "画笔",
-            TraditionalChinese => "畫筆",
-            Japanese => "ブラシ",
-            _ => "Brush"
+            SimplifiedChinese => "模组上色刷子",
+            TraditionalChinese => "模組上色刷子",
+            Japanese => "MODカラーブラシ",
+            _ => "Mod color brush"
         };
     }
 
@@ -1151,10 +1151,10 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "橡皮",
-            TraditionalChinese => "橡皮擦",
-            Japanese => "消しゴム",
-            _ => "Eraser"
+            SimplifiedChinese => "模组去色刷子",
+            TraditionalChinese => "模組去色刷子",
+            Japanese => "MODカラー消しゴム",
+            _ => "Mod color eraser"
         };
     }
 

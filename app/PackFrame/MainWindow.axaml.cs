@@ -5722,6 +5722,7 @@ public partial class MainWindow : Window
         var picker = new ColorPaletteWindow(
             currentColor,
             data.ColorLabels,
+            _packRoot,
             _config.Language
         );
         var choice = await picker.ShowDialog<ModColorChoice?>(this);

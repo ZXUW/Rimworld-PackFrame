@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 
 namespace PackFrame;
@@ -16,6 +17,9 @@ public sealed class ModColorData
 {
     public Dictionary<string, string> ModColors { get; set; } = new();
     public Dictionary<string, string> ColorLabels { get; set; } = new();
+
+    /// <summary>Extra palette entries the user added, as #RRGGBB.</summary>
+    public List<string> CustomColors { get; set; } = new();
 }
 
 public static class ModColorStore
@@ -41,7 +45,8 @@ public static class ModColorStore
         return new ModColorData
         {
             ModColors = new(data.ModColors, StringComparer.OrdinalIgnoreCase),
-            ColorLabels = new(data.ColorLabels, StringComparer.OrdinalIgnoreCase)
+            ColorLabels = new(data.ColorLabels, StringComparer.OrdinalIgnoreCase),
+            CustomColors = data.CustomColors.ToList()
         };
     }
 
@@ -52,7 +57,8 @@ public static class ModColorStore
         var result = new ModColorData
         {
             ModColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            ColorLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            ColorLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            CustomColors = new List<string>()
         };
         if (string.IsNullOrWhiteSpace(packRoot))
         {
@@ -89,6 +95,10 @@ public static class ModColorStore
                 {
                     result.ColorLabels[pair.Key] = pair.Value ?? string.Empty;
                 }
+            }
+            foreach (var hex in loaded.CustomColors ?? new List<string>())
+            {
+                if (!string.IsNullOrWhiteSpace(hex)) result.CustomColors.Add(hex.Trim());
             }
         }
         catch (Exception exception)
@@ -158,6 +168,43 @@ public static class ModColorStore
         return LoadCached(packRoot).ModColors.TryGetValue(packageId, out var color)
             ? color
             : null;
+    }
+
+    public static IReadOnlyList<string> GetCustomColors(string? packRoot) =>
+        Load(packRoot).CustomColors;
+
+    public static void AddCustomColor(string? packRoot, string hex)
+    {
+        if (string.IsNullOrWhiteSpace(packRoot) || string.IsNullOrWhiteSpace(hex)) return;
+        var normalized = hex.Trim().ToUpperInvariant();
+        if (normalized.Length != 7 || normalized[0] != '#') return;
+        foreach (var character in normalized[1..])
+        {
+            if (!Uri.IsHexDigit(character)) return;
+        }
+
+        var data = Load(packRoot);
+        if (data.CustomColors.Any(existing =>
+                string.Equals(existing, normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        data.CustomColors.Add(normalized);
+        Write(packRoot, data);
+    }
+
+    public static void RemoveCustomColor(string? packRoot, string hex)
+    {
+        if (string.IsNullOrWhiteSpace(packRoot) || string.IsNullOrWhiteSpace(hex)) return;
+        var data = Load(packRoot);
+        var removed = data.CustomColors.RemoveAll(existing =>
+            string.Equals(existing, hex.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (removed > 0)
+        {
+            data.ColorLabels.Remove(hex.Trim());
+            Write(packRoot, data);
+        }
     }
 
     private static void Write(string packRoot, ModColorData data)

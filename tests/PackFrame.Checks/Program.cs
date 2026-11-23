@@ -143,6 +143,13 @@ try
     File.WriteAllText(ModColorStore.GetPath(root), "{\"modColors\":{\"test\":\"#445566\"}}");
     ModColorStore.Invalidate();
     Check(ModColorStore.GetColor(root, "test") == "#445566", "color refresh loads external changes");
+    ModColorStore.AddCustomColor(root, "#123456");
+    ModColorStore.AddCustomColor(root, "#123456");
+    Check(ModColorStore.GetCustomColors(root).SequenceEqual(new[] { "#123456" }),
+        "custom palette colors are stored once");
+    ModColorStore.RemoveCustomColor(root, "#123456");
+    Check(ModColorStore.GetCustomColors(root).Count == 0,
+        "custom palette colors can be deleted again");
     var colorsCopy = ModColorStore.Load(root);
     colorsCopy.ModColors["test"] = "#FFFFFF";
     Check(ModColorStore.GetColor(root, "test") == "#445566", "caller cannot mutate color cache");
