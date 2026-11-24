@@ -761,6 +761,18 @@ public partial class MainWindow : Window
         RedoLastChange();
     }
 
+    // True when the press landed on a list's scrollbar (track or thumb).
+    private static bool IsScrollBarSource(object? source)
+    {
+        for (var visual = source as Visual; visual is not null; visual = visual.GetVisualParent())
+        {
+            if (visual is ScrollBar) return true;
+            if (visual is ListBox) return false;
+        }
+
+        return false;
+    }
+
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var props = e.GetCurrentPoint(this).Properties;
@@ -801,8 +813,7 @@ public partial class MainWindow : Window
     }
 
     private void OnScrollBarPointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.Source is not Visual source ||
+    {        if (e.Source is not Visual source ||
             !e.GetCurrentPoint(source).Properties.IsLeftButtonPressed)
         {
             return;
@@ -5060,6 +5071,12 @@ public partial class MainWindow : Window
 
         CloseProblemTooltip();
         var point = e.GetCurrentPoint(list);
+        // Scrollbar drags need the press; brush modes must not swallow it.
+        if (IsScrollBarSource(e.Source))
+        {
+            return;
+        }
+
         if (_paintMode && point.Properties.IsLeftButtonPressed)
         {
             var paintItem = FindListItem(list, e.Source);
