@@ -51,8 +51,60 @@ internal static class ModCategoryDatabase
     private static string UserPath =>
         Path.Combine(AppContext.BaseDirectory, "runtime", "rules", "modCategories.user.json");
 
-    internal static string CommunityPath =>
-        Path.Combine(AppContext.BaseDirectory, "runtime", "rules", "modCategories.json");
+    // 1.1.3: the table lives in the pack folder so users can find it:
+    // <pack root>\Input profile\Catalog\ModCategories.json. The download writes there too.
+    internal static string TablePath { get; set; } =
+        Path.Combine(PackRoot(), "Input profile", "Catalog", "ModCategories.json");
+
+    // The pack folder is five levels up from the app folder; fall back to the app
+    // folder itself for dev runs (dotnet run) and for a lone packframe.exe.
+    private static string PackRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var depth = 0; depth < 6 && directory is not null; depth++, directory = directory.Parent)
+        {
+            if (Directory.Exists(Path.Combine(
+                    directory.FullName, "app", "PackFrame", "bin", "Release", "net10.0")))
+            {
+                return directory.FullName;
+            }
+        }
+
+        return AppContext.BaseDirectory;
+    }
+
+    // Where earlier builds kept the downloaded table.
+    private static IEnumerable<string> LegacyTablePaths()
+    {
+        yield return Path.Combine(AppContext.BaseDirectory, "runtime", "rules", "modCategories.json");
+        yield return Path.Combine(AppContext.BaseDirectory, "Assets", "ModCategories.json");
+    }
+
+    internal static void MigrateLegacyTable()
+    {
+        try
+        {
+            foreach (var legacy in LegacyTablePaths())
+            {
+                if (!File.Exists(legacy)) continue;
+                var folder = Path.GetDirectoryName(TablePath);
+                if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+                if (File.Exists(TablePath))
+                {
+                    // Keep the file the user can see and edit; drop the old duplicate.
+                    File.Delete(legacy);
+                    continue;
+                }
+
+                File.Move(legacy, TablePath);
+                AppLog.Info("Moved the mod category table to " + TablePath);
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Migrate mod category table", exception);
+        }
+    }
 
     internal static ModCategoryDocument Load()
     {
@@ -88,7 +140,8 @@ internal static class ModCategoryDatabase
 
     internal static ModCategoryDocument? LoadCommunityTemplate(out DateTime? generatedAt)
     {
-        var path = CommunityPath;
+        MigrateLegacyTable();
+        var path = TablePath;
         if (!File.Exists(path))
         {
             path = Path.Combine(AppContext.BaseDirectory, "update", "modCategories.json");
@@ -148,8 +201,10 @@ internal static class ModCategoryDatabase
                 var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
                 var parsed = Parse(json);
                 if (parsed is null) continue;
-                Directory.CreateDirectory(Path.GetDirectoryName(CommunityPath)!);
-                FileTransactions.WriteAtomic(CommunityPath, temp => File.WriteAllText(temp, json, new UTF8Encoding(false)));
+                MigrateLegacyTable();
+                var folder = Path.GetDirectoryName(TablePath);
+                if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+                FileTransactions.WriteAtomic(TablePath, temp => File.WriteAllText(temp, json, new UTF8Encoding(false)));
                 lock (Gate) _table = null;
                 return;
             }
@@ -180,24 +235,11 @@ internal static class ModCategoryDatabase
 
     private static ModCategoryDocument Read()
     {
-        // 内置 → 社区 → 用户，后面的覆盖前面的
+        // 表(Assets\ModCategories.json，下载也会写它) → 用户层，后面的覆盖前面的
         var result = new ModCategoryDocument();
-        try
-        {
-            using var stream = typeof(ModCategoryDatabase).Assembly
-                .GetManifestResourceStream("PackFrame.Assets.ModCategories.json");
-            if (stream is not null)
-            {
-                using var reader = new StreamReader(stream);
-                if (Parse(reader.ReadToEnd()) is { } builtin) Overlay(result, builtin);
-            }
-        }
-        catch (Exception exception)
-        {
-            AppLog.Error("Load built-in mod category table", exception);
-        }
+        if (ReadBaseTable() is { } builtin) Overlay(result, builtin);
 
-        foreach (var path in new[] { CommunityPath, UserPath })
+        foreach (var path in new[] { UserPath })
         {
             try
             {
@@ -210,6 +252,22 @@ internal static class ModCategoryDatabase
             }
         }
         return result;
+    }
+
+    // The table on disk is the only source; nothing is baked into the assembly.
+    internal static ModCategoryDocument? ReadBaseTable()
+    {
+        try
+        {
+            MigrateLegacyTable();
+            if (File.Exists(TablePath)) return Parse(File.ReadAllText(TablePath));
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Load mod category table: " + TablePath, exception);
+        }
+
+        return null;
     }
 
     private static void Overlay(ModCategoryDocument target, ModCategoryDocument source)

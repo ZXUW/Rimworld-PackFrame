@@ -5,8 +5,8 @@
         Title="Rimworld PackFrame"
         Width="1500"
         Height="900"
-        MinWidth="1100"
-        MinHeight="700"
+        MinWidth="600"
+        MinHeight="300"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource AppBackgroundBrush}"
         RequestedThemeVariant="Dark">
@@ -148,6 +148,14 @@
         </DataTemplate>
     </Window.DataTemplates>
     <Window.Styles>
+        <!-- Hover is driven by the "hover" class we manage, so a list rebuild cannot
+             leave a stale pointerover highlight on a recycled row. -->
+        <Style Selector="ListBox.modpane ListBoxItem:pointerover:not(:selected) /template/ Border#PART_Border">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBox.modpane ListBoxItem:pointerover:not(:selected) /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
         <Style Selector="ListBox.category-mode ListBoxItem">
             <Setter Property="Padding" Value="0" />
         </Style>
@@ -167,91 +175,112 @@
             <Setter Property="Background" Value="{DynamicResource SecondaryBrush}" />
         </Style>
     </Window.Styles>
-    <Grid Margin="12" RowDefinitions="Auto,Auto,*,Auto">
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto" VerticalAlignment="Top">
+    <Grid>
+    <Grid x:Name="ListPage" Margin="12" RowDefinitions="Auto,Auto,*,Auto">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" VerticalAlignment="Top">
             <Button x:Name="LanguageButton"
                     Grid.Column="0"
                     Theme="{StaticResource FlatButton}"
                     Content="文/A"
                     Padding="10,8"
                     MinWidth="50"
-                    MinHeight="36"
+                    Height="32"
+                    VerticalAlignment="Center"
                     Margin="0,0,10,0" />
-            <TextBlock x:Name="GamePathLabel"
-                       Grid.Column="1"
-                       VerticalAlignment="Center"
-                       Margin="0,0,12,0"
-                       Foreground="{DynamicResource PrimaryTextBrush}" />
             <Border x:Name="PathField"
-                    Grid.Column="2"
+                    Grid.Column="1"
                     Classes="field"
                     CornerRadius="0"
-                    MinHeight="36">
-                <TextBox x:Name="PathBox"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         CornerRadius="0"
-                         VerticalContentAlignment="Center"
-                         VerticalAlignment="Stretch" />
+                    Height="32"
+                    MinWidth="120">
+                <Grid>
+                    <!-- Shown until the user clicks: long paths end with an ellipsis. -->
+                    <TextBlock x:Name="PathHint"
+                               VerticalAlignment="Center"
+                               Padding="8,0"
+                               Cursor="IBeam"
+                               TextTrimming="CharacterEllipsis"
+                               PointerPressed="OnPathHintPressed" />
+                    <TextBox x:Name="PathBox"
+                             IsVisible="False"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             CornerRadius="0"
+                             VerticalContentAlignment="Center"
+                             VerticalAlignment="Stretch" />
+                </Grid>
             </Border>
             <Button x:Name="AutoDetectGameButton"
-                    Grid.Column="3"
+                    Grid.Column="2"
                     Theme="{StaticResource FlatButton}"
-                    Margin="12,0,0,0"
-                    MinHeight="36"
+                    Margin="10,0,0,0"
+                    Height="32"
+                    VerticalAlignment="Center"
+                    Padding="14,4"
                     Click="OnAutoDetectGameClick" />
             <Button x:Name="BrowseButton"
-                    Grid.Column="4"
+                    Grid.Column="3"
                     Theme="{StaticResource FlatButton}"
                     Margin="8,0,0,0"
-                    MinHeight="36" />
+                    Height="32"
+                    VerticalAlignment="Center"
+                    Padding="14,4" />
+            <!-- Guide line between the path actions and the list actions. -->
+            <Border Grid.Column="4"
+                    Width="1"
+                    Margin="12,2,12,2"
+                    Background="{DynamicResource SecondaryBrush}" />
+            <StackPanel Grid.Column="5"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Spacing="8">
+                <Button x:Name="PaintModeButton"
+                        Theme="{StaticResource FlatButton}"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        Padding="14,4"
+                        Click="OnPaintModeClick" />
+                <Button x:Name="BatchCategoryButton"
+                        Theme="{StaticResource FlatButton}"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        Padding="14,4"
+                        Click="OnBatchCategoryClick" />
+                <Button x:Name="UndoButton"
+                        Theme="{StaticResource FlatButton}"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        Padding="14,4"
+                        Click="OnUndoClick" />
+                <Button x:Name="RedoButton"
+                        Theme="{StaticResource FlatButton}"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        Padding="14,4"
+                        Click="OnRedoClick" />
+                <Button x:Name="SyncConfigButton"
+                        Theme="{StaticResource FlatButton}"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        Padding="14,4"
+                        IsVisible="False"
+                        Click="OnSyncConfigClick" />
+                <Button x:Name="RefreshButton"
+                        Theme="{StaticResource FlatButton}"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        Padding="14,4"
+                        Click="OnRefreshClick" />
+            </StackPanel>
         </Grid>
 
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Spacing="8"
-                    Margin="0,8,0,0">
-            <Button x:Name="PaintModeButton"
-                    Theme="{StaticResource FlatButton}"
-                    MinHeight="32"
-                    Padding="18,6"
-                    Click="OnPaintModeClick" />
-            <Button x:Name="BatchCategoryButton"
-                    Theme="{StaticResource FlatButton}"
-                    MinHeight="32"
-                    Padding="18,6"
-                    Click="OnBatchCategoryClick" />
-            <Button x:Name="UndoButton"
-                    Theme="{StaticResource FlatButton}"
-                    MinHeight="32"
-                    Padding="18,6"
-                    Click="OnUndoClick" />
-            <Button x:Name="RedoButton"
-                    Theme="{StaticResource FlatButton}"
-                    MinHeight="32"
-                    Padding="18,6"
-                    Click="OnRedoClick" />
-            <Button x:Name="SyncConfigButton"
-                    Theme="{StaticResource FlatButton}"
-                    MinHeight="32"
-                    Padding="18,6"
-                    IsVisible="False"
-                    Click="OnSyncConfigClick" />
-            <Button x:Name="RefreshButton"
-                    Theme="{StaticResource FlatButton}"
-                    MinHeight="32"
-                    Padding="18,6"
-                    Click="OnRefreshClick" />
-        </StackPanel>
-
-        <Grid Grid.Row="2" Margin="0,8,0,0" ColumnDefinitions="420,12,*">
+        <Grid Grid.Row="2" Margin="0,8,0,0" ColumnDefinitions="*,12,3*">
             <Border Grid.Column="0"
                     Background="Transparent"
                     BorderBrush="{DynamicResource SecondaryBrush}"
                     BorderThickness="1"
                     Padding="12">
-                <Grid RowDefinitions="240,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+                <Grid x:Name="DetailsPane" RowDefinitions="240,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
                     <Image x:Name="PreviewImage"
                            Grid.Row="0"
                            Stretch="Uniform"
@@ -386,17 +415,7 @@
                                 Padding="6,2"
                                 Margin="6,0,0,0"
                                 Click="OnInactiveSortClick" />
-                            <Button x:Name="InactiveSortActionButton"
-                                Grid.Column="4"
-                                Theme="{StaticResource FlatButton}"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Center"
-                                MinHeight="26"
-                                Height="26"
-                                Padding="6,2"
-                                Margin="4,0,0,0"
-                                Click="OnInactiveSortActionClick" />
-                        <TextBlock x:Name="InactiveHeader"
+                            <TextBlock x:Name="InactiveHeader"
                                    Grid.Column="5"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                    HorizontalAlignment="Right"
@@ -895,6 +914,13 @@
             <TextBlock x:Name="UndoToastText"
                        Foreground="{DynamicResource PrimaryTextBrush}" />
         </Border>
+
+    </Grid>
+
+    <!-- 合集 page: a full-window page instead of a second window. -->
+    <ContentControl x:Name="ModpackPageHost"
+                    IsVisible="False"
+                    Background="{DynamicResource AppBackgroundBrush}" />
     </Grid>
 </Window>
 

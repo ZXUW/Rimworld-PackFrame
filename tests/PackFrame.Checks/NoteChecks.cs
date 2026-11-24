@@ -36,9 +36,27 @@ internal static class NoteChecks
                     flatTable is not null && flatTable.PackageId["p.flat"] == "系列/F",
                 "category table parses workshop/packageId/name sections and flat files");
 
+            var tableFile = Path.Combine(root, "Assets", "ModCategories.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(tableFile)!);
+            File.WriteAllText(tableFile, "{\"workshop\":{\"1\":\"种族/文件\"}}");
+            var originalTablePath = ModCategoryDatabase.TablePath;
+            try
+            {
+                ModCategoryDatabase.TablePath = tableFile;
+                var fromDisk = ModCategoryDatabase.ReadBaseTable();
+                ModCategoryDatabase.TablePath = Path.Combine(root, "Assets", "absent.json");
+                var fromNowhere = ModCategoryDatabase.ReadBaseTable();
+                Require(fromDisk is not null && fromDisk.Workshop["1"] == "种族/文件" &&
+                        fromNowhere is null,
+                    "the category table is read from its file only, with no copy baked into the exe");
+            }
+            finally
+            {
+                ModCategoryDatabase.TablePath = originalTablePath;
+            }
+
             var metadataTable = ModCategoryDatabase.Parse(
-                "{\"version\":3,\"generated\":\"2026-11-22T15:43:18+08:00\",\"title\":\"Mine\",\"packageId\":{\"p.meta\":\"内容拓展/Meta\"}}");
-            Require(metadataTable is { Version: 3, Title: "Mine" } &&
+                "{\"version\":3,\"generated\":\"2026-11-22T15:43:18+08:00\",\"title\":\"Mine\",\"packageId\":{\"p.meta\":\"内容拓展/Meta\"}}");            Require(metadataTable is { Version: 3, Title: "Mine" } &&
                     metadataTable.Generated == "2026-11-22T15:43:18+08:00" &&
                     metadataTable.PackageId.Count == 1 &&
                     metadataTable.PackageId["p.meta"] == "内容拓展/Meta" &&

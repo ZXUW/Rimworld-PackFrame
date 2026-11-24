@@ -122,7 +122,7 @@ public partial class MainWindow
         foreach (var list in GetModLists())
             list.GotFocus += (_, _) => SetPaneInteractionContext(list);
         foreach (var control in new Control[] { _inactiveSearchBox, _inactiveSearchField,
-                     _inactiveSourceButton, _inactiveViewModeButton, _inactiveSortButton, _inactiveSortActionButton, _inactiveCategoryModeButton, _inactiveCollapseCategoriesButton })
+                     _inactiveSourceButton, _inactiveViewModeButton, _inactiveSortButton, _inactiveCategoryModeButton, _inactiveCollapseCategoriesButton })
             control.GotFocus += (_, _) => SetPaneInteractionContext(_inactiveList);
         foreach (var control in new Control[] { _activeSearchBox1, _activeSearchField1,
                      _activeSourceButton1, _activeViewModeButton1, _instanceCombo1,

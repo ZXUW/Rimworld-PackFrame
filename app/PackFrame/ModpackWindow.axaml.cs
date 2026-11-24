@@ -35,8 +35,16 @@ public sealed class ModpackModRow
     public required string GameVersion { get; init; }
 }
 
-public partial class ModpackWindow : Window
+public partial class ModpackWindow : UserControl
 {
+    private readonly TaskCompletionSource<ModpackInstallResult?> _completion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private bool _started;
+
+    /// <summary>Completes when the page is left; the host keeps showing the list afterwards.</summary>
+    public Task<ModpackInstallResult?> Completion => _completion.Task;
+
+    private Window? OwnerWindow => TopLevel.GetTopLevel(this) as Window;
     private static readonly HttpClient ImageHttp = CreateImageHttpClient();
 
     private readonly AppConfig? _config;
@@ -91,25 +99,35 @@ public partial class ModpackWindow : Window
         RepoBox.Text = indexUrl;
         config.ModpackIndexUrl = indexUrl;
         config.Save();
-        Opened += async (_, _) => await LoadIndexAsync();
         KeyDown += OnWindowKeyDown;
-        Closing += (_, e) =>
-        {
-            if (_committingUpdate) { e.Cancel = true; return; }
-            _closed = true;
-            _operationCancellation?.Cancel();
-            _catalogVersion++;
-            _catalogCancellation?.Cancel();
-            CancelDetailLoad();
-            _coverCancellation?.Cancel();
-            DisposeCover();
-        };
+    }
+
+    public async Task StartAsync()
+    {
+        if (_started) return;
+        _started = true;
+        await LoadIndexAsync();
+    }
+
+    /// <summary>Leaves the page; refuses while a download is writing files.</summary>
+    public bool TryClose(ModpackInstallResult? result = null)
+    {
+        if (_committingUpdate) return false;
+        if (_closed) return true;
+        _closed = true;
+        _operationCancellation?.Cancel();
+        _catalogVersion++;
+        _catalogCancellation?.Cancel();
+        CancelDetailLoad();
+        _coverCancellation?.Cancel();
+        DisposeCover();
+        _completion.TrySetResult(result);
+        return true;
     }
 
     private void ApplyLocalization()
     {
         var title = Localization.ModpacksTitle(_language);
-        Title = $"Rimworld PackFrame - {title}";
         Find<TextBlock>("TitleText").Text = title;
         Find<Button>("RefreshButton").Content = Localization.Refresh(_language);
         Find<TextBlock>("RepoLabel").Text = Localization.ModpackRepoLabel(_language);
@@ -746,7 +764,7 @@ public partial class ModpackWindow : Window
             ConfigApplied = true;
             InstanceStore.SetPackBinding(_currentInstance, pack.Id,
                 pack.ConfigBaseUrl, pack.ConfigFiles, _currentInstance.IsSteamCmd);
-            if (!_closed) Close();
+            if (!_closed) TryClose();
         }
         catch (OperationCanceledException)
         {
@@ -842,7 +860,7 @@ public partial class ModpackWindow : Window
             );
             if (!_closed)
             {
-                Close(result);
+                TryClose(result);
             }
             else
             {
@@ -1015,14 +1033,14 @@ public partial class ModpackWindow : Window
     {
         if (e.Key == Key.Escape && !_busy)
         {
-            Close();
+            TryClose();
             e.Handled = true;
         }
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e)
     {
-        Close();
+        TryClose();
     }
 
     private void DisposeCover()

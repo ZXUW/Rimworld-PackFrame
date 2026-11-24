@@ -178,6 +178,11 @@ try
     Check(ModListOperations.InsertSelection(Array.Empty<string>(), new[] { "a" }, 99)
         .SequenceEqual(new[] { "a" }), "insertion handles empty target and out-of-range index");
     Check(originalOrder.SequenceEqual(new[] { "a", "b", "c", "d", "e" }), "reordering does not mutate original snapshot");
+    var reversedDisplay = Enumerable.Reverse(originalOrder).ToList();
+    var movedInReverse = ModListOperations.InsertSelection(reversedDisplay, new[] { "b" }, 5);
+    Check(movedInReverse.SequenceEqual(new[] { "e", "d", "c", "a", "b" }) &&
+          Enumerable.Reverse(movedInReverse).SequenceEqual(new[] { "b", "a", "c", "d", "e" }),
+        $"dropping in a reversed unordered view lands where the line shows (got {string.Join(",", movedInReverse)})");
     var inactiveA = new ModInfo("Alpha", "", "", "alpha", "", null, ModSource.Local, "", DateTime.MinValue);
     var inactiveB = new ModInfo("Beta", "", "", "beta", "", null, ModSource.Local, "", DateTime.MinValue);
     var inactiveC = new ModInfo("Gamma", "", "", "gamma", "", null, ModSource.Local, "", DateTime.MinValue);

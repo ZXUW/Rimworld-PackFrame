@@ -4,15 +4,16 @@
 
 ## 文件位置与优先级
 
-三层叠加，后面的覆盖前面的：
+两层叠加，后面的覆盖前面的：
 
 | 层 | 位置 | 用途 |
 |---|---|---|
-| 内置 | `app/PackFrame/Assets/ModCategories.json` | 随程序发布的默认表 |
-| 社区 | `<程序目录>/runtime/rules/modCategories.json` | 启动时从 `update/modCategories.json` 下载，所有用户共享 |
-| 用户 | `<程序目录>/runtime/rules/modCategories.user.json` | 「导出分类表」写这里，自己的改动不会被社区更新冲掉 |
+| 表 | `<程序目录>/Assets/ModCategories.json` | 默认分类表；出厂只有程序内嵌的空表，启动后从 `update/modCategories.json` 下载并写到这里，也可以直接编辑这个文件（下次下载会被覆盖） |
+| 用户 | `<程序目录>/runtime/rules/modCategories.user.json` | 「导出分类表」写这里，自己的改动不会被下载覆盖 |
 
-查找顺序：用户层 → 社区层 → 内置层。同一个 id 在用户层有值就以用户层为准；社区层更新只影响用户没改过的条目。
+查找顺序：用户层 → 表。同一个 id 在用户层有值就以用户层为准；表更新只影响用户没改过的条目。
+
+旧版本（1.1.2 及以前）把下载结果放在 `<程序目录>/runtime/rules/modCategories.json`，启动时会自动移动到 `Assets/ModCategories.json`，不会留下两份。
 
 仓库里维护的是 `data/categories/*.json`（按批次），由 `tools/BuildCategoryTable.ps1` 合并成 `update/modCategories.json`。
 
@@ -61,7 +62,7 @@
 
 | 模板 | 位置 | 来源 |
 |---|---|---|
-| PackFrame仓库 | `<程序目录>/runtime/rules/modCategories.json` | 启动时从 `update/modCategories.json` 下载 |
+| PackFrame仓库 | `<程序目录>/Assets/ModCategories.json` | 启动时从 `update/modCategories.json` 下载 |
 | 玩家保存 | `<PackFrame根目录>/instance/ModCategoryTemplates/*.json` | 「保存」或「导入」生成 |
 
 - 「补充分类」只填当前没有分类的已安装模组；「覆盖分类」会改写已有分类。

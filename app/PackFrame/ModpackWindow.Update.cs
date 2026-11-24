@@ -64,7 +64,7 @@ public partial class ModpackWindow
         SetControls(false);
         try
         {
-            if (!await confirm.ShowDialog<bool>(this) || _closed) return;
+            if (!await confirm.ShowDialog<bool>(OwnerWindow!) || _closed) return;
             PackUpdateService.BindLegacy(_currentInstance!, selectedPack);
             ConfigApplied = true;
         }
@@ -92,7 +92,7 @@ public partial class ModpackWindow
             { Find<TextBlock>("StatusText").Text = T("Up to date, or local revision is newer.", "已是最新版本，或本地版本较新。", "已是最新版本，或本機版本較新。", "最新、またはローカル版の方が新しいです。"); return; }
             var prompt = $"{pack.Name}: {pack.Version ?? pack.Revision.ToString()}\n{pack.Changelog}\n" +
                 T("Download and review changes?", "下载更新并查看变更？", "下載更新並查看變更？", "更新をダウンロードして確認しますか？");
-            if (!await new ConfirmWindow(prompt, T("Download", "下载", "下載", "ダウンロード"), Localization.CancelButton(_language)).ShowDialog<bool>(this)) return;
+            if (!await new ConfirmWindow(prompt, T("Download", "下载", "下載", "ダウンロード"), Localization.CancelButton(_language)).ShowDialog<bool>(OwnerWindow!)) return;
             staging = Path.Combine(_packRoot, "runtime", StagingFolder(pack.Id));
             _archiveDownloadControl = new ArchiveDownloadControl();
             ShowOssFallback(pack, skipModsDownload: false);
@@ -106,7 +106,7 @@ public partial class ModpackWindow
                 recordedOverlays: _currentInstance.Metadata?.AppliedOverlays);
             cancellation.Token.ThrowIfCancellationRequested();
             var plan = await Task.Run(() => PackUpdateService.Plan(_currentInstance, result));
-            var choices = await new UpdateChoicesWindow(plan, _language).ShowDialog<UpdateChoices?>(this);
+            var choices = await new UpdateChoicesWindow(plan, _language).ShowDialog<UpdateChoices?>(OwnerWindow!);
             if (choices is null) return;
             cancellation.Token.ThrowIfCancellationRequested();
             if (GameLaunchService.IsRunning() || InstanceStore.HasPendingMods) throw new IOException("Game is running or unsaved changes exist.");
@@ -138,7 +138,7 @@ public partial class ModpackWindow
         if (!await new ConfirmWindow(T("Restore files changed by the last update? Saves and external Steam mods are not restored.",
             "恢复上次更新涉及的文件？不恢复存档或外部 Steam 模组。", "還原上次更新涉及的檔案？不還原存檔或外部 Steam 模組。",
             "前回の更新ファイルを復元しますか？セーブと外部 Steam MOD は対象外です。"),
-            T("Restore", "恢复", "還原", "復元"), Localization.CancelButton(_language)).ShowDialog<bool>(this)) return;
+            T("Restore", "恢复", "還原", "復元"), Localization.CancelButton(_language)).ShowDialog<bool>(OwnerWindow!)) return;
         _busy = true; _committingUpdate = true; SetControls(false);
         try { await Task.Run(() => PackUpdateService.Restore(_currentInstance!)); ConfigApplied = true; }
         catch (Exception exception) { AppLog.Error("Restore update", exception); Find<TextBlock>("StatusText").Text = exception.Message; }

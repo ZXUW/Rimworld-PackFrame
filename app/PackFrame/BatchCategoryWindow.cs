@@ -19,10 +19,11 @@ public sealed record BatchCategoryChoice(bool Start, string? Category, bool Clea
 
 internal sealed class BatchCategoryWindow : Window
 {
-    internal sealed record ModRow(string Name, string Category, bool Dim);
+    internal sealed record ModRow(string Name, string Category, bool Dim, string? Link = null);
 
     private readonly string? _language;
     private readonly bool _viewer;
+    private readonly IReadOnlyDictionary<string, string>? _links;
     private readonly TextBox _input;
     private readonly CategoryMapView _map;
     private readonly TextBlock _status;
@@ -31,6 +32,8 @@ internal sealed class BatchCategoryWindow : Window
     private readonly Border _sideFrame;
     private readonly CategoryMapNode _root;
     private bool _syncing;
+    private int _builtRowCount = -1;
+    private string? _builtKey;
     private bool _panning;
     private Point _panPoint;
 
@@ -38,9 +41,11 @@ internal sealed class BatchCategoryWindow : Window
         IReadOnlyList<string> categories,
         IReadOnlyList<(string Name, string? Category)> mods,
         string? language,
-        string? viewerTitle = null)
+        string? viewerTitle = null,
+        IReadOnlyDictionary<string, string>? links = null)
     {
         _language = language;
+        _links = links;
         // Same map and mod column, opened read-only to browse a category table.
         _viewer = viewerTitle is not null;
         Title = viewerTitle ?? T("Batch category", "批量分类", "批次分類", "分類を一括");
@@ -210,11 +215,27 @@ internal sealed class BatchCategoryWindow : Window
             _map.SelectedPath = row.Category;
             SyncFromMap();
         };
+        // Double-click opens the mod's page. Detected on the press itself because
+        // selecting a row rebuilds the list and can eat the gesture.
+        _modList.AddHandler(
+            InputElement.PointerPressedEvent,
+            (_, e) =>
+            {
+                if (e.ClickCount < 2) return;
+                var row = (e.Source as Control)?.DataContext as ModRow
+                          ?? _modList.SelectedItem as ModRow;
+                if (row?.Link is { Length: > 0 } link)
+                {
+                    OpenExternal(link);
+                    e.Handled = true;
+                }
+            },
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
 
         var side = new Grid
         {
             RowDefinitions = new RowDefinitions("Auto,*"),
-            Width = 228,
             Margin = new Thickness(0, 0, 0, 0)
         };
         side.Children.Add(_modHeader);
@@ -236,16 +257,31 @@ internal sealed class BatchCategoryWindow : Window
         mapHost.Children.Add(_map);
         mapHost.Children.Add(tools);
 
+        // The guide line doubles as a splitter: drag it left/right to resize the column.
+        var splitter = new GridSplitter
+        {
+            ResizeDirection = GridResizeDirection.Columns,
+            ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+            Background = Brushes.Transparent,
+            Width = 5,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Cursor = new Cursor(StandardCursorType.SizeWestEast)
+        };
+
         // Map and its action bar share the left column; the mod column spans both rows.
         var stage = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("*,5,228"),
             RowDefinitions = new RowDefinitions("*,Auto")
         };
         stage.Children.Add(mapHost);
         Grid.SetRow(bottom, 1);
         stage.Children.Add(bottom);
-        Grid.SetColumn(sideFrame, 1);
+        Grid.SetColumn(splitter, 1);
+        Grid.SetRowSpan(splitter, 2);
+        stage.Children.Add(splitter);
+        Grid.SetColumn(sideFrame, 2);
         Grid.SetRowSpan(sideFrame, 2);
         stage.Children.Add(sideFrame);
 
@@ -332,12 +368,24 @@ internal sealed class BatchCategoryWindow : Window
     {
         for (var visual = source as Visual; visual is not null; visual = visual.GetVisualParent())
         {
-            if (visual is Button or TextBox or ComboBox or ScrollBar or ListBox or CheckBox or Slider)
+            if (visual is Button or TextBox or ComboBox or ScrollBar or ListBox or CheckBox or Slider or GridSplitter)
             {
                 return true;
             }
         }
         return false;
+    }
+
+    private void OpenExternal(string url)
+    {
+        try
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri)) _ = Launcher.LaunchUriAsync(uri);
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Open external link: " + url, exception);
+        }
     }
 
     private static bool IsWithin(object? source, Control target)
@@ -441,7 +489,7 @@ internal sealed class BatchCategoryWindow : Window
                 "点选分类查看其中的模组",
                 "點選分類查看其中的模組",
                 "分類を選ぶと MOD 一覧を表示します");
-            _modList.ItemsSource = rows;
+            SetRows(rows);
             return;
         }
 
@@ -449,7 +497,11 @@ internal sealed class BatchCategoryWindow : Window
         {
             foreach (var name in entry.Mods)
             {
-                rows.Add(new ModRow(name, entry.Path, !entry.Direct));
+                rows.Add(new ModRow(
+                    name,
+                    entry.Path,
+                    !entry.Direct,
+                    _links is not null && _links.TryGetValue(name, out var link) ? link : null));
             }
         }
 
@@ -457,6 +509,21 @@ internal sealed class BatchCategoryWindow : Window
             $"{node.Path}\n" +
             $"{T("direct", "直接", "直接", "直接")} {node.Mods.Count} / " +
             $"{T("with subfolders", "含子分类", "含子分類", "サブ含む")} {node.TotalMods}";
+        SetRows(rows);
+    }
+
+    // Rebuilding the items recreates the row controls, which kills the second click
+    // of a double click; keep them when the list would look the same.
+    private void SetRows(List<ModRow> rows)
+    {
+        var key = rows.Count == 0 ? string.Empty : rows[0].Category;
+        if (rows.Count == _builtRowCount && string.Equals(key, _builtKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _builtRowCount = rows.Count;
+        _builtKey = key;
         _modList.ItemsSource = rows;
     }
 

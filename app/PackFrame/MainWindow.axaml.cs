@@ -70,7 +70,6 @@ public partial class MainWindow : Window
     }
 
     private readonly AppConfig _config;
-    private readonly TextBlock _gamePathLabel;
     private readonly TextBox _pathBox;
     private readonly Border _pathField;
     private readonly Button _languageButton;
@@ -105,7 +104,6 @@ public partial class MainWindow : Window
     private readonly Button _inactiveSortButton;
     private readonly Button _inactiveCategoryModeButton;
     private readonly Button _inactiveCollapseCategoriesButton;
-    private readonly Button _inactiveSortActionButton;
     private readonly HashSet<string> _collapsedCategories = new(StringComparer.OrdinalIgnoreCase);
     private CategoryHeaderRow? _pressedCategoryHeader;
     private readonly Button _activeSourceButton1;
@@ -243,6 +241,7 @@ public partial class MainWindow : Window
     private int _inactiveSortField = 6;
     private bool _inactiveSortAscending = true;
     private int? _pendingInactiveSortField;
+    private Control? _sortMenuAnchor;
     private readonly ProblemFilterState _inactiveFilter = new();
     private readonly ProblemFilterState _activeFilter1 = new();
     private readonly ProblemFilterState _activeFilter2 = new();
@@ -250,6 +249,9 @@ public partial class MainWindow : Window
     private readonly ModSearchState _activeSearch1 = new();
     private readonly ModSearchState _activeSearch2 = new();
     private ListBoxItem? _hoveredItem;
+    private bool _instanceAddRequested;
+    private ListBox? _lastHoverList;
+    private Point? _lastHoverPoint;
     private readonly List<UndoEntry> _undoHistory = new();
     private readonly List<UndoEntry> _redoHistory = new();
     private ListBox? _pendingCollapseList;
@@ -267,7 +269,6 @@ public partial class MainWindow : Window
         _inactiveSortField = 6;
         InitializeComponent();
 
-        _gamePathLabel = Find<TextBlock>("GamePathLabel");
         _pathBox = Find<TextBox>("PathBox");
         _pathField = Find<Border>("PathField");
         _languageButton = Find<Button>("LanguageButton");
@@ -299,7 +300,6 @@ public partial class MainWindow : Window
         _activeSearchField2 = Find<ComboBox>("ActiveSearchField2");
         _inactiveSourceButton = Find<Button>("InactiveSourceButton");
         _inactiveSortButton = Find<Button>("InactiveSortButton");
-        _inactiveSortActionButton = Find<Button>("InactiveSortActionButton");
         _inactiveCategoryModeButton = Find<Button>("InactiveCategoryModeButton");
         _inactiveCollapseCategoriesButton = Find<Button>("InactiveCollapseCategoriesButton");
         foreach (var cat in _config.CollapsedCategories)
@@ -648,7 +648,6 @@ public partial class MainWindow : Window
     private void ApplyLocalization()
     {
         var language = _config.Language;
-        _gamePathLabel.Text = Localization.GamePathLabel(language);
         _autoDetectGameButton.Content = Localization.AutoDetectButton(language);
         _browseButton.Content = Localization.BrowseButton(language);
         UpdatePaintButtonVisual();
@@ -2362,11 +2361,42 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void OnPathHintPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed is false) return;
+        ShowPathEditor();
+        e.Handled = true;
+    }
+
+    // The path field shows an ellipsized label until it is clicked.
+    private void ShowPathEditor()
+    {
+        var hint = Find<TextBlock>("PathHint");
+        hint.IsVisible = false;
+        _pathBox.IsVisible = true;
+        _pathBox.Focus();
+        _pathBox.CaretIndex = _pathBox.Text?.Length ?? 0;
+    }
+
+    private void ShowPathHint()
+    {
+        var hint = Find<TextBlock>("PathHint");
+        hint.Text = _pathBox.Text ?? string.Empty;
+        if (!_pathBox.IsVisible) return;   // already showing the label
+        _pathBox.IsVisible = false;
+        hint.IsVisible = true;
+    }
+
     private void OnPathKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
         {
             ValidatePath(save: true);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            ShowPathHint();
             e.Handled = true;
         }
     }
@@ -2377,10 +2407,13 @@ public partial class MainWindow : Window
         {
             ValidatePath(save: true);
         }
+
+        ShowPathHint();
     }
 
     private void OnPathTextChanged(object? sender, TextChangedEventArgs e)
     {
+        if (!_pathBox.IsVisible) ShowPathHint();
         if (string.IsNullOrWhiteSpace(_pathBox.Text))
         {
             SetFieldValid(true);
@@ -2776,6 +2809,7 @@ public partial class MainWindow : Window
 
     private void RefreshManager(bool selectFirst)
     {
+        ClearListHover();
         foreach (var timer in _searchTimers.Values) timer.Stop();
         _searchSources.Clear();
         if (_allMods.Count == 0)
@@ -3139,12 +3173,7 @@ public partial class MainWindow : Window
         if (_config.InactiveCategoryMode) return;
         var language = _config.Language;
         var flyout = new MenuFlyout();
-        flyout.Items.Add(CreateMenuItem((_inactiveSortField == 6 ? "✓ " : "   ") + SortFieldName(6, language), true, () =>
-        {
-            _inactiveSortField = 6;
-            UpdateSortButton(language);
-            RefreshInactivePreservingScroll();
-        }));
+        flyout.Items.Add(CreateUnorderedSortRow(flyout, language));
         flyout.Items.Add(new Separator());
         for (var i = 0; i < 6; i++)
         {
@@ -3172,7 +3201,65 @@ public partial class MainWindow : Window
         flyout.ShowAt(_inactiveSortButton);
     }
 
-    private void OnInactiveSortActionClick(object? sender, RoutedEventArgs e)
+    // "✓ Unordered" with the one-shot sort button tucked on its right.
+    private MenuItem CreateUnorderedSortRow(MenuFlyout flyout, string? language)
+    {
+        var label = new TextBlock
+        {
+            Text = (_inactiveSortField == 6 ? "✓ " : "   ") + SortFieldName(6, language),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
+        var hit = new Border
+        {
+            Child = label,
+            Background = Brushes.Transparent,
+            Padding = new Thickness(4, 0, 4, 0),
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        hit.PointerPressed += (_, _) =>
+        {
+            _inactiveSortField = 6;
+            UpdateSortButton(language);
+            RefreshInactivePreservingScroll();
+            flyout.Hide();
+        };
+
+        var action = new Button
+        {
+            Content = UpdateText("Sort", "排序", "排序", "並べ替え"),
+            Theme = Application.Current?.FindResource("FlatButton") as Avalonia.Styling.ControlTheme,
+            Height = 18,
+            MinHeight = 18,
+            MinWidth = 0,
+            FontSize = 10,
+            Padding = new Thickness(5, 0),
+            CornerRadius = new CornerRadius(5),
+            BorderThickness = new Thickness(0),
+            Background = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF)),
+            Foreground = ThemeService.PrimaryTextBrush,
+            Margin = new Thickness(4, 0, 2, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
+        };
+        action.Click += (_, _) => ShowInactiveSortFieldMenu(action);
+
+        var row = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            MinHeight = 26
+        };
+        row.Children.Add(hit);
+        Grid.SetColumn(action, 1);
+        row.Children.Add(action);
+
+        return new MenuItem
+        {
+            Header = row,
+            StaysOpenOnClick = true
+        };
+    }
+
+    private void ShowInactiveSortFieldMenu(Control anchor)
     {
         if (_config.InactiveCategoryMode) return;
         var language = _config.Language;
@@ -3186,7 +3273,8 @@ public partial class MainWindow : Window
                 ShowInactiveSortDirectionMenu();
             }));
         }
-        flyout.ShowAt(_inactiveSortActionButton);
+        _sortMenuAnchor = anchor;
+        flyout.ShowAt(anchor);
     }
 
     private void ShowInactiveSortDirectionMenu()
@@ -3203,7 +3291,7 @@ public partial class MainWindow : Window
             ApplySortToUnorderedList(_pendingInactiveSortField ?? 0, ascending: false);
             _pendingInactiveSortField = null;
         }));
-        flyout.ShowAt(_inactiveSortActionButton);
+        flyout.ShowAt(_sortMenuAnchor ?? _inactiveSortButton);
     }
 
     private void ApplySortToUnorderedList(int field, bool ascending)
@@ -3254,7 +3342,6 @@ public partial class MainWindow : Window
         _modCategoryButton.IsVisible = active;
         _inactiveCollapseCategoriesButton.IsVisible = active;
         _inactiveSortButton.IsVisible = !active;
-        _inactiveSortActionButton.IsVisible = !active && _inactiveSortField == 6;
     }
 
     private void ToggleCategoryCollapse(string pathKey)
@@ -3341,8 +3428,6 @@ public partial class MainWindow : Window
     {
         _inactiveSortButton.Content =
             $"{SortFieldName(_inactiveSortField, language)} " + (_inactiveSortAscending ? "↑" : "↓");
-        _inactiveSortActionButton.Content = UpdateText("Sort", "排序", "排序", "並べ替え");
-        _inactiveSortActionButton.IsVisible = !_config.InactiveCategoryMode && _inactiveSortField == 6;
     }
 
     private void SaveInactiveModOrder(ManagedInstance instance, List<string> order)
@@ -3527,6 +3612,22 @@ public partial class MainWindow : Window
         container.AddHandler(
             InputElement.PointerPressedEvent,
             (_, e) => OnInstanceDragPressed(combo, container, e),
+            RoutingStrategies.Tunnel,
+            true
+        );
+        // Only a real click on "+" may create an instance; the wheel and the keyboard
+        // move the selection too, which used to spawn profiles by accident.
+        container.AddHandler(
+            InputElement.PointerReleasedEvent,
+            (_, e) =>
+            {
+                if (container.DataContext is InstanceSelectorItem { IsAdd: true } &&
+                    e.GetCurrentPoint(container).Properties.PointerUpdateKind ==
+                    Avalonia.Input.PointerUpdateKind.LeftButtonReleased)
+                {
+                    _instanceAddRequested = true;
+                }
+            },
             RoutingStrategies.Tunnel,
             true
         );
@@ -3846,8 +3947,15 @@ public partial class MainWindow : Window
         }
 
         var step = e.Delta.Y > 0 ? -1 : 1;
-        combo.SelectedIndex = (combo.SelectedIndex + step + combo.ItemCount) %
-                              combo.ItemCount;
+        // The trailing "+" row must not join the wheel cycle: landing on it would
+        // create a new profile just by scrolling.
+        var source = combo.ItemsSource?.Cast<object>().ToList() ?? new List<object>();
+        var count = source.Count;
+        if (count > 0 && source[^1] is InstanceSelectorItem { IsAdd: true }) count--;
+        if (count <= 0) return;
+        var current = combo.SelectedIndex;
+        if (current < 0 || current >= count) current = step > 0 ? -1 : 0;
+        combo.SelectedIndex = (current + step + count) % count;
         e.Handled = true;
     }
 
@@ -4176,6 +4284,9 @@ public partial class MainWindow : Window
             _updatingInstances = true;
             comboBox.SelectedIndex = column == 0 ? _lastInstanceIndex1 : _lastInstanceIndex2;
             _updatingInstances = false;
+            var requested = _instanceAddRequested;
+            _instanceAddRequested = false;
+            if (!requested) return;
             _ = CreateInstanceAsync(column);
             return;
         }
@@ -5807,16 +5918,7 @@ public partial class MainWindow : Window
 
     private void OnModListPointerExited(object? sender, PointerEventArgs e)
     {
-        if (_hoveredItem is not null)
-        {
-            _hoveredItem.Classes.Remove("hover");
-            if (_hoveredItem.DataContext is ModInfo mod)
-            {
-                mod.ShowOriginalName = false;
-                mod.CategoryHovered = false;
-            }
-            _hoveredItem = null;
-        }
+        ClearListHover();
 
         if (_customDragActive)
         {
@@ -5824,12 +5926,36 @@ public partial class MainWindow : Window
         }
     }
 
+    // List containers are recycled on every rebuild, so a stale hover would light up
+    // whatever row now sits in that container.
+    private void ClearListHover()
+    {
+        if (_hoveredItem is null) return;
+        _hoveredItem.Classes.Remove("hover");
+        if (_hoveredItem.DataContext is ModInfo mod)
+        {
+            mod.ShowOriginalName = false;
+            mod.CategoryHovered = false;
+        }
+
+        _hoveredItem = null;
+        _lastHoverList = null;
+        _lastHoverPoint = null;
+    }
     // Left 2/3 of a row previews the full mod name; the right 1/3 previews the full category.
     internal static bool IsCategoryRegion(double rowWidth, double x) =>
         rowWidth > 0 && x >= rowWidth * 2.0 / 3.0;
 
     private void UpdateHoveredItem(ListBox list, PointerEventArgs e)
     {
+        // A list rebuild can raise a pointer event with the unchanged coordinates;
+        // treating it as movement would flash the hover on the row that replaced the
+        // one the pointer was over.
+        var point = e.GetPosition(list);
+        if (ReferenceEquals(list, _lastHoverList) && _lastHoverPoint == point) return;
+        _lastHoverList = list;
+        _lastHoverPoint = point;
+
         var item = FindListItem(list, e.Source);
         if (item?.DataContext is ModInfo hovered)
         {
@@ -6902,10 +7028,15 @@ public partial class MainWindow : Window
         if (payload.SourceColumn == 0 && targetColumn == 0 && _inactiveSortField == 6 &&
             GetSelectedInstance(_lastEnableColumn - 1) is { IsDamaged: false } inactiveInstance)
         {
-            var insertIndex = ModListOperations.SavedInsertIndex(
-                inactiveInstance.InactiveModOrder.Count, targetIndex, !_inactiveSortAscending);
-            var updated = ModListOperations.InsertSelection(inactiveInstance.InactiveModOrder, selectedIds, insertIndex);
-            if (updated.SequenceEqual(inactiveInstance.InactiveModOrder, StringComparer.OrdinalIgnoreCase)) return;
+            // Reorder in display order and flip back to the saved order. Mapping the
+            // insertion index alone lands on the wrong side when the dropped item sits
+            // past it in the saved order (the reversed view).
+            var reversed = !_inactiveSortAscending;
+            var saved = inactiveInstance.InactiveModOrder;
+            var display = reversed ? Enumerable.Reverse(saved).ToList() : saved.ToList();
+            var updatedDisplay = ModListOperations.InsertSelection(display, selectedIds, targetIndex);
+            var updated = reversed ? Enumerable.Reverse(updatedDisplay).ToList() : updatedDisplay;
+            if (updated.SequenceEqual(saved, StringComparer.OrdinalIgnoreCase)) return;
             SaveInactiveModOrder(inactiveInstance, updated);
             RefreshInactivePreservingScroll();
             return;
@@ -7264,6 +7395,45 @@ public partial class MainWindow : Window
         await window.ShowDialog(this);
     }
 
+    private bool _modpackPageOpen;
+
+    // The 合集 browser is a page of this window, not a second window.
+    private async Task<ModpackInstallResult?> ShowModpackPageAsync(ModpackWindow page)
+    {
+        var host = Find<ContentControl>("ModpackPageHost");
+        Find<Grid>("ListPage").IsVisible = false;
+        _modpackPageOpen = true;
+        host.Content = page;
+        host.IsVisible = true;
+        Title = "Rimworld PackFrame - " + Localization.ModpacksTitle(_config.Language);
+        await page.StartAsync();
+        return await page.Completion;
+    }
+
+    private void LeaveModpackPage()
+    {
+        if (!_modpackPageOpen) return;
+        _modpackPageOpen = false;
+        var host = Find<ContentControl>("ModpackPageHost");
+        host.IsVisible = false;
+        host.Content = null;
+        Find<Grid>("ListPage").IsVisible = true;
+        Title = "Rimworld PackFrame";
+    }
+
+    // On the 合集 page the window's ✕ goes back instead of quitting.
+    private bool TryLeaveModpackPage()
+    {
+        if (!_modpackPageOpen) return false;
+        if (Find<ContentControl>("ModpackPageHost").Content is ModpackWindow page && !page.TryClose())
+        {
+            return true;
+        }
+
+        LeaveModpackPage();
+        return true;
+    }
+
     private async Task OpenModpacksAsync(int column)
     {
         if (_packRoot is null ||
@@ -7275,14 +7445,15 @@ public partial class MainWindow : Window
         }
 
         var currentInstance = GetSelectedInstance(column);
-        var window = new ModpackWindow(
+        var page = new ModpackWindow(
             _config,
             _gameInstallation,
             _packRoot,
             currentInstance
         );
-        var result = await window.ShowDialog<ModpackInstallResult?>(this);
-        if (window.ConfigApplied && currentInstance is not null)
+        var result = await ShowModpackPageAsync(page);
+        LeaveModpackPage();
+        if (page.ConfigApplied && currentInstance is not null)
         {
             if (_gameInstallation is not null)
             {
@@ -8170,6 +8341,7 @@ public partial class MainWindow : Window
     private async void ShowDetails(ModInfo? mod)
     {
         UpdatePrerequisitesDetails(mod);
+        Find<Grid>("DetailsPane").IsVisible = mod is not null;
         if (mod is null)
         {
             _detailMod = null;
@@ -8257,6 +8429,12 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        if (TryLeaveModpackPage())
+        {
+            e.Cancel = true;
+            return;
+        }
+
         if (!_closeApproved && InstanceStore.HasPendingMods)
         {
             e.Cancel = true;

@@ -34,25 +34,48 @@ public partial class MainWindow
         var document = entry.Document;
         // The community table is keyed by workshop id; show the installed mod's
         // name where we have one, and the raw key otherwise.
-        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var installed = new Dictionary<string, (string Name, string? Link)>(StringComparer.OrdinalIgnoreCase);
         foreach (var mod in _allMods)
         {
             if (string.IsNullOrWhiteSpace(mod.Name)) continue;
+            var known = (mod.Name, (string?)(string.IsNullOrWhiteSpace(mod.Link) ? null : mod.Link));
             var workshopId = ModpackService.ParseWorkshopId(mod.Link)?.ToString();
-            if (workshopId is not null) names.TryAdd(workshopId, mod.Name);
-            if (!string.IsNullOrWhiteSpace(mod.PackageId)) names.TryAdd(mod.PackageId, mod.Name);
+            if (workshopId is not null) installed.TryAdd(workshopId, known);
+            if (!string.IsNullOrWhiteSpace(mod.PackageId)) installed.TryAdd(mod.PackageId, known);
         }
 
         var titles = document.Titles;
-        var entries = CategoryTemplateTable(document)
-            .Select(pair => (names.TryGetValue(pair.Key, out var installed)
-                ? installed
-                : titles.TryGetValue(pair.Key, out var title) && !string.IsNullOrWhiteSpace(title)
-                    ? title
-                    : pair.Key.All(char.IsDigit)
-                        ? UpdateText("Workshop ", "创意工坊 ", "創意工坊 ", "ワークショップ ") + pair.Key
-                        : pair.Key, (string?)pair.Value))
-            .ToList();
+        var entries = new List<(string Name, string? Category)>();
+        var links = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in CategoryTemplateTable(document))
+        {
+            string name;
+            string? link;
+            if (installed.TryGetValue(pair.Key, out var known))
+            {
+                name = known.Name;
+                link = known.Link;
+            }
+            else if (titles.TryGetValue(pair.Key, out var title) && !string.IsNullOrWhiteSpace(title))
+            {
+                name = title;
+                link = pair.Key.All(char.IsDigit) ? SteamLink(pair.Key) : null;
+            }
+            else if (pair.Key.All(char.IsDigit))
+            {
+                name = UpdateText("Workshop ", "创意工坊 ", "創意工坊 ", "ワークショップ ") + pair.Key;
+                link = SteamLink(pair.Key);
+            }
+            else
+            {
+                name = pair.Key;
+                link = null;
+            }
+
+            entries.Add((name, pair.Value));
+            if (link is not null) links.TryAdd(name, link);
+        }
+
         if (entries.Count == 0) return null;
         var categories = entries
             .Select(item => item.Item2)
@@ -64,8 +87,12 @@ public partial class MainWindow
             categories,
             entries,
             _config.Language,
-            entry.Name);
+            entry.Name,
+            links);
     }
+
+    private static string SteamLink(string workshopId) =>
+        "https://steamcommunity.com/sharedfiles/filedetails/?id=" + workshopId;
 
     // The section the "N entries" count in the row comes from.
     private static Dictionary<string, string> CategoryTemplateTable(ModCategoryDocument document) =>
