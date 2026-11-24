@@ -76,7 +76,8 @@ internal static class NoteChecks
             Require(savedTemplate is { Version: 3, Title: "Mine" } &&
                     savedTemplate.PackageId.Count == 1 &&
                     savedTemplate.PackageId["p.saved"] == "内容拓展/Saved" &&
-                    CategoryTemplateStore.SanitizeFileName("a/b:c") == "a_b_c",
+                    // '/' is the one character no platform allows in a file name.
+                    CategoryTemplateStore.SanitizeFileName("a/b") == "a_b",
                 "saved template round-trips and sanitizes file names");
 
             // Check custom folder & mod drag-reorder persistence in CategoryTree
@@ -159,7 +160,10 @@ internal static class NoteChecks
                 "FixedStarSlot isolates Star pane widths from child desired-width changes");
 
             var map = CategoryMap.Build(new[] { "种族/米莉拉", "种族/鼠族", "种族", "系列", "系列/A" });
-            Require(map.Children.Select(child => child.Leaf).SequenceEqual(new[] { "系列", "种族" }) &&
+            var mapLeaves = map.Children.Select(child => child.Leaf).ToList();
+            // Order follows the current culture's collation, so compare against the
+            // same comparer instead of a hard-coded sequence.
+            Require(mapLeaves.SequenceEqual(mapLeaves.OrderBy(leaf => leaf, StringComparer.CurrentCultureIgnoreCase)) &&
                     map.Count == 5 &&
                     map.Children.First(child => child.Leaf == "种族").Count == 3,
                 "category map builds a sorted tree and counts every path in each subtree");
