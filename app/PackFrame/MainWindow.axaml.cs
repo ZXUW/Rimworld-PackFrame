@@ -151,7 +151,7 @@ public partial class MainWindow : Window
     private readonly TextBox _authorValue;
     private readonly TextBox _pathValue;
     private readonly TextBox _packageValue;
-    private readonly SelectableTextBlock _descriptionValue;
+    private readonly TextBox _descriptionValue;
     private readonly Border _prerequisitesSection;
     private readonly TextBlock _prerequisitesLabel;
     private readonly TextBlock _prerequisitesHint;
@@ -170,6 +170,13 @@ public partial class MainWindow : Window
     private readonly Popup _modBadgePopup;
     private Control? _problemTooltipTarget;
     private IPointer? _problemTooltipPointer;
+    private Control? _pathLink;
+    private IBrush? _pathLinkForeground;
+    private TextDecorationCollection? _pathLinkDecorations;
+    private Thickness _pathLinkThickness;
+    private IBrush? _pathLinkBorderBrush;
+    private readonly Border _pathUnderline;
+    private static readonly IBrush PathLinkBrush = new SolidColorBrush(Color.FromRgb(0x4D, 0xA6, 0xFF));
 
     private const string ScratchFolderName = "__scratch__";
     private List<ModInfo> _allMods = new();
@@ -371,7 +378,7 @@ public partial class MainWindow : Window
         _authorValue = Find<TextBox>("AuthorValue");
         _pathValue = Find<TextBox>("PathValue");
         _packageValue = Find<TextBox>("PackageValue");
-        _descriptionValue = Find<SelectableTextBlock>("DescriptionValue");
+        _descriptionValue = Find<TextBox>("DescriptionValue");
         _prerequisitesSection = Find<Border>("PrerequisitesSection");
         _prerequisitesLabel = Find<TextBlock>("PrerequisitesLabel");
         _prerequisitesHint = Find<TextBlock>("PrerequisitesHint");
@@ -497,6 +504,39 @@ public partial class MainWindow : Window
         _pathBox.KeyDown += OnPathKeyDown;
         _pathBox.LostFocus += OnPathLostFocus;
         _pathBox.TextChanged += OnPathTextChanged;
+        // Read-only value boxes keep their selection highlight after focus moves away.
+        foreach (var valueBox in new[] { _nameValue, _authorValue, _packageValue, _pathValue })
+        {
+            valueBox.LostFocus += (sender, _) =>
+            {
+                if (sender is TextBox box)
+                {
+                    box.SelectionStart = 0;
+                    box.SelectionEnd = 0;
+                }
+            };
+        }
+        AddHandler(
+            InputElement.PointerReleasedEvent,
+            OnWindowPointerReleasedDisarmPathLink,
+            RoutingStrategies.Bubble,
+            true
+        );
+        _pathValue.AddHandler(
+            InputElement.PointerReleasedEvent,
+            OnDetailPathReleased,
+            RoutingStrategies.Tunnel,
+            true
+        );
+        _pathUnderline = Find<Border>("PathLinkUnderline");
+        // The details pane scrolls itself; a click inside the description must not ask
+        // the ScrollViewer to bring the caret into view.
+        Find<Grid>("DetailsPane").AddHandler(
+            Control.RequestBringIntoViewEvent,
+            OnDetailsRequestBringIntoView,
+            RoutingStrategies.Bubble,
+            true
+        );
         _languageButton.Click += OnLanguageClick;
         _browseButton.Click += OnBrowseClick;
         _undoButton.Click += OnUndoClick;
@@ -2459,11 +2499,141 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void OnPathHintPressed(object? sender, PointerPressedEventArgs e)
+    private void OnDetailsRequestBringIntoView(object? sender, RequestBringIntoViewEventArgs e)
     {
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed is false) return;
+        if (ReferenceEquals(e.TargetObject, _descriptionValue))
+        {
+            e.Handled = true;
+        }
+    }
+
+    // Clicking the empty part of the field opens the editor; clicking the text keeps
+    // the link behaviour.
+    private void OnPathFieldReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        var hint = Find<TextBlock>("PathHint");
+        if (!hint.IsVisible) return;
+        if (IsOnPathText(e.GetPosition(hint), hint)) return;
         ShowPathEditor();
-        e.Handled = true;
+    }
+
+    private static bool IsOnPathText(Point position, TextBlock hint)
+    {
+        var width = hint.TextLayout?.Width ?? 0;
+        var left = hint.Padding.Left;
+        return position.X >= left && position.X <= left + width;
+    }
+
+    // First click turns the path into a link (blue + underline), a second click opens it.
+    private void OnPathHintReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is not Control hint) return;
+        if (hint is TextBlock block && !IsOnPathText(e.GetPosition(block), block)) return;
+        if (!ArmPathLink(hint)) return;
+        DisarmPathLink();
+        if (Directory.Exists(_config.GamePath))
+        {
+            InstanceStore.OpenFolder(_config.GamePath);
+        }
+    }
+
+    private void OnDetailPathReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is not Control target) return;
+        if (!ArmPathLink(target)) return;
+        DisarmPathLink();
+        if (_detailMod is { } mod && Directory.Exists(mod.Path))
+        {
+            InstanceStore.OpenFolder(mod.Path);
+        }
+    }
+
+    // Returns true when this click should open the folder (already armed).
+    private bool ArmPathLink(Control target)
+    {
+        if (ReferenceEquals(_pathLink, target)) return true;
+        DisarmPathLink();
+        _pathLink = target;
+        _pathLinkForeground = Avalonia.Controls.Documents.TextElement.GetForeground(target);
+        Avalonia.Controls.Documents.TextElement.SetForeground(target, PathLinkBrush);
+        if (target is TextBlock block)
+        {
+            _pathLinkDecorations = block.TextDecorations;
+            block.TextDecorations = TextDecorations.Underline;
+        }
+        else if (target is TextBox box)
+        {
+            // TextBox has no text decorations; an overlay line under it reads as one.
+            _pathLinkThickness = box.BorderThickness;
+            _pathLinkBorderBrush = box.BorderBrush;
+            if (ReferenceEquals(box, _pathValue))
+            {
+                _pathUnderline.IsVisible = true;
+            }
+        }
+
+        return false;
+    }
+
+    private void DisarmPathLink()
+    {
+        if (_pathLink is null) return;
+        if (_pathLinkForeground is null)
+        {
+            _pathLink.ClearValue(Avalonia.Controls.Documents.TextElement.ForegroundProperty);
+        }
+        else
+        {
+            Avalonia.Controls.Documents.TextElement.SetForeground(_pathLink, _pathLinkForeground);
+        }
+
+        if (_pathLink is TextBlock block)
+        {
+            block.TextDecorations = _pathLinkDecorations;
+        }
+        else if (_pathLink is TextBox box)
+        {
+            box.BorderThickness = _pathLinkThickness;
+            box.BorderBrush = _pathLinkBorderBrush;
+            if (ReferenceEquals(box, _pathValue))
+            {
+                _pathUnderline.IsVisible = false;
+            }
+        }
+
+        _pathLink = null;
+        _pathLinkForeground = null;
+        _pathLinkDecorations = null;
+        _pathLinkBorderBrush = null;
+    }
+
+    private void OnWindowPointerReleasedDisarmPathLink(object? sender, PointerReleasedEventArgs e)
+    {
+        // A click outside the path field leaves the editor.
+        if (_pathBox.IsVisible && e.Source is Visual clicked)
+        {
+            var field = Find<Border>("PathField");
+            if (!ReferenceEquals(clicked, field) &&
+                !clicked.GetSelfAndVisualAncestors().Contains(field))
+            {
+                if (!string.IsNullOrWhiteSpace(_pathBox.Text))
+                {
+                    ValidatePath(save: true);
+                }
+
+                ShowPathHint();
+            }
+        }
+
+        if (_pathLink is null) return;
+        if (e.Source is Visual source &&
+            (ReferenceEquals(source, _pathLink) ||
+             source.GetSelfAndVisualAncestors().Contains(_pathLink)))
+        {
+            return;
+        }
+
+        DisarmPathLink();
     }
 
     // The path field shows an ellipsized label until it is clicked.
@@ -7698,6 +7868,7 @@ public partial class MainWindow : Window
         {
             flyout.Items.Add(new MenuItem { Header = "⚠ " + selected.LoadError, IsEnabled = false });
             flyout.Items.Add(CreateMenuItem(Localization.OpenInstance(language), true, () => OpenInstance(column)));
+            flyout.Items.Add(CreateMenuItem(Localization.OpenSaves(language), true, () => OpenSaves(column)));
             flyout.Items.Add(CreateMenuItem(Localization.ImportInstance(language), hasPackRoot, () => _ = ImportInstancesAsync(column)));
             if (!selected.IsOfficial)
                 flyout.Items.Add(CreateMenuItem(Localization.DeleteInstance(language), true, () => _ = DeleteInstanceAsync(column)));
@@ -7745,6 +7916,11 @@ public partial class MainWindow : Window
                 hasOfficialPath,
                 () => OpenInstance(column)
             ));
+            flyout.Items.Add(CreateMenuItem(
+                Localization.OpenSaves(language),
+                hasOfficialPath,
+                () => OpenSaves(column)
+            ));
             flyout.ShowAt(button);
             return;
         }
@@ -7764,6 +7940,8 @@ public partial class MainWindow : Window
             () => _ = ExportInstanceAsync(column)));
         flyout.Items.Add(CreateMenuItem(Localization.OpenInstance(language), hasInstance,
             () => OpenInstance(column)));
+        flyout.Items.Add(CreateMenuItem(Localization.OpenSaves(language), hasInstance,
+            () => OpenSaves(column)));
 
         flyout.ShowAt(button);
     }
@@ -8489,6 +8667,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OpenSaves(int column)
+    {
+        var instance = GetSelectedInstance(column);
+        if (instance is null)
+        {
+            return;
+        }
+
+        try
+        {
+            InstanceStore.OpenSaves(instance);
+        }
+        catch
+        {
+        }
+    }
+
     private string? _previewPath;
     private int _previewVersion;
     private bool _windowClosed;
@@ -8529,9 +8724,7 @@ public partial class MainWindow : Window
             _noteCategoryBox.Text = note?.Category ?? string.Empty;
         }
         _authorValue.Text = mod.Author;
-        var displayPath = UpperDrive(mod.Path);
-        _pathValue.Text = displayPath;
-        ToolTip.SetTip(_pathValue, displayPath);
+        _pathValue.Text = UpperDrive(mod.Path);
         _packageValue.Text = mod.PackageId;
         _descriptionValue.Text = mod.Description;
 

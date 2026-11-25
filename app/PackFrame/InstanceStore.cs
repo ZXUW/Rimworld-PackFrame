@@ -966,6 +966,11 @@ public static class InstanceStore
         OpenFolder(instance.ConfigDirectoryPath);
     }
 
+    public static void OpenSaves(ManagedInstance instance)
+    {
+        OpenFolder(Path.Combine(instance.DirectoryPath, "Saves"));
+    }
+
     public static void OpenFolder(string folder)
     {
         if (!Directory.Exists(folder))

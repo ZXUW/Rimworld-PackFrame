@@ -192,6 +192,7 @@
                     Classes="field"
                     CornerRadius="0"
                     Height="32"
+                    PointerReleased="OnPathFieldReleased"
                     MinWidth="120">
                 <Grid>
                     <!-- Shown until the user clicks: long paths end with an ellipsis. -->
@@ -200,12 +201,13 @@
                                Padding="8,0"
                                Cursor="IBeam"
                                TextTrimming="CharacterEllipsis"
-                               PointerPressed="OnPathHintPressed" />
+                               PointerReleased="OnPathHintReleased" />
                     <TextBox x:Name="PathBox"
                              IsVisible="False"
                              Background="Transparent"
                              BorderThickness="0"
                              CornerRadius="0"
+                             Padding="8,0"
                              VerticalContentAlignment="Center"
                              VerticalAlignment="Stretch" />
                 </Grid>
@@ -344,6 +346,13 @@
                                  MinHeight="0"
                                  Foreground="{DynamicResource PrimaryTextBrush}"
                                  TextWrapping="NoWrap" />
+                        <Border x:Name="PathLinkUnderline"
+                                Grid.Column="1"
+                                Height="1"
+                                VerticalAlignment="Bottom"
+                                Background="#4DA6FF"
+                                IsHitTestVisible="False"
+                                IsVisible="False" />
                     </Grid>
 
                     <Grid Grid.Row="5" ColumnDefinitions="Auto,*" Margin="0,6,0,0">
@@ -367,11 +376,16 @@
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                Margin="0,10,0,2" />
 
-                    <ScrollViewer Grid.Row="7" VerticalScrollBarVisibility="Auto">
-                        <SelectableTextBlock x:Name="DescriptionValue"
-                                             Foreground="{DynamicResource PrimaryTextBrush}"
-                                             TextWrapping="Wrap" />
-                    </ScrollViewer>
+                    <TextBox x:Name="DescriptionValue"
+                             Grid.Row="7"
+                             IsReadOnly="True"
+                             AcceptsReturn="True"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Padding="0"
+                             MinHeight="0"
+                             Foreground="{DynamicResource PrimaryTextBrush}"
+                             TextWrapping="Wrap" />
 
                     <Border x:Name="PrerequisitesSection" Grid.Row="8"
                             IsVisible="False" Margin="0,8,0,0" Padding="0,6,0,0"

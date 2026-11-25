@@ -474,10 +474,21 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "打开",
-            TraditionalChinese => "開啟",
-            Japanese => "開く",
-            _ => "Open"
+            SimplifiedChinese => "打开Config路径",
+            TraditionalChinese => "開啟Config路徑",
+            Japanese => "Configフォルダを開く",
+            _ => "Open Config Folder"
+        };
+    }
+
+    public static string OpenSaves(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "打开存档路径",
+            TraditionalChinese => "開啟存檔路徑",
+            Japanese => "セーブデータを開く",
+            _ => "Open Saves Folder"
         };
     }
 
