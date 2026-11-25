@@ -231,6 +231,10 @@
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="Normal" />
         </Style>
+        <Style Selector="ComboBox:dropdownopen /template/ PathIcon">
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        </Style>
         <Style Selector="ComboBox /template/ Border#PopupBorder">
             <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}" />

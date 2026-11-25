@@ -216,6 +216,18 @@ try
             ModListOperations.SavedInsertIndex(reversedSaved.Count, 0, reversed: true))
         .SequenceEqual(new[] { "b", "c", "d", "e", "a" }),
         "dropping at the top of a reversed list writes the item to the end of the saved order");
+    var savedWithEnabled = new List<string> { "a", "on1", "b", "on2", "c", "on3", "d" };
+    Check(ModListOperations.MoveToAnchor(savedWithEnabled, new[] { "c" }, "b", reversed: false)
+        .SequenceEqual(new[] { "a", "on1", "c", "b", "on2", "on3", "d" }),
+        "a drop lands on its line even when the saved order still holds enabled mods");
+    Check(ModListOperations.MoveToAnchor(new[] { "a", "b", "c" }, new[] { "x" }, "b", reversed: true)
+        .SequenceEqual(new[] { "a", "b", "x", "c" }),
+        "a reversed view inserts after its anchor so the item stays above the line");
+    Check(ModListOperations.MoveToAnchor(new[] { "a", "b", "c" }, new[] { "x" }, null, reversed: false)
+            .SequenceEqual(new[] { "a", "b", "c", "x" }) &&
+          ModListOperations.MoveToAnchor(new[] { "a", "b", "c" }, new[] { "x" }, null, reversed: true)
+            .SequenceEqual(new[] { "x", "a", "b", "c" }),
+        "dropping past the last row appends in either direction");
     Check(ModListOperations.NudgeSelection(originalOrder, new[] { "b", "d" }, -1)
         .SequenceEqual(new[] { "b", "a", "d", "c", "e" }), "Alt+Up nudges noncontiguous selection up one slot");
     Check(ModListOperations.NudgeSelection(originalOrder, new[] { "a", "c" }, -1)

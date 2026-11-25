@@ -836,6 +836,17 @@ public static class Localization
         };
     }
 
+    public static string ProblemLocalTitle(string? language)
+    {
+        return language switch
+        {
+            SimplifiedChinese => "L — 本地模组",
+            TraditionalChinese => "L — 本機模組",
+            Japanese => "L — ローカルMOD",
+            _ => "L — Local mods"
+        };
+    }
+
     public static string BadgeLocal(string? language)
     {
         return language switch
@@ -1140,8 +1151,8 @@ public static class Localization
     {
         return language switch
         {
-            SimplifiedChinese => "模组上色刷子",
-            TraditionalChinese => "模組上色刷子",
+            SimplifiedChinese => "上色刷子",
+            TraditionalChinese => "上色刷子",
             Japanese => "MODカラーブラシ",
             _ => "Mod color brush"
         };

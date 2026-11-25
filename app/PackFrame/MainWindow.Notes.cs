@@ -292,8 +292,8 @@ public partial class MainWindow
         _batchCategoryButton.Content = _noteBatchMode
             ? (_noteBatchClear
                 ? UpdateText("Batch clear (brush)", "批量清除分类刷子", "批次清除分類刷子", "分類クリア（ブラシ）")
-                : _noteBatchCategory ?? UpdateText("Batch category brush", "批量分类刷子", "批次分類刷子", "分類ブラシ"))
-            : UpdateText("Batch category brush", "批量分类刷子", "批次分類刷子", "分類ブラシ");
+                : _noteBatchCategory ?? UpdateText("Batch category brush", "分类刷子", "分類刷子", "分類ブラシ"))
+            : UpdateText("Batch category brush", "分类刷子", "分類刷子", "分類ブラシ");
         _batchCategoryButton.Background = _noteBatchMode ? TextBrush : SecondaryBorderBrush;
         _batchCategoryButton.Foreground = _noteBatchMode
             ? ThemeService.BackgroundBrush

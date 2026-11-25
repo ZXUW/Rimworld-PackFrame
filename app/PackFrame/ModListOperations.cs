@@ -81,6 +81,27 @@ internal static class ModListOperations
     public static int SavedInsertIndex(int savedCount, int displayIndex, bool reversed) =>
         reversed ? savedCount - displayIndex : displayIndex;
 
+    // Saved order keeps ids of mods that are no longer inactive, so a display index
+    // cannot be used on it; anchor the move on the row the drop line sits on.
+    public static List<string> MoveToAnchor(IReadOnlyList<string> saved,
+        IReadOnlyList<string> movedIds, string? anchorId, bool reversed)
+    {
+        var moved = new HashSet<string>(movedIds, StringComparer.OrdinalIgnoreCase);
+        var updated = saved.Where(id => !moved.Contains(id)).ToList();
+        var anchor = anchorId is null
+            ? -1
+            : updated.FindIndex(id => string.Equals(id, anchorId, StringComparison.OrdinalIgnoreCase));
+        if (anchor < 0)
+        {
+            if (reversed) updated.InsertRange(0, movedIds);
+            else updated.AddRange(movedIds);
+            return updated;
+        }
+
+        updated.InsertRange(reversed ? anchor + 1 : anchor, movedIds);
+        return updated;
+    }
+
     public static List<ModInfo> WithLoadOrder(
         IReadOnlyList<ModInfo> resolvedMods,
         IReadOnlyList<string> activePackageIds)

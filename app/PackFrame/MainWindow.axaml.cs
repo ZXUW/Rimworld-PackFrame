@@ -147,10 +147,10 @@ public partial class MainWindow : Window
     private readonly SelectableTextBlock _pathLabel;
     private readonly SelectableTextBlock _packageLabel;
     private readonly SelectableTextBlock _descriptionLabel;
-    private readonly SelectableTextBlock _nameValue;
-    private readonly SelectableTextBlock _authorValue;
-    private readonly SelectableTextBlock _pathValue;
-    private readonly SelectableTextBlock _packageValue;
+    private readonly TextBox _nameValue;
+    private readonly TextBox _authorValue;
+    private readonly TextBox _pathValue;
+    private readonly TextBox _packageValue;
     private readonly SelectableTextBlock _descriptionValue;
     private readonly Border _prerequisitesSection;
     private readonly TextBlock _prerequisitesLabel;
@@ -164,12 +164,11 @@ public partial class MainWindow : Window
     private readonly Border _undoToast;
     private readonly TextBlock _undoToastText;
     private readonly DispatcherTimer _undoToastTimer;
-    private readonly DispatcherTimer _problemTooltipTimer;
+    private IDisposable? _problemTooltipCloseTimer;
     private const int StartupRefreshDelayMs = 3000;
     private IDisposable? _problemTooltipShowTimer;
     private readonly Popup _modBadgePopup;
     private Control? _problemTooltipTarget;
-    private bool _problemTooltipContentHovered;
     private IPointer? _problemTooltipPointer;
 
     private const string ScratchFolderName = "__scratch__";
@@ -239,6 +238,7 @@ public partial class MainWindow : Window
     private ComboBoxItem? _instanceDropTarget;
     private bool _updatingSearch;
     private int _inactiveSortField = 6;
+    private int _officialSortField = -1;   // sort to restore when leaving an official instance
     private bool _inactiveSortAscending = true;
     private int? _pendingInactiveSortField;
     private Control? _sortMenuAnchor;
@@ -367,10 +367,10 @@ public partial class MainWindow : Window
         _pathLabel = Find<SelectableTextBlock>("PathLabel");
         _packageLabel = Find<SelectableTextBlock>("PackageLabel");
         _descriptionLabel = Find<SelectableTextBlock>("DescriptionLabel");
-        _nameValue = Find<SelectableTextBlock>("NameValue");
-        _authorValue = Find<SelectableTextBlock>("AuthorValue");
-        _pathValue = Find<SelectableTextBlock>("PathValue");
-        _packageValue = Find<SelectableTextBlock>("PackageValue");
+        _nameValue = Find<TextBox>("NameValue");
+        _authorValue = Find<TextBox>("AuthorValue");
+        _pathValue = Find<TextBox>("PathValue");
+        _packageValue = Find<TextBox>("PackageValue");
         _descriptionValue = Find<SelectableTextBlock>("DescriptionValue");
         _prerequisitesSection = Find<Border>("PrerequisitesSection");
         _prerequisitesLabel = Find<TextBlock>("PrerequisitesLabel");
@@ -401,10 +401,6 @@ public partial class MainWindow : Window
             _undoToast.IsVisible = false;
         };
 
-        _problemTooltipTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(100)
-        };
         _modBadgePopup = new Popup
         {
             IsLightDismissEnabled = false,
@@ -412,17 +408,7 @@ public partial class MainWindow : Window
         };
         // Inherit control themes, including visible text-selection highlights.
         LogicalChildren.Add(_modBadgePopup);
-        _problemTooltipTimer.Tick += (_, _) =>
-        {
-            // Retry while dragging or a nested copy menu temporarily prevents closing.
-            if (!_problemTooltipContentHovered &&
-                (_problemTooltipPointer?.Captured is not Visual captured ||
-                 !captured.GetSelfAndVisualAncestors().Contains(_modBadgePopup.Child)) &&
-                _modBadgePopup.OpenedPopups.Count == 0)
-            {
-                CloseProblemTooltip();
-            }
-        };
+        PointerMoved += OnProblemTooltipPointerMoved;
         foreach (var label in new[]
                  {
                      _inactiveProblemV,
@@ -432,12 +418,17 @@ public partial class MainWindow : Window
                      _activeProblemR1,
                      _activeProblemS2,
                      _activeProblemV2,
-                     _activeProblemR2
+                     _activeProblemR2,
+                     _inactiveLocalCount,
+                     _activeLocalCount1,
+                     _activeLocalCount2
                  })
         {
-            ToolTip.SetServiceEnabled(label, false);
-            label.PointerEntered += OnProblemLabelPointerEntered;
-            label.PointerExited += OnProblemLabelPointerExited;
+            // Hover the whole highlighted Border, not just the label text.
+            var hover = label.Parent as Control ?? label;
+            ToolTip.SetServiceEnabled(hover, false);
+            hover.PointerEntered += OnProblemLabelPointerEntered;
+            hover.PointerExited += OnProblemLabelPointerExited;
         }
 
         foreach (var list in GetModLists())
@@ -454,6 +445,12 @@ public partial class MainWindow : Window
             list.PointerMoved += OnModListPointerMoved;
             list.PointerReleased += OnModListPointerReleased;
             list.PointerExited += OnModListPointerExited;
+            list.AddHandler(
+                InputElement.PointerWheelChangedEvent,
+                OnModListWheelShiftPage,
+                RoutingStrategies.Tunnel,
+                true
+            );
             list.PointerCaptureLost += (_, _) =>
             {
                 if (_noteBatchIds.Count > 0)
@@ -593,7 +590,7 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(_config.GamePath))
         {
-            _pathBox.Text = _config.GamePath;
+            _pathBox.Text = UpperDrive(_config.GamePath);
             ValidatePath(save: false);
         }
 
@@ -1389,6 +1386,51 @@ public partial class MainWindow : Window
         Dictionary<string, string?>? CategoryBefore = null,
         Dictionary<string, string?>? CategoryAfter = null
     );
+    // A faded summary of the active problem filters, right of the counts.
+    private void UpdateFilterSummaries()
+    {
+        var language = _config.Language;
+        SetFilterSummary("InactiveFilterSummary", _inactiveFilter, language);
+        SetFilterSummary("ActiveFilterSummary1", _activeFilter1, language);
+        SetFilterSummary("ActiveFilterSummary2", _activeFilter2, language);
+    }
+
+    private void SetFilterSummary(string name, ProblemFilterState filter, string? language)
+    {
+        var summary = this.FindControl<TextBlock>(name);
+        if (summary is null) return;
+        var hide = new List<string>();
+        var only = new List<string>();
+        void Add(ProblemFilterMode mode, string target)
+        {
+            if (mode == ProblemFilterMode.Only) only.Add(target);
+            else if (mode == ProblemFilterMode.Hide) hide.Add(target);
+        }
+
+        Add(filter.Sort, UpdateText("sort errors", "错排", "錯排", "整列エラー"));
+        Add(filter.Duplicate, UpdateText("duplicates", "重复", "重複", "重複"));
+        Add(filter.Version, UpdateText("old versions", "旧版", "舊版", "旧版"));
+        Add(filter.Local, UpdateText("local", "本地", "本機", "ローカル"));
+
+        // Same state collapses into one phrase so the bar never gets cut off.
+        var separator = UpdateText(", ", "、", "、", "・");
+        var parts = new List<string>();
+        if (only.Count > 0)
+        {
+            var joined = string.Join(separator, only);
+            parts.Add(UpdateText($"only {joined}", $"仅显示{joined}", $"僅顯示{joined}", $"{joined}のみ"));
+        }
+
+        if (hide.Count > 0)
+        {
+            var joined = string.Join(separator, hide);
+            parts.Add(UpdateText($"hide {joined}", $"隐藏{joined}", $"隱藏{joined}", $"{joined}を非表示"));
+        }
+
+        summary.Text = string.Join(UpdateText(", ", "，", "，", "、"), parts);
+        summary.IsVisible = parts.Count > 0;
+    }
+
     private void UpdateProblemSummary(
         TextBlock? sortText,
         TextBlock versionText,
@@ -1415,7 +1457,8 @@ public partial class MainWindow : Window
         }
         versionText.Text = $"V: {versionMods.Count}";
         duplicateText.Text = $"R: {duplicateMods.Count}";
-        localText.Text = $"L: {mods.Count(mod => mod.IsLocal)}";
+        var localMods = mods.Where(mod => mod.IsLocal).ToList();
+        localText.Text = $"L: {localMods.Count}";
         SetProblemTooltip(
             versionText,
             Localization.ProblemVersionTitle(language),
@@ -1425,6 +1468,11 @@ public partial class MainWindow : Window
             duplicateText,
             Localization.ProblemDuplicateTitle(language),
             duplicateMods
+        );
+        SetProblemTooltip(
+            localText,
+            Localization.ProblemLocalTitle(language),
+            localMods
         );
     }
 
@@ -1666,17 +1714,20 @@ public partial class MainWindow : Window
 
     private void AttachProblemTooltipHover(Control target, Control content)
     {
-        content.PointerEntered += (_, _) =>
-        {
-            _problemTooltipContentHovered = true;
-            _problemTooltipTimer.Stop();
-        };
+        content.PointerEntered += (_, _) => CancelProblemTooltipClose();
         content.PointerExited += (_, e) =>
         {
             if (ReferenceEquals(_problemTooltipTarget, target))
             {
-                _problemTooltipContentHovered = false;
                 _problemTooltipPointer = e.Pointer;
+                StartProblemTooltipCloseTimer();
+            }
+        };
+        // A finished text selection releases the capture; re-check then.
+        content.PointerCaptureLost += (_, _) =>
+        {
+            if (ReferenceEquals(_problemTooltipTarget, target))
+            {
                 StartProblemTooltipCloseTimer();
             }
         };
@@ -1695,7 +1746,7 @@ public partial class MainWindow : Window
         };
         Avalonia.Controls.Documents.TextElement.SetForeground(popupContent, TextBrush);
         AttachProblemTooltipHover(target, popupContent);
-        target.Tag = popupContent;
+        SetProblemTooltipTag(target, popupContent);
     }
 
     private void SetSortProblemTooltipContent(TextBlock target, StackPanel content)
@@ -1713,12 +1764,23 @@ public partial class MainWindow : Window
             }
         };
         AttachProblemTooltipHover(target, popupContent);
-        target.Tag = popupContent;
+        SetProblemTooltipTag(target, popupContent);
+    }
+
+    // The hover events sit on the highlighted Border wrapping the label, so the tag
+    // has to be readable from either one.
+    private static void SetProblemTooltipTag(Control target, Control content)
+    {
+        target.Tag = content;
+        if (target.Parent is Control parent)
+        {
+            parent.Tag = content;
+        }
     }
 
     private void OnProblemLabelPointerEntered(object? sender, PointerEventArgs e)
     {
-        if (sender is not TextBlock target)
+        if (sender is not Control target)
         {
             return;
         }
@@ -1764,7 +1826,7 @@ public partial class MainWindow : Window
 
     private void ScheduleProblemTooltip(Control target, Action show)
     {
-        _problemTooltipTimer.Stop();
+        CancelProblemTooltipClose();
         if (ReferenceEquals(_problemTooltipTarget, target) && _modBadgePopup.IsOpen)
         {
             return;
@@ -1785,7 +1847,7 @@ public partial class MainWindow : Window
             }
 
             show();
-        }, TimeSpan.FromMilliseconds(300));
+        }, TimeSpan.FromMilliseconds(200));
     }
 
     private void OnModBadgePointerExited(object? sender, PointerEventArgs e)
@@ -1974,26 +2036,62 @@ public partial class MainWindow : Window
     {
         _problemTooltipShowTimer?.Dispose();
         _problemTooltipShowTimer = null;
-        if (_problemTooltipContentHovered)
+        CancelProblemTooltipClose();
+        if (ProblemTooltipStillInUse())
         {
             return;
         }
 
-        _problemTooltipTimer.Stop();
-        _problemTooltipTimer.Start();
+        _problemTooltipCloseTimer = DispatcherTimer.RunOnce(() =>
+        {
+            _problemTooltipCloseTimer = null;
+            if (!ProblemTooltipStillInUse())
+            {
+                CloseProblemTooltip();
+            }
+        }, TimeSpan.FromMilliseconds(200));
     }
+
+    private void CancelProblemTooltipClose()
+    {
+        _problemTooltipCloseTimer?.Dispose();
+        _problemTooltipCloseTimer = null;
+    }
+
+    // Hovering the popup, hovering its label, selecting text inside it, or an open
+    // submenu all mean the tooltip is still in use.
+    private bool ProblemTooltipStillInUse() =>
+        _modBadgePopup.Child?.IsPointerOver == true ||
+        _problemTooltipTarget?.IsPointerOver == true ||
+        _modBadgePopup.OpenedPopups.Count > 0 ||
+        _problemTooltipPointer?.Captured is Visual captured &&
+        captured.GetSelfAndVisualAncestors().Contains(_modBadgePopup.Child);
 
     private void CloseProblemTooltip()
     {
         _problemTooltipShowTimer?.Dispose();
         _problemTooltipShowTimer = null;
-        _problemTooltipTimer.Stop();
+        CancelProblemTooltipClose();
         _modBadgePopup.IsOpen = false;
         _modBadgePopup.Child = null;
 
         _problemTooltipTarget = null;
-        _problemTooltipContentHovered = false;
         _problemTooltipPointer = null;
+    }
+
+    // Popup is its own top level, so its PointerExited can be missed; re-check while
+    // the pointer moves over the window instead of polling.
+    private void OnProblemTooltipPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_modBadgePopup.IsOpen) return;
+        if (ProblemTooltipStillInUse())
+        {
+            CancelProblemTooltipClose();
+        }
+        else if (_problemTooltipCloseTimer is null)
+        {
+            StartProblemTooltipCloseTimer();
+        }
     }
 
     private List<MissingModRow> BuildMissingMods(int instanceIndex)
@@ -2378,6 +2476,10 @@ public partial class MainWindow : Window
         _pathBox.CaretIndex = _pathBox.Text?.Length ?? 0;
     }
 
+    /// <summary>Registry paths come back with a lowercase drive; show it upper case.</summary>
+    private static string UpperDrive(string path) =>
+        path.Length >= 2 && path[1] == ':' ? char.ToUpperInvariant(path[0]) + path.Substring(1) : path;
+
     private void ShowPathHint()
     {
         var hint = Find<TextBlock>("PathHint");
@@ -2456,7 +2558,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            _pathBox.Text = path;
+            _pathBox.Text = UpperDrive(path);
             ValidatePath(save: true);
             if (!_loadingMods &&
                 _allMods.Count == 0 &&
@@ -2502,7 +2604,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            _pathBox.Text = path;
+            _pathBox.Text = UpperDrive(path);
             ValidatePath(save: true);
         }
         catch
@@ -2810,6 +2912,7 @@ public partial class MainWindow : Window
     private void RefreshManager(bool selectFirst)
     {
         ClearListHover();
+        UpdateFilterSummaries();
         foreach (var timer in _searchTimers.Values) timer.Stop();
         _searchSources.Clear();
         if (_allMods.Count == 0)
@@ -3173,14 +3276,19 @@ public partial class MainWindow : Window
         if (_config.InactiveCategoryMode) return;
         var language = _config.Language;
         var flyout = new MenuFlyout();
-        flyout.Items.Add(CreateUnorderedSortRow(flyout, language));
-        flyout.Items.Add(new Separator());
+        // Official instances do not persist a manual order, so offer no "unordered" row.
+        if (GetSelectedInstance(_lastEnableColumn - 1) is not { IsOfficial: true })
+        {
+            flyout.Items.Add(CreateUnorderedSortRow(flyout, language));
+            flyout.Items.Add(new Separator());
+        }
         for (var i = 0; i < 6; i++)
         {
             var field = i;
             flyout.Items.Add(CreateMenuItem((_inactiveSortField == field ? "✓ " : "   ") + SortFieldName(field, language), true, () =>
             {
                 _inactiveSortField = field;
+                _officialSortField = -1;   // an explicit pick wins over the restore
                 UpdateSortButton(language);
                 RefreshInactivePreservingScroll();
             }));
@@ -4270,6 +4378,30 @@ public partial class MainWindow : Window
         );
     }
 
+    // Unordered needs a saved order; official instances keep none.
+    private void ApplyOfficialSortAdjustment()
+    {
+        if (_inactiveSortButton is null) return;   // called before the pane is built
+        var official = GetSelectedInstance(_lastEnableColumn - 1) is { IsOfficial: true };
+        if (official)
+        {
+            if (_inactiveSortField != 6) return;
+            _officialSortField = _inactiveSortField;
+            _inactiveSortField = 0;
+        }
+        else if (_officialSortField >= 0)
+        {
+            _inactiveSortField = _officialSortField;
+            _officialSortField = -1;
+        }
+        else
+        {
+            return;
+        }
+
+        UpdateSortButton(_config.Language);
+    }
+
     private async void OnInstanceSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_updatingInstances || sender is not ComboBox comboBox)
@@ -4690,6 +4822,7 @@ public partial class MainWindow : Window
             else header.Classes.Remove("enable-target");
         }
         UpdateLaunchButton();
+        ApplyOfficialSortAdjustment();
     }
 
     private void UpdateLaunchButton()
@@ -5916,6 +6049,20 @@ public partial class MainWindow : Window
         ShowDetails(mod);
     }
 
+    // Shift + wheel jumps most of a screen per notch.
+    private void OnModListWheelShiftPage(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Shift) || e.Delta.Y == 0) return;
+        if (sender is not ListBox list) return;
+        var viewer = list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+        if (viewer is null) return;
+        var maximum = Math.Max(0, viewer.Extent.Height - viewer.Viewport.Height);
+        var step = viewer.Viewport.Height * 0.9;
+        var target = Math.Clamp(viewer.Offset.Y - Math.Sign(e.Delta.Y) * step, 0, maximum);
+        viewer.Offset = new Vector(viewer.Offset.X, target);
+        e.Handled = true;
+    }
+
     private void OnModListPointerExited(object? sender, PointerEventArgs e)
     {
         ClearListHover();
@@ -7028,14 +7175,22 @@ public partial class MainWindow : Window
         if (payload.SourceColumn == 0 && targetColumn == 0 && _inactiveSortField == 6 &&
             GetSelectedInstance(_lastEnableColumn - 1) is { IsDamaged: false } inactiveInstance)
         {
-            // Reorder in display order and flip back to the saved order. Mapping the
-            // insertion index alone lands on the wrong side when the dropped item sits
-            // past it in the saved order (the reversed view).
-            var reversed = !_inactiveSortAscending;
+            // The saved order still holds ids of mods that are already enabled, so a
+            // display index means nothing there; anchor on the row under the drop line.
+            var view = GetModListForColumn(0);
+            var anchorId = view is not null && targetIndex >= 0 && targetIndex < view.ItemCount &&
+                           view.Items[targetIndex] is ModInfo anchor
+                ? anchor.PackageId
+                : null;
+            if (anchorId is not null &&
+                selectedIds.Contains(anchorId, StringComparer.OrdinalIgnoreCase))
+            {
+                return; // dropped onto itself
+            }
+
             var saved = inactiveInstance.InactiveModOrder;
-            var display = reversed ? Enumerable.Reverse(saved).ToList() : saved.ToList();
-            var updatedDisplay = ModListOperations.InsertSelection(display, selectedIds, targetIndex);
-            var updated = reversed ? Enumerable.Reverse(updatedDisplay).ToList() : updatedDisplay;
+            var updated = ModListOperations.MoveToAnchor(
+                saved, selectedIds, anchorId, reversed: !_inactiveSortAscending);
             if (updated.SequenceEqual(saved, StringComparer.OrdinalIgnoreCase)) return;
             SaveInactiveModOrder(inactiveInstance, updated);
             RefreshInactivePreservingScroll();
@@ -8341,7 +8496,11 @@ public partial class MainWindow : Window
     private async void ShowDetails(ModInfo? mod)
     {
         UpdatePrerequisitesDetails(mod);
-        Find<Grid>("DetailsPane").IsVisible = mod is not null;
+        var detailsPane = Find<Grid>("DetailsPane");
+        detailsPane.IsVisible = mod is not null;
+        // Empty pane must not leave a scrollbar track behind.
+        Find<ScrollViewer>("DetailsScroll").VerticalScrollBarVisibility =
+            mod is null ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
         if (mod is null)
         {
             _detailMod = null;
@@ -8370,7 +8529,9 @@ public partial class MainWindow : Window
             _noteCategoryBox.Text = note?.Category ?? string.Empty;
         }
         _authorValue.Text = mod.Author;
-        _pathValue.Text = mod.Path;
+        var displayPath = UpperDrive(mod.Path);
+        _pathValue.Text = displayPath;
+        ToolTip.SetTip(_pathValue, displayPath);
         _packageValue.Text = mod.PackageId;
         _descriptionValue.Text = mod.Description;
 
@@ -8448,7 +8609,7 @@ public partial class MainWindow : Window
         _launchCancellation?.Cancel();
         _launchCancellation?.Dispose();
         _launchCancellation = null;
-        _problemTooltipTimer.Stop();
+        CancelProblemTooltipClose();
         foreach (var timer in _searchTimers.Values) timer.Stop();
         _windowClosed = true;
         _previewVersion++;
