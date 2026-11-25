@@ -279,13 +279,15 @@
                     Background="Transparent"
                     BorderBrush="{DynamicResource SecondaryBrush}"
                     BorderThickness="1"
-                    Padding="8">
+                    Padding="8,5,8,8">
                 <ScrollViewer x:Name="DetailsScroll"
+                              Margin="0,3,0,0"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                <Grid x:Name="DetailsPane" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <Grid x:Name="DetailsPane" Margin="0,3,0,0" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <Image x:Name="PreviewImage"
                            Grid.Row="0"
+                           Margin="0,-3,0,0"
                            Stretch="Uniform"
                            MaxHeight="240"
                            HorizontalAlignment="Center"
@@ -396,7 +398,7 @@
                 <Border Background="Transparent"
                         BorderBrush="{DynamicResource SecondaryBrush}"
                         BorderThickness="1"
-                        Padding="8">
+                        Padding="8,5,8,8">
                     <Grid RowDefinitions="Auto,Auto,*,Auto">
         <Grid RowDefinitions="28" Margin="2,3,2,0">
                             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*">
@@ -535,7 +537,7 @@
                         Background="Transparent"
                         BorderBrush="{DynamicResource SecondaryBrush}"
                         BorderThickness="1"
-                        Padding="8">
+                        Padding="8,5,8,8">
                     <Grid RowDefinitions="Auto,Auto,*,Auto">
                         <Border x:Name="ActivePaneHeader1" Classes="pane-header"
                                 Grid.Row="0" Margin="0,0,0,2">
@@ -714,7 +716,7 @@
                         Background="Transparent"
                         BorderBrush="{DynamicResource SecondaryBrush}"
                         BorderThickness="1"
-                        Padding="8">
+                        Padding="8,5,8,8">
                     <Grid RowDefinitions="Auto,Auto,*,Auto">
                         <Border x:Name="ActivePaneHeader2" Classes="pane-header"
                                 Grid.Row="0" Margin="0,0,0,2">
