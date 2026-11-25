@@ -1,9 +1,9 @@
 [
   {
     "Name": "Rimworld.PackFrame-Window64.zip",
-    "Size": 23027461,
-    "Sha256": "1684cf98230831478ed86a491b0c55025f8f8674fe19efaffc2311d748daa393",
+    "Size": 23027663,
+    "Sha256": "518885657b26eeabdccbf0505c87963bf5676cefe330c473294496e2635b24d9",
     "Version": "1.1.4",
-    "Commit": "b3450f7e2278693f06765cc20f5873767055aad6"
+    "Commit": "b31dd8430ddf613865cafb973755189f583e828e"
   }
 ]
