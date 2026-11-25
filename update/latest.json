@@ -1,30 +1,9 @@
 [
   {
     "Name": "Rimworld.PackFrame-Window64.zip",
-    "Size": 23021124,
-    "Sha256": "6089fa70229917e81d99b3e906401029d6ec0fd02e545f6b5b92bc877295b391",
-    "Version": "1.1.3",
-    "Commit": "d58f216972f898bccbd3b59f5b4a82ef30f4c5db"
-  },
-  {
-    "Name": "Rimworld.PackFrame-macOS-arm64.zip",
-    "Size": 44002040,
-    "Sha256": "0fde3fce361159d369e8447b2f7f0822716c062061284eb63a4a135afc3275f3",
-    "Version": "1.1.3",
-    "Commit": "d58f216972f898bccbd3b59f5b4a82ef30f4c5db"
-  },
-  {
-    "Name": "Rimworld.PackFrame-macOS-x64.zip",
-    "Size": 45941155,
-    "Sha256": "1c7f07f021481f3be7c47c7dbfe2ac711cb2482db162b21a02899c06d160592c",
-    "Version": "1.1.3",
-    "Commit": "d58f216972f898bccbd3b59f5b4a82ef30f4c5db"
-  },
-  {
-    "Name": "Rimworld.PackFrame-Linux-x64.zip",
-    "Size": 43164088,
-    "Sha256": "cb3dff6be7ac27d7d33059ebc0ac4722a8f926c5a99e0c9743d43e7953322bf0",
-    "Version": "1.1.3",
-    "Commit": "d58f216972f898bccbd3b59f5b4a82ef30f4c5db"
+    "Size": 23027461,
+    "Sha256": "1684cf98230831478ed86a491b0c55025f8f8674fe19efaffc2311d748daa393",
+    "Version": "1.1.4",
+    "Commit": "b3450f7e2278693f06765cc20f5873767055aad6"
   }
 ]
