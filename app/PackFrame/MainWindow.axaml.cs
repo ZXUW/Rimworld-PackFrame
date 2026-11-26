@@ -170,6 +170,9 @@ public partial class MainWindow : Window
     private readonly Popup _modBadgePopup;
     private Control? _problemTooltipTarget;
     private IPointer? _problemTooltipPointer;
+    // Title follows the assembly version, so a release only bumps the csproj.
+    private static string AppTitle => "Rimworld PackFrame " + UpdateService.CurrentVersion + " by ZX";
+
     private Control? _pathLink;
     private IBrush? _pathLinkForeground;
     private TextDecorationCollection? _pathLinkDecorations;
@@ -500,6 +503,7 @@ public partial class MainWindow : Window
         ApplyLocalization();
         UpdateEnableTargetBorders();
         UpdateUndoButton();
+        Title = AppTitle;
 
         _pathBox.KeyDown += OnPathKeyDown;
         _pathBox.LostFocus += OnPathLostFocus;
@@ -7730,7 +7734,7 @@ public partial class MainWindow : Window
         _modpackPageOpen = true;
         host.Content = page;
         host.IsVisible = true;
-        Title = "Rimworld PackFrame - " + Localization.ModpacksTitle(_config.Language);
+        Title = AppTitle + " - " + Localization.ModpacksTitle(_config.Language);
         await page.StartAsync();
         return await page.Completion;
     }
@@ -7743,7 +7747,7 @@ public partial class MainWindow : Window
         host.IsVisible = false;
         host.Content = null;
         Find<Grid>("ListPage").IsVisible = true;
-        Title = "Rimworld PackFrame";
+        Title = AppTitle;
     }
 
     // On the 合集 page the window's ✕ goes back instead of quitting.
