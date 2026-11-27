@@ -76,6 +76,7 @@ public partial class MainWindow : Window
     private readonly Button _autoDetectGameButton;
     private readonly Button _browseButton;
     private readonly Button _paintModeButton;
+    private readonly Button _thumbnailToggleButton;
     private readonly Button _batchCategoryButton;
     private readonly Button _modCategoryButton;
     private readonly TextBox _noteAliasBox;
@@ -151,7 +152,7 @@ public partial class MainWindow : Window
     private readonly TextBox _authorValue;
     private readonly TextBox _pathValue;
     private readonly TextBox _packageValue;
-    private readonly TextBox _descriptionValue;
+    private readonly SelectableTextBlock _descriptionValue;
     private readonly Border _prerequisitesSection;
     private readonly TextBlock _prerequisitesLabel;
     private readonly TextBlock _prerequisitesHint;
@@ -167,9 +168,118 @@ public partial class MainWindow : Window
     private IDisposable? _problemTooltipCloseTimer;
     private const int StartupRefreshDelayMs = 3000;
     private IDisposable? _problemTooltipShowTimer;
+    private IDisposable? _memoryTrimTimer;
+    private DateTime _lastMemoryTrim = DateTime.MinValue;
+    private long _lastTrimHeap;
+    private readonly DispatcherTimer _memoryMonitor = new()
+    {
+        Interval = TimeSpan.FromSeconds(20)
+    };
     private readonly Popup _modBadgePopup;
     private Control? _problemTooltipTarget;
     private IPointer? _problemTooltipPointer;
+    // Big JSON tables and mod lists leave the large object heap fragmented; compact it
+    // after the refresh burst settles, but not more often than every 5 seconds.
+    private void ScheduleMemoryTrim()
+    {
+        _memoryTrimTimer?.Dispose();
+        _memoryTrimTimer = DispatcherTimer.RunOnce(TryTrimMemory, TimeSpan.FromSeconds(1.5));
+    }
+
+    private void TryTrimMemory()
+    {
+        var since = DateTime.UtcNow - _lastMemoryTrim;
+        if (since < TimeSpan.FromSeconds(5))
+        {
+            _memoryTrimTimer = DispatcherTimer.RunOnce(
+                TryTrimMemory, TimeSpan.FromSeconds(5) - since);
+            return;
+        }
+
+        _memoryTrimTimer = null;
+        _lastMemoryTrim = DateTime.UtcNow;
+        Task.Run(() =>
+        {
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode =
+                System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            _lastTrimHeap = GC.GetTotalMemory(true);
+        });
+    }
+
+    // Thumbnails load only for rows that actually appear on screen.
+    private async void OnModThumbnailAttached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (!_config.ShowThumbnails) return;
+        if (sender is not Control control || control.DataContext is not ModInfo mod) return;
+        if (mod.HasThumbnail) return;
+
+        var path = mod.PreviewPath ?? ModCatalog.FindPreview(mod.Path);
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var cached = ModThumbnailCache.TryGet(path);
+        if (cached is not null)
+        {
+            mod.Thumbnail = cached;
+            return;
+        }
+
+        var bitmap = await ModThumbnailCache.LoadAsync(path);
+        if (bitmap is not null && !mod.HasThumbnail)
+        {
+            mod.Thumbnail = bitmap;
+        }
+    }
+
+    // The inner scroll viewer sizes to the widest sibling (the no-wrap path), so cap the
+    // description to the visible width to make it wrap inside the pane.
+    private void UpdateDescriptionWidth()
+    {
+        if (_descriptionValue is null) return;
+        var width = Find<ScrollViewer>("DetailsScroll").Bounds.Width - 20;
+        if (width > 0)
+        {
+            _descriptionValue.MaxWidth = width;
+        }
+    }
+
+    private void OnThumbnailToggleClick(object? sender, RoutedEventArgs e)
+    {
+        _config.ShowThumbnails = !_config.ShowThumbnails;
+        _config.Save();
+        ApplyThumbnailSetting();
+    }
+
+    private void ApplyThumbnailSetting()
+    {
+        var on = _config.ShowThumbnails;
+        _thumbnailToggleButton.Content = UpdateText("Thumbnails", "缩略图", "縮圖", "サムネイル");
+        // Normal look while on; faded out while off.
+        _thumbnailToggleButton.Background = SecondaryBorderBrush;
+        _thumbnailToggleButton.Foreground = Brushes.White;
+        _thumbnailToggleButton.Opacity = on ? 1 : 0.45;
+        foreach (var list in new[] { _inactiveList, _activeList1, _activeList2 })
+        {
+            list.Classes.Set("no-thumbs", !on);
+        }
+
+        if (!on)
+        {
+            ModThumbnailCache.Clear();
+            _allMods = _allMods.Select(mod =>
+            {
+                mod.Thumbnail = null;
+                return mod;
+            }).ToList();
+        }
+
+        // Rebuilding the rows is what makes them (re)load pictures.
+        if (_allMods.Count > 0)
+        {
+            RefreshManager(false);
+        }
+    }
+
     // Title follows the assembly version, so a release only bumps the csproj.
     private static string AppTitle => "Rimworld PackFrame " + UpdateService.CurrentVersion + " by ZX";
 
@@ -285,6 +395,7 @@ public partial class MainWindow : Window
         _autoDetectGameButton = Find<Button>("AutoDetectGameButton");
         _browseButton = Find<Button>("BrowseButton");
         _paintModeButton = Find<Button>("PaintModeButton");
+        _thumbnailToggleButton = Find<Button>("ThumbnailToggleButton");
         _batchCategoryButton = Find<Button>("BatchCategoryButton");
         _modCategoryButton = Find<Button>("ModCategoryButton");
         _noteAliasBox = Find<TextBox>("NoteAliasBox");
@@ -368,6 +479,7 @@ public partial class MainWindow : Window
         _inactiveList = Find<ListBox>("InactiveList");
         _activeList1 = Find<ListBox>("ActiveList1");
         _activeList2 = Find<ListBox>("ActiveList2");
+        ApplyThumbnailSetting();
         _activeColumn1 = Find<Border>("ActiveColumn1");
         _activeColumn2 = Find<Border>("ActiveColumn2");
         _activePaneHeader1 = Find<Border>("ActivePaneHeader1");
@@ -381,7 +493,7 @@ public partial class MainWindow : Window
         _authorValue = Find<TextBox>("AuthorValue");
         _pathValue = Find<TextBox>("PathValue");
         _packageValue = Find<TextBox>("PackageValue");
-        _descriptionValue = Find<TextBox>("DescriptionValue");
+        _descriptionValue = Find<SelectableTextBlock>("DescriptionValue");
         _prerequisitesSection = Find<Border>("PrerequisitesSection");
         _prerequisitesLabel = Find<TextBlock>("PrerequisitesLabel");
         _prerequisitesHint = Find<TextBlock>("PrerequisitesHint");
@@ -418,6 +530,14 @@ public partial class MainWindow : Window
         };
         // Inherit control themes, including visible text-selection highlights.
         LogicalChildren.Add(_modBadgePopup);
+        _memoryMonitor.Tick += (_, _) =>
+        {
+            // Thumbnail decoding and list rebuilds leave large unreferenced arrays behind;
+            // the heap only gives them back after a compacting collection.
+            if (GC.GetTotalMemory(false) - _lastTrimHeap < 32L * 1024 * 1024) return;
+            TryTrimMemory();
+        };
+        _memoryMonitor.Start();
         PointerMoved += OnProblemTooltipPointerMoved;
         foreach (var label in new[]
                  {
@@ -533,6 +653,9 @@ public partial class MainWindow : Window
             true
         );
         _pathUnderline = Find<Border>("PathLinkUnderline");
+        var detailsScroll = Find<ScrollViewer>("DetailsScroll");
+        detailsScroll.SizeChanged += (_, _) => UpdateDescriptionWidth();
+        UpdateDescriptionWidth();
         // The details pane scrolls itself; a click inside the description must not ask
         // the ScrollViewer to bring the caret into view.
         Find<Grid>("DetailsPane").AddHandler(
@@ -3087,6 +3210,7 @@ public partial class MainWindow : Window
     {
         ClearListHover();
         UpdateFilterSummaries();
+        ScheduleMemoryTrim();
         foreach (var timer in _searchTimers.Values) timer.Stop();
         _searchSources.Clear();
         if (_allMods.Count == 0)
@@ -5404,6 +5528,17 @@ public partial class MainWindow : Window
         {
             await GameLaunchService.Start(game, instance, saveDataFolder, cancellation.Token, running =>
             {
+                if (running)
+                {
+                    // RimWorld hogging memory makes our own heap worth trimming once it settled.
+                    Dispatcher.UIThread.Post(() =>
+                        DispatcherTimer.RunOnce(() =>
+                        {
+                            _lastMemoryTrim = DateTime.MinValue;
+                            TryTrimMemory();
+                        }, TimeSpan.FromSeconds(5)));
+                }
+
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (!ReferenceEquals(_launchCancellation, cancellation)) return;
@@ -8730,7 +8865,9 @@ public partial class MainWindow : Window
         _authorValue.Text = mod.Author;
         _pathValue.Text = UpperDrive(mod.Path);
         _packageValue.Text = mod.PackageId;
-        _descriptionValue.Text = mod.Description;
+        _descriptionValue.Text = string.IsNullOrWhiteSpace(mod.Description)
+            ? ModCatalog.ReadDescription(mod.Path)
+            : mod.Description;
 
         var previewPath = mod.PreviewPath ?? ModCatalog.FindPreview(mod.Path);
         if (_previewPath == previewPath) return;

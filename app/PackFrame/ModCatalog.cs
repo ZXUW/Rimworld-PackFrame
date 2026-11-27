@@ -56,6 +56,22 @@ public sealed record ModInfo(
         set => SetField(ref _colorLabel, value);
     }
 
+    private Avalonia.Media.Imaging.Bitmap? _thumbnail;
+
+    public Avalonia.Media.Imaging.Bitmap? Thumbnail
+    {
+        get => _thumbnail;
+        set
+        {
+            if (ReferenceEquals(_thumbnail, value)) return;
+            _thumbnail = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Thumbnail)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasThumbnail)));
+        }
+    }
+
+    public bool HasThumbnail => _thumbnail is not null;
+
     private void SetField<T>(
         ref T field,
         T value,
@@ -466,6 +482,22 @@ public static class ModCatalog
         _ => 3
     };
 
+    // Description is read when the mod is selected instead of during the scan.
+    public static string ReadDescription(string directory)
+    {
+        var aboutPath = Path.Combine(directory, "About", "About.xml");
+        if (!File.Exists(aboutPath)) return string.Empty;
+        try
+        {
+            var document = XDocument.Load(aboutPath);
+            return (ElementValue(document.Root!, "description") ?? string.Empty).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
     public static string? ReadPackageId(string directory)
     {
         var aboutPath = Path.Combine(directory, "About", "About.xml");
@@ -526,7 +558,8 @@ public static class ModCatalog
             }
 
             var author = ReadAuthor(root);
-            var description = ElementValue(root, "description") ?? string.Empty;
+            // Loaded on demand when the mod is selected; 2000+ descriptions in memory is wasted.
+            var description = string.Empty;
             // Resolved on demand in the details pane; scanning thousands of mods must not hit the disk for previews.
             var preview = (string?)null;
             var versions = root.Elements()

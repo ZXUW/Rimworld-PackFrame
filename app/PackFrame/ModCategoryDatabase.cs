@@ -154,7 +154,7 @@ internal static class ModCategoryDatabase
 
         try
         {
-            var document = Parse(File.ReadAllText(path));
+            var document = ParseFile(path);
             generatedAt = ParseGenerated(document?.Generated) ?? File.GetLastWriteTime(path);
             return document;
         }
@@ -243,7 +243,7 @@ internal static class ModCategoryDatabase
         {
             try
             {
-                if (!File.Exists(path) || Parse(File.ReadAllText(path)) is not { } overlay) continue;
+                if (!File.Exists(path) || ParseFile(path) is not { } overlay) continue;
                 Overlay(result, overlay);
             }
             catch (Exception exception)
@@ -255,12 +255,26 @@ internal static class ModCategoryDatabase
     }
 
     // The table on disk is the only source; nothing is baked into the assembly.
+    private static string? _baseStamp;
+    private static ModCategoryDocument? _baseCache;
+
     internal static ModCategoryDocument? ReadBaseTable()
     {
         try
         {
             MigrateLegacyTable();
-            if (File.Exists(TablePath)) return Parse(File.ReadAllText(TablePath));
+            if (!File.Exists(TablePath)) return null;
+            var info = new FileInfo(TablePath);
+            var stamp = info.LastWriteTimeUtc.Ticks + ":" + info.Length;
+            if (_baseCache is not null && _baseStamp == stamp) return _baseCache;
+            var parsed = ParseFile(TablePath);
+            if (parsed is not null)
+            {
+                _baseStamp = stamp;
+                _baseCache = parsed;
+            }
+
+            return parsed ?? _baseCache;
         }
         catch (Exception exception)
         {
@@ -283,7 +297,34 @@ internal static class ModCategoryDatabase
         try
         {
             using var document = JsonDocument.Parse(json);
-            var root = document.RootElement;
+            return ParseRoot(document.RootElement);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Parses straight from disk so the whole table never becomes a big string.
+    internal static ModCategoryDocument? ParseFile(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var document = JsonDocument.Parse(stream);
+            return ParseRoot(document.RootElement);
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Load mod category table: " + path, exception);
+            return null;
+        }
+    }
+
+    private static ModCategoryDocument? ParseRoot(JsonElement root)
+    {
+        try
+        {
             if (root.ValueKind != JsonValueKind.Object) return null;
 
             var result = new ModCategoryDocument();

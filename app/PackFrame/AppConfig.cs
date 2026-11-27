@@ -13,6 +13,7 @@ public sealed class AppConfig
     public string? ProfileFolder1 { get; set; }
     public string? ProfileFolder2 { get; set; }
     public bool ShowSecondaryPane { get; set; }
+    public bool ShowThumbnails { get; set; } = true;
     public bool InactiveCategoryMode { get; set; }
     public List<string> CollapsedCategories { get; set; } = new();
     public List<string> ProfileOrder { get; set; } = new();

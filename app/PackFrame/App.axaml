@@ -14,7 +14,7 @@
         <ControlTheme x:Key="ModListItem" TargetType="ListBoxItem">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
-            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="Padding" Value="6,0" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
@@ -59,6 +59,61 @@
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                     </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+        <!-- Search-field dropdown: slim arrow area so the text sits close to it. -->
+        <ControlTheme x:Key="SearchFieldCombo" TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource SecondaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid>
+                        <Border Background="{TemplateBinding Background}">
+                            <Panel>
+                                <PathIcon Width="8" Height="5"
+                                          HorizontalAlignment="Right"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,6,0"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          Data="M0,0 L4,4 L8,0" />
+                                <ContentPresenter Name="PART_ContentPresenter"
+                                                  Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"
+                                                  Margin="6,3,18,3"
+                                                  VerticalAlignment="Center" />
+                            </Panel>
+                        </Border>
+                        <ToggleButton Name="PART_ToggleButton"
+                                      Focusable="False"
+                                      ClickMode="Press"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
+                                                          RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate>
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <Popup Name="PART_Popup"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               Placement="Bottom">
+                            <Border Background="{DynamicResource AppBackgroundBrush}"
+                                    BorderBrush="{DynamicResource SecondaryBrush}"
+                                    BorderThickness="1"
+                                    MinWidth="70">
+                                <ItemsPresenter Name="PART_ItemsPresenter" />
+                            </Border>
+                        </Popup>
+                    </Grid>
                 </ControlTemplate>
             </Setter>
         </ControlTheme>
@@ -208,6 +263,19 @@
         </Style>
         <Style Selector="ListBoxItem:pointerover">
             <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}" />
+        </Style>
+        <!-- Mod rows show a 25px thumbnail that must touch the row edges. -->
+        <Style Selector="ListBox.modpane ListBoxItem">
+            <Setter Property="Padding" Value="6,0" />
+        </Style>
+        <!-- Thumbnails off: collapse the picture column so names start where they used to. -->
+        <Style Selector="Border.mod-thumb">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+        </Style>
+        <Style Selector="ListBox.no-thumbs Border.mod-thumb">
+            <Setter Property="Width" Value="0" />
+            <Setter Property="Margin" Value="0" />
         </Style>
         <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}" />
