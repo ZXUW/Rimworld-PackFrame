@@ -815,6 +815,8 @@ public partial class MainWindow : Window
         _autoDetectGameButton.Content = Localization.AutoDetectButton(language);
         _browseButton.Content = Localization.BrowseButton(language);
         UpdatePaintButtonVisual();
+        _thumbnailToggleButton.Content = UpdateText(
+            "Thumbnails", "缩略图", "縮圖", "サムネイル");
         _undoButton.Content = Localization.Undo(language);
         _redoButton.Content = Localization.Redo(language);
         _githubLinkButton.Content = "GitHub";
@@ -3156,6 +3158,9 @@ public partial class MainWindow : Window
         _updatingInstances = false;
         _lastInstanceIndex1 = _instanceCombo1.SelectedIndex;
         _lastInstanceIndex2 = _instanceCombo2.SelectedIndex;
+        // Startup restores the selection without going through OnInstanceSelectionChanged.
+        _lastEnableColumn = Math.Max(1, _lastEnableColumn);
+        ApplyOfficialSortAdjustment();
     }
 
     private void ResetCatalog()
