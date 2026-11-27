@@ -241,7 +241,7 @@
             <!-- Guide line between the path actions and the list actions. -->
             <Border Grid.Column="4"
                     Width="1"
-                    Margin="12,2,12,2"
+                    Margin="8,2,8,2"
                     Background="{DynamicResource SecondaryBrush}" />
             <StackPanel Grid.Column="5"
                         Orientation="Horizontal"
