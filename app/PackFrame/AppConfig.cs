@@ -34,20 +34,61 @@ public sealed class AppConfig
         {
             if (!File.Exists(ConfigPath))
             {
-                return new AppConfig();
+                return WithDetectedLanguage(new AppConfig());
             }
 
             var json = File.ReadAllText(ConfigPath);
-            return JsonSerializer.Deserialize(
+            return WithDetectedLanguage(JsonSerializer.Deserialize(
                 json,
                 PackFrameJsonContext.Default.AppConfig
-            ) ?? new AppConfig();
+            ) ?? new AppConfig());
         }
         catch (Exception exception)
         {
             AppLog.Error("Read app config: " + ConfigPath, exception);
-            return new AppConfig();
+            return WithDetectedLanguage(new AppConfig());
         }
+    }
+
+    // First run: follow the OS UI language instead of defaulting to English.
+    private static AppConfig WithDetectedLanguage(AppConfig config)
+    {
+        if (string.IsNullOrWhiteSpace(config.Language))
+        {
+            config.Language = DetectLanguage();
+        }
+
+        return config;
+    }
+
+    private static string DetectLanguage()
+    {
+        try
+        {
+            var culture = System.Globalization.CultureInfo.CurrentUICulture;
+            var name = culture.Name;
+            if (name.StartsWith("zh", StringComparison.OrdinalIgnoreCase))
+            {
+                var traditional =
+                    name.Contains("TW", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("HK", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("MO", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("Hant", StringComparison.OrdinalIgnoreCase);
+                return traditional
+                    ? Localization.TraditionalChinese
+                    : Localization.SimplifiedChinese;
+            }
+
+            if (name.StartsWith("ja", StringComparison.OrdinalIgnoreCase))
+            {
+                return Localization.Japanese;
+            }
+        }
+        catch
+        {
+        }
+
+        return Localization.English;
     }
 
     public void Save()
