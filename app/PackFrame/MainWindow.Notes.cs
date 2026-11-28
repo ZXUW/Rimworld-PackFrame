@@ -228,7 +228,67 @@ public partial class MainWindow
             {
                 if (TogglePrerequisite(mod, id)) UpdateRow();
             };
-            _prerequisitesItems.Children.Add(button);
+
+            // "Jump": locate the prerequisite in whichever list holds it.
+            var jump = new Button
+            {
+                Content = UpdateText("Jump", "跳转", "跳轉", "移動"),
+                Theme = Application.Current?.FindResource("FlatButton") as ControlTheme,
+                Background = Brushes.Transparent,
+                Padding = new Thickness(6, 2),
+                FontSize = 12,
+                MinWidth = 0,
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor = new Cursor(StandardCursorType.Hand)
+            };
+            jump.Classes.Add("prerequisite-jump");
+            AutomationProperties.SetName(jump, UpdateText("Jump", "跳转", "跳轉", "移動"));
+            AutomationProperties.SetHelpText(jump, UpdateText("Locate in list", "在列表中定位", "在清單中定位", "リストで表示"));
+            var located = FindPrerequisiteList(id);
+            jump.IsEnabled = located is not null;
+            if (located is { } target)
+            {
+                jump.Click += (_, _) => JumpToMod(target);
+            }
+
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            Grid.SetColumn(button, 0);
+            Grid.SetColumn(jump, 1);
+            row.Children.Add(button);
+            row.Children.Add(jump);
+            _prerequisitesItems.Children.Add(row);
+        }
+    }
+
+    private (ListBox List, int Index)? FindPrerequisiteList(string packageId)
+    {
+        foreach (var list in new[] { _activeList1, _activeList2, _inactiveList })
+        {
+            for (var index = 0; index < list.ItemCount; index++)
+            {
+                if (list.Items[index] is ModInfo candidate &&
+                    string.Equals(candidate.PackageId, packageId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return (list, index);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private void JumpToMod((ListBox List, int Index) target)
+    {
+        var (list, index) = target;
+        _refreshing = true;
+        PaneSelectionRange.Select(list, index, index);
+        SetPaneAnchor(list, index);
+        _refreshing = false;
+        list.ScrollIntoView(index);
+        list.Focus();
+        if (list.Items[index] is ModInfo found)
+        {
+            ShowDetails(found);
         }
     }
 
